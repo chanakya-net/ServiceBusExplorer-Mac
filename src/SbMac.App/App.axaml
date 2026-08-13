@@ -19,6 +19,7 @@
       </ResourceDictionary.MergedDictionaries>
 
       <converters:IconLookupConverter x:Key="IconLookup" />
+      <converters:BrushLookupConverter x:Key="BrushLookup" />
     </ResourceDictionary>
   </Application.Resources>
 

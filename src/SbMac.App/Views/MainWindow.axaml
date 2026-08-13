@@ -66,7 +66,7 @@
     </NativeMenu>
   </NativeMenu.Menu>
 
-  <Grid RowDefinitions="Auto,*,Auto">
+  <Grid RowDefinitions="Auto,*,Auto,Auto">
 
     <!-- ══════════════════════════════ toolbar ══════════════════════════════ -->
     <Border Grid.Row="0" Classes="toolbar">
@@ -438,26 +438,125 @@
       </Grid>
     </Grid>
 
-    <!-- ═══════════════════════════ status bar ═══════════════════════════ -->
-    <Border Grid.Row="2" Classes="statusBar">
-      <DockPanel LastChildFill="True">
+    <!-- ═══════════════════════ activity, expanded ═══════════════════════ -->
+    <!--
+      One row per operation, so it is obvious which are still running and which have
+      finished. Collapsed, the same operations are the coloured bars in the status bar.
+    -->
+    <Border Grid.Row="2" Classes="activityPanel"
+            IsVisible="{Binding IsActivityExpanded}">
+      <Grid RowDefinitions="Auto,Auto">
 
-        <ProgressBar DockPanel.Dock="Left" Width="104" Height="3" Margin="0,0,12,0"
-                     IsIndeterminate="True"
-                     IsVisible="{Binding IsBusy}"
+        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,6">
+          <TextBlock DockPanel.Dock="Left" Classes="caption" Text="ACTIVITY"
                      VerticalAlignment="Center" />
 
+          <Button DockPanel.Dock="Right" Classes="toolbar"
+                  Content="Hide" Padding="9,3"
+                  Command="{Binding ToggleActivityCommand}" />
+
+          <Button DockPanel.Dock="Right" Classes="toolbar"
+                  Content="Clear finished" Padding="9,3"
+                  IsEnabled="{Binding HasFinishedOperations}"
+                  Command="{Binding ClearFinishedOperationsCommand}" />
+
+          <Button DockPanel.Dock="Right" Classes="toolbar destructive"
+                  Content="Cancel all" Padding="9,3"
+                  IsEnabled="{Binding IsBusy}"
+                  Command="{Binding CancelAllOperationsCommand}" />
+        </DockPanel>
+
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding Operations}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:OperationViewModel">
+              <!-- Finished rows recede as a whole rather than a part at a time. -->
+              <Grid ColumnDefinitions="*,Auto,88" RowDefinitions="Auto,Auto" Margin="0,5"
+                    Opacity="{Binding TrayOpacity}">
+
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="{Binding Title}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+
+                <TextBlock Grid.Row="0" Grid.Column="1"
+                           Classes="tertiary"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           MaxWidth="360"
+                           Text="{Binding Detail}" />
+
+                <Button Grid.Row="0" Grid.Column="2" Classes="toolbar"
+                        Content="Cancel" Padding="9,2" Margin="10,0,0,0"
+                        HorizontalAlignment="Right"
+                        IsVisible="{Binding IsRunning}"
+                        Command="{Binding CancelCommand}" />
+
+                <TextBlock Grid.Row="0" Grid.Column="2"
+                           Classes="tertiary"
+                           VerticalAlignment="Center"
+                           Margin="10,0,4,0"
+                           HorizontalAlignment="Right"
+                           IsVisible="{Binding IsFinished}"
+                           Text="{Binding StateLabel}" />
+
+                <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                             Height="3" Margin="0,6,0,0"
+                             Minimum="0" Maximum="100"
+                             Value="{Binding Progress}"
+                             IsIndeterminate="{Binding IsIndeterminate}"
+                             Foreground="{Binding AccentKey, Converter={StaticResource BrushLookup}}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Grid>
+    </Border>
+
+    <!-- ═══════════════════════════ status bar ═══════════════════════════ -->
+    <Border Grid.Row="3" Classes="statusBar">
+      <DockPanel LastChildFill="True">
+
+        <!--
+          The tray: one small bar per operation, each in its kind's colour, so several
+          running at once stay tellable apart. Clicking opens the full list above.
+        -->
+        <Button DockPanel.Dock="Left" Classes="toolbar" Padding="6,2" Margin="0,0,10,0"
+                IsVisible="{Binding HasOperations}"
+                Command="{Binding ToggleActivityCommand}"
+                ToolTip.Tip="Show every running and recent operation">
+          <StackPanel Orientation="Horizontal" Spacing="9">
+            <ItemsControl ItemsSource="{Binding Operations}" VerticalAlignment="Center">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="4" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:OperationViewModel">
+                  <ProgressBar Width="30" Height="3"
+                               Minimum="0" Maximum="100"
+                               Value="{Binding Progress}"
+                               IsIndeterminate="{Binding IsIndeterminate}"
+                               Opacity="{Binding TrayOpacity}"
+                               VerticalAlignment="Center"
+                               ToolTip.Tip="{Binding StatusLine}"
+                               Foreground="{Binding AccentKey, Converter={StaticResource BrushLookup}}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Classes="secondary" VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" MaxWidth="360"
+                       Text="{Binding ActivitySummary}" />
+          </StackPanel>
+        </Button>
+
         <Button DockPanel.Dock="Right" Classes="toolbar"
-                Content="Cancel"
+                Content="Cancel all"
                 Padding="9,3"
                 IsVisible="{Binding IsBusy}"
-                Command="{Binding CancelOperationCommand}" />
-
-        <TextBlock VerticalAlignment="Center"
-                   Classes="secondary"
-                   TextTrimming="CharacterEllipsis"
-                   Text="{Binding BusyDescription, FallbackValue=''}"
-                   IsVisible="{Binding IsBusy}" />
+                Command="{Binding CancelAllOperationsCommand}" />
 
         <TextBlock VerticalAlignment="Center"
                    Classes="secondary"

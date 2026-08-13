@@ -69,4 +69,48 @@ public abstract partial class TreeNodeViewModel : ViewModelBase
 
     /// <summary>Reloads this node's children from the service. The base implementation does nothing.</summary>
     public virtual Task RefreshAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    /// <summary>
+    /// Refreshes a set of nodes at once, bounded so a large namespace doesn't open hundreds
+    /// of requests in one go. Loading them one after another is what made a namespace with
+    /// many topics take so long to appear.
+    /// </summary>
+    /// <remarks>
+    /// Every task is started from — and awaited back onto — the calling thread, which is
+    /// the UI thread. That matters: the nodes mutate observable collections the tree is
+    /// bound to, and those must not be touched from the thread pool.
+    /// </remarks>
+    protected static async Task RefreshAllAsync(
+        IReadOnlyList<TreeNodeViewModel> nodes,
+        CancellationToken cancellationToken,
+        int maxConcurrency = 6)
+    {
+        if (nodes.Count == 0)
+        {
+            return;
+        }
+
+        using var gate = new SemaphoreSlim(Math.Max(1, maxConcurrency));
+
+        var pending = new List<Task>(nodes.Count);
+        foreach (var node in nodes)
+        {
+            pending.Add(RefreshOneAsync(node));
+        }
+
+        await Task.WhenAll(pending).ConfigureAwait(true);
+
+        async Task RefreshOneAsync(TreeNodeViewModel node)
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+            try
+            {
+                await node.RefreshAsync(cancellationToken).ConfigureAwait(true);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+    }
 }

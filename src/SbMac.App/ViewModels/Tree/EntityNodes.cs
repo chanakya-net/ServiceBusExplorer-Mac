@@ -63,18 +63,24 @@ public sealed class TopicFolderNodeViewModel : TreeNodeViewModel
         {
             var topics = await entities.GetTopicsAsync(cancellationToken).ConfigureAwait(true);
 
-            Children.Clear();
-            foreach (var topic in topics)
-            {
-                var node = new TopicNodeViewModel(topic) { Parent = this };
-                Children.Add(node);
+            // The topics go into the tree before their subscriptions are fetched, so the
+            // list is browsable while the counts are still filling in.
+            var nodes = topics
+                .Select(topic => new TopicNodeViewModel(topic) { Parent = this })
+                .ToList();
 
-                // Subscriptions are loaded eagerly: their counts are the reason most
-                // people open a topic, and a namespace rarely has enough to be slow.
-                await node.RefreshAsync(cancellationToken).ConfigureAwait(true);
+            Children.Clear();
+            foreach (var node in nodes)
+            {
+                Children.Add(node);
             }
 
             Detail = topics.Count == 0 ? "empty" : topics.Count.ToString("N0");
+
+            // Subscriptions are loaded eagerly: their counts are the reason most people
+            // open a topic. Loading them together rather than one topic at a time is what
+            // keeps a namespace with many topics from crawling.
+            await RefreshAllAsync(nodes, cancellationToken).ConfigureAwait(true);
         }
         finally
         {
