@@ -54,27 +54,68 @@ That needs the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ---
 
-## Why this is a rewrite, not a port
+## Built on the current Azure stack
 
-This project exists because the
-[Windows Service Bus Explorer](https://github.com/paolosalvatori/ServiceBusExplorer)
-cannot be made to run on macOS. Two independent blockers, either of which alone would be
-fatal:
+SB-Mac targets **.NET 10** and uses the current, actively maintained Azure SDKs — the ones
+Microsoft recommends for new work. No legacy compatibility shims, and nothing held back:
+
+| Dependency | Version | Latest | Role |
+|---|---|---|---|
+| [`Azure.Messaging.ServiceBus`](https://www.nuget.org/packages/Azure.Messaging.ServiceBus) | 7.20.2 | 7.20.2 ✅ | Messaging and entity management |
+| [`Azure.Identity`](https://www.nuget.org/packages/Azure.Identity) | 1.21.0 | 1.21.0 ✅ | Entra ID authentication |
+| [`Azure.ResourceManager.ServiceBus`](https://www.nuget.org/packages/Azure.ResourceManager.ServiceBus) | 1.2.0 | 1.2.0 ✅ | Namespace-level resource operations |
+| [`CommunityToolkit.Mvvm`](https://www.nuget.org/packages/CommunityToolkit.Mvvm) | 8.4.2 | 8.4.2 ✅ | View model plumbing |
+
+`dotnet list package --outdated` reports nothing to update for `SbMac.Core`, which is the
+entire Azure surface.
+
+The UI framework is the one deliberate exception. [Avalonia](https://avaloniaui.net) is
+pinned to **11.3.13** even though a 12.x line exists, because `Avalonia.Controls.DataGrid`
+lags the core packages and 11.3.13 is the newest version every Avalonia package in use
+shares. Mixing versions across an Avalonia release line is not supported. Moving to 12.x is
+a straightforward but real upgrade — a major version with its own API changes — and is
+tracked separately from the Azure stack, which has no such constraint.
+
+### Why it's a rewrite rather than a port
+
+The [Windows Service Bus Explorer](https://github.com/paolosalvatori/ServiceBusExplorer)
+is an excellent tool, but its code cannot be carried across to macOS. Two independent
+blockers, either fatal on its own:
 
 | Layer | Size | Blocker |
 |---|---|---|
-| `ServiceBusExplorer` (UI) | ~92k lines, 56 WinForms designers | WinForms is Windows-only. It does not exist in any .NET on macOS. |
-| `Common` | ~18.8k lines, 56 of 92 files affected | Built on `WindowsAzure.ServiceBus` 7.0.1 — the legacy WCF `Microsoft.ServiceBus` SDK. .NET Framework only; never ported to .NET Core. Also depends on `System.ServiceModel`, `System.Web`, `System.IdentityModel`. |
+| `ServiceBusExplorer` (UI) | ~92k lines, 56 WinForms designers | WinForms is a Windows-only technology. It has no implementation on macOS in any version of .NET. |
+| `Common` | ~18.8k lines, 56 of 92 files affected | Built on the `Microsoft.ServiceBus` API from the `WindowsAzure.ServiceBus` package, which is WCF-based and ships a single `net462` target. |
 
-So SB-Mac reimplements both layers on cross-platform foundations:
+On that second point, this is Microsoft's own guidance rather than an opinion — the
+[`WindowsAzure.ServiceBus`](https://www.nuget.org/packages/WindowsAzure.ServiceBus)
+package description reads:
 
-- **Service layer** → `Azure.Messaging.ServiceBus` 7.20.2 + `Azure.Identity` 1.21.0
-- **UI** → Avalonia 11.3.13, targeting .NET 10
+> Please note, for Azure Service Bus, Azure Event Hubs and Azure Relay, newer packages
+> Azure.Messaging.ServiceBus, Azure.Messaging.EventHubs and Microsoft.Azure.Relay are
+> available as of November 2020, February 2020 and March 2017 respectively. While
+> WindowsAzure.ServiceBus will continue to receive critical bug fixes, we strongly
+> encourage you to upgrade.
 
-The original repository's `netstandard2.0` projects (`Utilities`, `ServiceBus`,
-`EventHubs`, `Relay`, `EventGridExplorerLibrary`) were already portable and already on
-the modern SDKs. SB-Mac takes the same approach rather than depending on them, so this
+Its successor is exactly what SB-Mac uses. Upgrading the Windows app's `Common` layer in
+place would mean rewriting it against a different API surface anyway — the old
+`NamespaceManager` / `BrokeredMessage` model has no direct equivalent — and its UI would
+still be stuck on WinForms. So both layers were rebuilt here on the current stack.
+
+The Windows repository's `netstandard2.0` projects (`Utilities`, `ServiceBus`,
+`EventHubs`, `Relay`, `EventGridExplorerLibrary`) were already portable and already on the
+modern SDKs. SB-Mac takes the same approach rather than depending on them, so this
 repository is self-contained — no source from the Windows project is vendored in.
+
+### Keeping it current
+
+```bash
+dotnet list package --outdated
+```
+
+Bump versions in `src/*/*.csproj` and `tests/*/*.csproj`. CI builds, tests and packages on
+every push, so a bad upgrade surfaces before it can be tagged. Keep all `Avalonia.*`
+packages on the same version — see the note above.
 
 ---
 
