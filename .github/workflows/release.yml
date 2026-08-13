@@ -48,8 +48,11 @@ jobs:
       - name: Test
         run: dotnet test --configuration Release
 
+      # The tag is passed in rather than derived from the checkout: actions/checkout
+      # fetches shallow and without tags, so `git describe` inside the script would
+      # find nothing and stamp 0.0.0 onto a real release.
       - name: Build .app
-        run: ./build/make-app.sh ${{ matrix.runtime }}
+        run: ./build/make-app.sh ${{ matrix.runtime }} "${{ github.event.inputs.tag || github.ref_name }}"
 
       # ── Developer ID signing, only when the secrets are configured ──────────────
       #
