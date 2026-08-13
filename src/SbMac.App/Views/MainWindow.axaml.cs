@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+// Avalonia 12 moved SetTextAsync off IClipboard onto ClipboardExtensions in this namespace.
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 

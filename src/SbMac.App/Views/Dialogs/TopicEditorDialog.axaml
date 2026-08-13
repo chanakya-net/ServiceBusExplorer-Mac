@@ -23,7 +23,7 @@
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
           <TextBox Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
-                   Watermark="order-events" />
+                   PlaceholderText="order-events" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
@@ -34,12 +34,12 @@
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default time to live" />
-          <TextBox Grid.Column="1" Text="{Binding DefaultMessageTimeToLive}" Watermark="blank = service default" />
+          <TextBox Grid.Column="1" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Auto-delete on idle" />
-          <TextBox Grid.Column="1" Text="{Binding AutoDeleteOnIdle}" Watermark="blank = never" />
+          <TextBox Grid.Column="1" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
         </Grid>
 
         <TextBlock Classes="tertiary" Margin="190,0,0,0"
@@ -73,7 +73,7 @@
             <TextBox Grid.Column="1"
                      Text="{Binding DuplicateDetectionHistoryTimeWindow}"
                      IsEnabled="{Binding CanEditCreateOnlySettings}"
-                     Watermark="00:10:00" />
+                     PlaceholderText="00:10:00" />
           </Grid>
 
           <TextBlock Classes="tertiary"

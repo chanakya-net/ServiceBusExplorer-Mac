@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 
 using SbMac.App.ViewModels;
@@ -16,10 +15,10 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // Avalonia's DataAnnotations validator duplicates every validation error
-            // raised by the view models' own INotifyDataErrorInfo implementation.
-            DisableDuplicateValidation();
-
+            // Avalonia 11 registered a DataAnnotations validator by default, which
+            // duplicated every error the view models raise themselves, so it had to be
+            // removed here. Avalonia 12 no longer registers it — and made BindingPlugins
+            // internal — so there is nothing left to undo.
             var viewModel = new MainWindowViewModel();
             desktop.MainWindow = new MainWindow { DataContext = viewModel };
 
@@ -28,13 +27,5 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
-    }
-
-    static void DisableDuplicateValidation()
-    {
-        foreach (var plugin in BindingPlugins.DataValidators.OfType<DataAnnotationsValidationPlugin>().ToArray())
-        {
-            BindingPlugins.DataValidators.Remove(plugin);
-        }
     }
 }

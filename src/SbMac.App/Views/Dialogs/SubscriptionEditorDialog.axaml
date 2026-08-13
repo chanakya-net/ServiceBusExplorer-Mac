@@ -23,7 +23,7 @@
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
           <TextBox Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
-                   Watermark="audit" />
+                   PlaceholderText="audit" />
         </Grid>
 
         <!-- Only offered on create: the default rule can't be replaced atomically later. -->
@@ -31,7 +31,7 @@
           <Grid ColumnDefinitions="190,*">
             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default rule filter" />
             <TextBox Grid.Column="1" Classes="mono" Text="{Binding DefaultRuleFilter}"
-                     Watermark="1=1" />
+                     PlaceholderText="1=1" />
           </Grid>
           <TextBlock Classes="tertiary" Margin="190,0,0,0"
                      TextWrapping="Wrap"
@@ -46,17 +46,17 @@
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Lock duration" />
-          <TextBox Grid.Column="1" Text="{Binding LockDuration}" Watermark="00:00:30" />
+          <TextBox Grid.Column="1" Text="{Binding LockDuration}" PlaceholderText="00:00:30" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default time to live" />
-          <TextBox Grid.Column="1" Text="{Binding DefaultMessageTimeToLive}" Watermark="blank = service default" />
+          <TextBox Grid.Column="1" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Auto-delete on idle" />
-          <TextBox Grid.Column="1" Text="{Binding AutoDeleteOnIdle}" Watermark="blank = never" />
+          <TextBox Grid.Column="1" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
         </Grid>
 
         <Rectangle Classes="divider" Margin="0,6" />
@@ -90,7 +90,7 @@
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward to" />
-          <TextBox Grid.Column="1" Text="{Binding ForwardTo}" Watermark="another queue or topic" />
+          <TextBox Grid.Column="1" Text="{Binding ForwardTo}" PlaceholderText="another queue or topic" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">

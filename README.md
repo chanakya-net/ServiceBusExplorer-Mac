@@ -69,12 +69,20 @@ Microsoft recommends for new work. No legacy compatibility shims, and nothing he
 `dotnet list package --outdated` reports nothing to update for `SbMac.Core`, which is the
 entire Azure surface.
 
-The UI framework is the one deliberate exception. [Avalonia](https://avaloniaui.net) is
-pinned to **11.3.13** even though a 12.x line exists, because `Avalonia.Controls.DataGrid`
-lags the core packages and 11.3.13 is the newest version every Avalonia package in use
-shares. Mixing versions across an Avalonia release line is not supported. Moving to 12.x is
-a straightforward but real upgrade — a major version with its own API changes — and is
-tracked separately from the Azure stack, which has no such constraint.
+The UI is [Avalonia](https://avaloniaui.net) **12.1**, also current.
+`Avalonia.Controls.DataGrid` ships slightly ahead of the core packages at 12.1.2, which is
+fine — it requires core `>= 12.1.0`. Keep all `Avalonia.*` references on the same version;
+mixing across a release line is not supported.
+
+Two consequences of being on 12 rather than 11 are worth knowing:
+
+- **DevTools is gone.** `Avalonia.Diagnostics` has no 12.x release and no first-party
+  replacement, so the in-app visual tree inspector is not available in Debug builds. The
+  screenshot harness below covers most of what it was used for here.
+- **Tests run on xunit v3.** Not a choice — `Avalonia.Headless.XUnit` 12 depends on
+  `xunit.v3.extensibility.core`, and referencing v2 alongside it makes every `[Fact]`
+  ambiguous. xunit v3 test projects are self-executing, hence `<OutputType>Exe</OutputType>`
+  in the test project.
 
 ### Why it's a rewrite rather than a port
 
@@ -156,7 +164,7 @@ packages on the same version — see the note above.
 
 ## Authentication
 
-Both modes the question asked for, selectable per namespace.
+Two modes, selectable per namespace.
 
 **Connection string** — paste a SAS connection string from the portal.
 

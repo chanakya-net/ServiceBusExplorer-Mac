@@ -14,19 +14,24 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.13" />
+    <PackageReference Include="Avalonia" Version="12.1.1" />
     <!--
       macOS backend only, instead of the Avalonia.Desktop metapackage. That package also
       pulls in the X11 and Win32 backends, neither of which can run here, and X11 drags in
       a Tmds.DBus.Protocol version with a published advisory. Referencing Avalonia.Native
       directly keeps the dependency graph to what actually executes on this platform.
     -->
-    <PackageReference Include="Avalonia.Native" Version="11.3.13" />
-    <PackageReference Include="Avalonia.Skia" Version="11.3.13" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.13" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.13" />
-    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.13" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="Avalonia.Native" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.1" />
+    <!--
+      Avalonia 12 split text shaping out of Skia into its own package and no longer
+      configures it implicitly. Without this the app builds fine and then dies at startup
+      with "No text shaping system configured".
+    -->
+    <PackageReference Include="Avalonia.HarfBuzz" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
