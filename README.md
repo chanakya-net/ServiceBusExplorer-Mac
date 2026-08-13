@@ -187,8 +187,8 @@ Both modes support AMQP over WebSockets (port 443) for networks that block 5671.
 
 ### Where secrets go
 
-Connection strings and client secrets are written to the **macOS login keychain** via
-`/usr/bin/security`, keyed per namespace. They are never written to the config file.
+Connection strings and client secrets are written to the **macOS login keychain**, keyed
+per namespace. They are never written to the config file.
 
 ```
 ~/Library/Application Support/SB-Mac/
@@ -196,7 +196,24 @@ Connection strings and client secrets are written to the **macOS login keychain*
   settings.json        preferences
 ```
 
-A test asserts this directly: `SecretsAreKeptOutOfTheConnectionsFile`.
+Keychain access goes through the Security framework (`SecItemAdd` and friends) rather than
+the `security` command-line tool. That is not a stylistic preference — the CLI cannot do
+this job safely or, as it turns out, correctly:
+
+- `security add-generic-password -w` with no value **prompts on the terminal** instead of
+  reading stdin. From a GUI app it stores an *empty* password and still exits 0, so every
+  saved connection string silently disappeared. This shipped in v1.0.0 and v1.1.0; see
+  `KeychainSecretStoreTests` for the regression tests.
+- The forms that do work — `-w <value>` and `-X <hex>` — put the secret in the process
+  arguments, where anything running as the same user can read it out of `ps`.
+
+Two tests pin the behaviour end to end: `SecretsAreKeptOutOfTheConnectionsFile` and
+`ConnectionStringSurvivesAnAppRestart`, the latter saving through one `ConnectionStore`
+and reading back through a fresh one, which is what an app restart does.
+
+**Upgrading from v1.0.0 or v1.1.0?** Namespaces saved by those builds have an empty
+keychain entry. SB-Mac now flags them on startup — select the namespace, choose **Edit
+Namespace**, and paste the connection string again. It will stick this time.
 
 ---
 
@@ -262,7 +279,7 @@ Requires the .NET 10 SDK.
 
 ```bash
 dotnet build          # build everything
-dotnet test           # 96 tests
+dotnet test           # 106 tests
 dotnet run --project src/SbMac.App    # run without packaging
 ```
 
@@ -309,7 +326,7 @@ SB-Mac/
     Views/                 windows and dialogs
     Styles/                Theme.axaml (tokens), Icons.axaml, AppStyles.axaml
     Converters/            icon-name to geometry lookup
-  tests/SbMac.Tests/       96 tests, including headless UI tests
+  tests/SbMac.Tests/       106 tests, including headless UI and real-keychain tests
   tools/SbMac.Preview/     dev-only screenshot harness (not in the solution)
   build/                   Info.plist, icon generator, packaging and signing scripts
 ```
@@ -325,7 +342,7 @@ or tests without a UI.
 dotnet test
 ```
 
-96 tests, all passing, no Azure connection required. They cover message body decoding,
+106 tests, all passing, no Azure connection required. They cover message body decoding,
 connection string parsing, secret storage, import/export round-trips, and view model
 logic.
 

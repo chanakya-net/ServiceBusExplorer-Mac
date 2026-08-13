@@ -178,14 +178,34 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
+            var missingSecrets = 0;
+
             foreach (var connection in await connectionStore.LoadAsync().ConfigureAwait(true))
             {
-                Namespaces.Add(new NamespaceNodeViewModel(connection));
+                var node = new NamespaceNodeViewModel(connection);
+
+                // A saved namespace whose secret is gone from the keychain looks identical
+                // to a healthy one until you try to connect. Flag it up front instead.
+                if (connection.AuthenticationMode == AuthenticationMode.ConnectionString &&
+                    string.IsNullOrWhiteSpace(connection.ConnectionString))
+                {
+                    node.ConnectionError = "Connection string missing from the keychain — edit this namespace to re-enter it.";
+                    missingSecrets++;
+                }
+
+                Namespaces.Add(node);
             }
 
             AppendLog(Namespaces.Count == 0
                 ? "No saved namespaces yet — use Add namespace to connect."
                 : $"Loaded {Namespaces.Count} saved namespace(s).");
+
+            if (missingSecrets > 0)
+            {
+                AppendLog(
+                    $"{missingSecrets} namespace(s) have no connection string in the keychain. " +
+                    "Select one and choose Edit Namespace to re-enter it.");
+            }
         }
         catch (Exception exception)
         {
@@ -329,7 +349,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         catch (Exception exception)
         {
+            // A failed save means the connection string is gone the moment the app closes.
+            // Logging it quietly is how that went unnoticed before, so this is surfaced.
             AppendLog($"Could not save connections: {exception.Message}");
+
+            if (Ui is not null)
+            {
+                await Ui.ShowErrorAsync(
+                    "Could not save the connection",
+                    $"{exception.Message}\n\n" +
+                    "The namespace is usable now, but will not be remembered when SB-Mac closes.")
+                    .ConfigureAwait(true);
+            }
         }
     }
 
