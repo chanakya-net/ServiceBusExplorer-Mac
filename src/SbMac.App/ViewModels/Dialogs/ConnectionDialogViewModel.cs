@@ -19,6 +19,7 @@ public sealed partial class ConnectionDialogViewModel : ViewModelBase
         id = connection.Id;
 
         name = connection.Name;
+        useEventHubs = connection.Kind == NamespaceKind.EventHubs;
         useEntraId = connection.AuthenticationMode == AuthenticationMode.EntraId;
         connectionString = connection.ConnectionString ?? string.Empty;
         fullyQualifiedNamespace = connection.FullyQualifiedNamespace ?? string.Empty;
@@ -27,6 +28,9 @@ public sealed partial class ConnectionDialogViewModel : ViewModelBase
         clientSecret = connection.ClientSecret ?? string.Empty;
         useWebSockets = connection.Transport == ServiceBusTransport.AmqpWebSockets;
         selectedCredentialKind = connection.EntraCredentialKind;
+        eventHubNames = string.Join(Environment.NewLine, connection.EventHubNames);
+        consumerGroup = connection.ConsumerGroup ?? string.Empty;
+        subscriptionId = connection.SubscriptionId ?? string.Empty;
     }
 
     public bool IsNew { get; }
@@ -45,9 +49,18 @@ public sealed partial class ConnectionDialogViewModel : ViewModelBase
     string name;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowEventHubFields))]
+    [NotifyPropertyChangedFor(nameof(ShowSubscriptionField))]
+    [NotifyPropertyChangedFor(nameof(ConnectionStringPlaceholder))]
+    [NotifyPropertyChangedFor(nameof(RoleHint))]
+    bool useEventHubs;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSave))]
     [NotifyPropertyChangedFor(nameof(ShowConnectionStringFields))]
     [NotifyPropertyChangedFor(nameof(ShowEntraFields))]
+    [NotifyPropertyChangedFor(nameof(ShowSubscriptionField))]
+    [NotifyPropertyChangedFor(nameof(RoleHint))]
     bool useEntraId;
 
     [ObservableProperty]
@@ -69,6 +82,19 @@ public sealed partial class ConnectionDialogViewModel : ViewModelBase
 
     [ObservableProperty]
     bool useWebSockets;
+
+    /// <summary>
+    /// Event hub names, one per line. Free text rather than a picker because the hubs in a
+    /// namespace can only be listed through ARM, which not every identity can reach.
+    /// </summary>
+    [ObservableProperty]
+    string eventHubNames;
+
+    [ObservableProperty]
+    string consumerGroup;
+
+    [ObservableProperty]
+    string subscriptionId;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSave))]
@@ -97,6 +123,28 @@ public sealed partial class ConnectionDialogViewModel : ViewModelBase
     public bool ShowEntraFields => UseEntraId;
 
     public bool ShowClientSecretFields => UseEntraId && SelectedCredentialKind == EntraCredentialKind.ClientSecret;
+
+    public bool ShowEventHubFields => UseEventHubs;
+
+    /// <summary>
+    /// The subscription only matters for ARM hub discovery, which needs an Entra identity.
+    /// </summary>
+    public bool ShowSubscriptionField => UseEventHubs && UseEntraId;
+
+    /// <summary>
+    /// An Event Hubs connection string copied from a hub rather than the namespace carries
+    /// an <c>EntityPath</c>, which pins it to that one hub — worth showing so the shape is
+    /// recognisable when it happens.
+    /// </summary>
+    public string ConnectionStringPlaceholder => UseEventHubs
+        ? "Endpoint=sb://contoso.servicebus.windows.net/;SharedAccessKeyName=…;SharedAccessKey=…;EntityPath=telemetry"
+        : "Endpoint=sb://contoso.servicebus.windows.net/;SharedAccessKeyName=…;SharedAccessKey=…";
+
+    /// <summary>The role the signed-in identity needs, which differs between the two services.</summary>
+    public string RoleHint => UseEventHubs
+        ? "Your identity needs the Azure Event Hubs Data Receiver role to read events, and Data Sender to publish them. " +
+          "Listing the hubs in the namespace additionally needs Reader on the namespace resource; without it, name the hubs below."
+        : "Your identity needs the Azure Service Bus Data Owner role on the namespace to browse entities and messages.";
 
     public bool CanSave
     {
@@ -150,6 +198,7 @@ public sealed partial class ConnectionDialogViewModel : ViewModelBase
     {
         Id = id,
         Name = Name.Trim(),
+        Kind = UseEventHubs ? NamespaceKind.EventHubs : NamespaceKind.ServiceBus,
         AuthenticationMode = UseEntraId ? AuthenticationMode.EntraId : AuthenticationMode.ConnectionString,
         ConnectionString = UseEntraId ? null : ConnectionString.Trim(),
         FullyQualifiedNamespace = UseEntraId ? NormalizeNamespace(FullyQualifiedNamespace) : null,
@@ -157,8 +206,38 @@ public sealed partial class ConnectionDialogViewModel : ViewModelBase
         TenantId = NullIfBlank(TenantId),
         ClientId = NullIfBlank(ClientId),
         ClientSecret = SelectedCredentialKind == EntraCredentialKind.ClientSecret ? NullIfBlank(ClientSecret) : null,
-        Transport = UseWebSockets ? ServiceBusTransport.AmqpWebSockets : ServiceBusTransport.AmqpTcp
+        Transport = UseWebSockets ? ServiceBusTransport.AmqpWebSockets : ServiceBusTransport.AmqpTcp,
+
+        // The Event Hubs fields are cleared rather than kept when the kind is switched
+        // back, so a saved Service Bus namespace never carries stale hub names.
+        EventHubNames = UseEventHubs ? [.. ParseEventHubNames(EventHubNames)] : [],
+        ConsumerGroup = UseEventHubs ? NullIfBlank(ConsumerGroup) : null,
+        SubscriptionId = UseEventHubs ? NullIfBlank(SubscriptionId) : null
     };
+
+    /// <summary>
+    /// Splits the free-text hub list. People paste these from a portal blade or a script,
+    /// so newlines, commas and semicolons all have to work, and duplicates are dropped.
+    /// </summary>
+    public static IReadOnlyList<string> ParseEventHubNames(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        var names = new List<string>();
+        foreach (var token in text.Split(['\n', '\r', ',', ';'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var name = token.Trim();
+            if (name.Length > 0 && !names.Contains(name, StringComparer.OrdinalIgnoreCase))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
+    }
 
     /// <summary>
     /// Accepts what people actually paste — a bare host, or a full <c>sb://host/</c> URL —

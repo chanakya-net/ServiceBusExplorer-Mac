@@ -3,10 +3,12 @@ using Avalonia.Headless.XUnit;
 
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
+using SbMac.App.ViewModels.Tree;
 using SbMac.App.Views;
 using SbMac.App.Views.Dialogs;
 
 using SbMac.Core.Connections;
+using SbMac.Core.EventHubs;
 using SbMac.Core.ImportExport;
 
 using Xunit;
@@ -69,6 +71,23 @@ public class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void ConnectionDialogLoadsForAnEventHubsNamespace()
+    {
+        var connection = new NamespaceConnection
+        {
+            Name = "contoso",
+            Kind = NamespaceKind.EventHubs,
+            EventHubNames = ["telemetry"],
+            ConsumerGroup = "analytics"
+        };
+
+        var window = new ConnectionDialog { DataContext = new ConnectionDialogViewModel(connection) };
+        window.Show();
+
+        Assert.Equal("Edit namespace", window.Title);
+    }
+
+    [AvaloniaFact]
     public void SendMessageDialogLoads()
     {
         var window = new SendMessageDialog
@@ -79,6 +98,47 @@ public class UiSmokeTests
         window.Show();
 
         Assert.Equal("Send to orders", window.Title);
+    }
+
+    [AvaloniaFact]
+    public void SendMessageDialogLoadsForAnEventHub()
+    {
+        var window = new SendMessageDialog
+        {
+            DataContext = new SendMessageViewModel(new SendMessageRequest("telemetry", IsEventHub: true))
+        };
+
+        window.Show();
+
+        Assert.Equal("Send to telemetry", window.Title);
+    }
+
+    /// <summary>
+    /// The toolbar's enabled states are bound to properties that only an Event Hubs
+    /// selection exercises, so the window is shown with one selected.
+    /// </summary>
+    [AvaloniaFact]
+    public void MainWindowRendersWithAnEventHubSelected()
+    {
+        var namespaceNode = new NamespaceNodeViewModel(new NamespaceConnection
+        {
+            Name = "contoso",
+            Kind = NamespaceKind.EventHubs
+        });
+
+        var folder = new EventHubFolderNodeViewModel { Parent = namespaceNode };
+        var hub = new EventHubNodeViewModel(
+            new EventHubEntity("telemetry", DateTimeOffset.UtcNow, ["0", "1"], ["$Default"])) { Parent = folder };
+
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+
+        viewModel.Namespaces.Add(namespaceNode);
+        viewModel.SelectedNode = hub;
+
+        Assert.Equal("Events", viewModel.MessageSourceLabel);
+        Assert.NotNull(window.GetControl<DataGrid>("MessageGrid"));
     }
 
     [AvaloniaFact]

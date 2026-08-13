@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using SbMac.Core;
 using SbMac.Core.Connections;
 using SbMac.Core.Entities;
+using SbMac.Core.EventHubs;
 using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 
@@ -10,11 +11,14 @@ namespace SbMac.App.ViewModels.Tree;
 
 /// <summary>
 /// A saved namespace and, once connected, the services bound to it. This is the root
-/// of each branch in the tree and the owner of the live <see cref="ServiceBusSession"/>.
+/// of each branch in the tree and the owner of the live session — a
+/// <see cref="ServiceBusSession"/> or an <see cref="EventHubsSession"/>, depending on
+/// which service the connection points at.
 /// </summary>
 public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDisposable
 {
     ServiceBusSession? session;
+    EventHubsSession? eventHubsSession;
 
     public NamespaceNodeViewModel(NamespaceConnection connection)
     {
@@ -38,9 +42,17 @@ public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDi
 
     public ImportExportService? ImportExport { get; private set; }
 
+    /// <summary>Set instead of <see cref="Entities"/> when this is an Event Hubs namespace.</summary>
+    public EventHubService? EventHubs { get; private set; }
+
     public QueueFolderNodeViewModel? QueueFolder { get; private set; }
 
     public TopicFolderNodeViewModel? TopicFolder { get; private set; }
+
+    public EventHubFolderNodeViewModel? EventHubFolder { get; private set; }
+
+    /// <summary>True when this namespace is browsed as Event Hubs rather than Service Bus.</summary>
+    public bool IsEventHubs => Connection.Kind == NamespaceKind.EventHubs;
 
     /// <summary>Replaces the saved settings, e.g. after the user edits the connection.</summary>
     public void UpdateConnection(NamespaceConnection connection)
@@ -55,7 +67,20 @@ public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDi
             ? Connection.ResolvedNamespace
             : Connection.Name;
 
-        Detail = Connection.AuthenticationMode == AuthenticationMode.EntraId ? "Entra ID" : null;
+        // Two facts fight for one line here, so only the non-default ones are shown:
+        // Service Bus is the assumed service, and a SAS key the assumed credential.
+        var parts = new List<string>(2);
+        if (Connection.Kind == NamespaceKind.EventHubs)
+        {
+            parts.Add("Event Hubs");
+        }
+
+        if (Connection.AuthenticationMode == AuthenticationMode.EntraId)
+        {
+            parts.Add("Entra ID");
+        }
+
+        Detail = parts.Count == 0 ? null : string.Join(" · ", parts);
     }
 
     /// <summary>
@@ -71,25 +96,14 @@ public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDi
 
         try
         {
-            session = ServiceBusSession.Create(Connection);
-            await session.TestConnectionAsync(cancellationToken).ConfigureAwait(true);
-
-            Entities = new EntityService(session);
-            Messages = new MessageService(session);
-            ImportExport = new ImportExportService(Entities);
-
-            QueueFolder = new QueueFolderNodeViewModel { Parent = this };
-            TopicFolder = new TopicFolderNodeViewModel { Parent = this };
-
-            Children.Clear();
-            Children.Add(QueueFolder);
-            Children.Add(TopicFolder);
-
-            IsConnected = true;
-            IsExpanded = true;
-
-            await QueueFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
-            await TopicFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
+            if (IsEventHubs)
+            {
+                await ConnectEventHubsAsync(cancellationToken).ConfigureAwait(true);
+            }
+            else
+            {
+                await ConnectServiceBusAsync(cancellationToken).ConfigureAwait(true);
+            }
         }
         catch (Exception exception)
         {
@@ -106,6 +120,47 @@ public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDi
         }
     }
 
+    async Task ConnectServiceBusAsync(CancellationToken cancellationToken)
+    {
+        session = ServiceBusSession.Create(Connection);
+        await session.TestConnectionAsync(cancellationToken).ConfigureAwait(true);
+
+        Entities = new EntityService(session);
+        Messages = new MessageService(session);
+        ImportExport = new ImportExportService(Entities);
+
+        QueueFolder = new QueueFolderNodeViewModel { Parent = this };
+        TopicFolder = new TopicFolderNodeViewModel { Parent = this };
+
+        Children.Clear();
+        Children.Add(QueueFolder);
+        Children.Add(TopicFolder);
+
+        IsConnected = true;
+        IsExpanded = true;
+
+        await QueueFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
+        await TopicFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
+    }
+
+    async Task ConnectEventHubsAsync(CancellationToken cancellationToken)
+    {
+        eventHubsSession = EventHubsSession.Create(Connection);
+        await eventHubsSession.TestConnectionAsync(cancellationToken).ConfigureAwait(true);
+
+        EventHubs = new EventHubService(eventHubsSession);
+
+        EventHubFolder = new EventHubFolderNodeViewModel { Parent = this };
+
+        Children.Clear();
+        Children.Add(EventHubFolder);
+
+        IsConnected = true;
+        IsExpanded = true;
+
+        await EventHubFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
+    }
+
     public async Task DisconnectAsync()
     {
         if (session is not null)
@@ -114,17 +169,25 @@ public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDi
             session = null;
         }
 
+        if (eventHubsSession is not null)
+        {
+            await eventHubsSession.DisposeAsync().ConfigureAwait(true);
+            eventHubsSession = null;
+        }
+
         Entities = null;
         Messages = null;
         ImportExport = null;
+        EventHubs = null;
         QueueFolder = null;
         TopicFolder = null;
+        EventHubFolder = null;
 
         Children.Clear();
         IsConnected = false;
     }
 
-    /// <summary>Reloads both folders. Does nothing when not connected.</summary>
+    /// <summary>Reloads the top-level folders. Does nothing when not connected.</summary>
     public override async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         if (!IsConnected)
@@ -143,6 +206,11 @@ public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDi
             if (TopicFolder is not null)
             {
                 await TopicFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
+            }
+
+            if (EventHubFolder is not null)
+            {
+                await EventHubFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
             }
         }
         finally

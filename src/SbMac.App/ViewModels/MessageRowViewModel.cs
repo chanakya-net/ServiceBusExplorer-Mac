@@ -50,6 +50,15 @@ public sealed class MessageRowViewModel : ViewModelBase
 
     public int DeliveryCount => Record.DeliveryCount;
 
+    /// <summary>
+    /// The delivery count for the grid. Blank for events: Event Hubs never redelivers, so
+    /// a column of zeroes would read as information it isn't.
+    /// </summary>
+    public string? DeliveryCountText => Record.IsEvent ? null : Record.DeliveryCount.ToString();
+
+    /// <summary>The partition an event came from. Null for Service Bus messages.</summary>
+    public string? PartitionId => Record.Event?.PartitionId;
+
     public string? Label => Record.Subject;
 
     public string? SessionId => Record.SessionId;
@@ -132,18 +141,31 @@ public sealed class MessageRowViewModel : ViewModelBase
             Append("SequenceNumber", Record.SequenceNumber);
             Append("EnqueuedSequenceNumber", Record.EnqueuedSequenceNumber == 0 ? null : Record.EnqueuedSequenceNumber);
             Append("EnqueuedTime", Record.EnqueuedTime.ToLocalTime().ToString("O"));
-            Append("ExpiresAt", Record.ExpiresAt == DateTimeOffset.MaxValue
-                ? "never"
-                : Record.ExpiresAt.ToLocalTime().ToString("O"));
 
-            if (Record.ScheduledEnqueueTime > DateTimeOffset.MinValue)
+            if (Record.Event is { } origin)
             {
-                Append("ScheduledEnqueueTime", Record.ScheduledEnqueueTime.ToLocalTime().ToString("O"));
+                Append("PartitionId", origin.PartitionId);
+                Append("Offset", origin.Offset);
+            }
+            else
+            {
+                // Locks, expiry, redelivery and message state are broker behaviour Event
+                // Hubs has no equivalent of, so they are left off rather than shown at
+                // whatever default they happen to hold.
+                Append("ExpiresAt", Record.ExpiresAt == DateTimeOffset.MaxValue
+                    ? "never"
+                    : Record.ExpiresAt.ToLocalTime().ToString("O"));
+
+                if (Record.ScheduledEnqueueTime > DateTimeOffset.MinValue)
+                {
+                    Append("ScheduledEnqueueTime", Record.ScheduledEnqueueTime.ToLocalTime().ToString("O"));
+                }
+
+                Append("TimeToLive", Record.TimeToLive == TimeSpan.MaxValue ? "infinite" : Record.TimeToLive.ToString());
+                Append("DeliveryCount", Record.DeliveryCount);
+                Append("State", Record.State);
             }
 
-            Append("TimeToLive", Record.TimeToLive == TimeSpan.MaxValue ? "infinite" : Record.TimeToLive.ToString());
-            Append("DeliveryCount", Record.DeliveryCount);
-            Append("State", Record.State);
             Append("Subject", Record.Subject);
             Append("CorrelationId", Record.CorrelationId);
             Append("SessionId", Record.SessionId);
@@ -198,18 +220,28 @@ public sealed class MessageRowViewModel : ViewModelBase
             Add("Session ID", Record.SessionId);
             Add("Partition key", Record.PartitionKey);
 
-            entries.Add(new MessagePropertyEntry("Delivery", string.Empty, IsSection: true));
-            Add("Enqueued", Record.EnqueuedTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff"));
-            Add("Expires", Record.ExpiresAt == DateTimeOffset.MaxValue
-                ? "never"
-                : Record.ExpiresAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
-            Add("Time to live", Record.TimeToLive == TimeSpan.MaxValue ? "infinite" : Record.TimeToLive.ToString());
-            Add("Delivery count", Record.DeliveryCount);
-            Add("State", Record.State);
-
-            if (Record.ScheduledEnqueueTime > DateTimeOffset.MinValue)
+            if (Record.Event is { } origin)
             {
-                Add("Scheduled for", Record.ScheduledEnqueueTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+                entries.Add(new MessagePropertyEntry("Position", string.Empty, IsSection: true));
+                Add("Partition", origin.PartitionId);
+                Add("Offset", origin.Offset);
+                Add("Enqueued", Record.EnqueuedTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff"));
+            }
+            else
+            {
+                entries.Add(new MessagePropertyEntry("Delivery", string.Empty, IsSection: true));
+                Add("Enqueued", Record.EnqueuedTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff"));
+                Add("Expires", Record.ExpiresAt == DateTimeOffset.MaxValue
+                    ? "never"
+                    : Record.ExpiresAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+                Add("Time to live", Record.TimeToLive == TimeSpan.MaxValue ? "infinite" : Record.TimeToLive.ToString());
+                Add("Delivery count", Record.DeliveryCount);
+                Add("State", Record.State);
+
+                if (Record.ScheduledEnqueueTime > DateTimeOffset.MinValue)
+                {
+                    Add("Scheduled for", Record.ScheduledEnqueueTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+                }
             }
 
             entries.Add(new MessagePropertyEntry("Content", string.Empty, IsSection: true));

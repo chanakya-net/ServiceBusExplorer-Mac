@@ -11,6 +11,7 @@ using SbMac.App.ViewModels.Tree;
 using SbMac.Core;
 using SbMac.Core.Connections;
 using SbMac.Core.Entities;
+using SbMac.Core.EventHubs;
 using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 
@@ -54,18 +55,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(SelectedQueue))]
     [NotifyPropertyChangedFor(nameof(SelectedTopic))]
     [NotifyPropertyChangedFor(nameof(SelectedSubscription))]
+    [NotifyPropertyChangedFor(nameof(SelectedEventHub))]
+    [NotifyPropertyChangedFor(nameof(SelectedPartition))]
     [NotifyPropertyChangedFor(nameof(SelectedNamespace))]
     [NotifyPropertyChangedFor(nameof(HasMessageEntity))]
     [NotifyPropertyChangedFor(nameof(EmptyMessagesHint))]
+    [NotifyPropertyChangedFor(nameof(MessageSourceLabel))]
     [NotifyPropertyChangedFor(nameof(CanCreateSubscription))]
     [NotifyPropertyChangedFor(nameof(CanEditEntity))]
     [NotifyPropertyChangedFor(nameof(CanDeleteEntity))]
+    [NotifyPropertyChangedFor(nameof(CanManageEntities))]
+    [NotifyPropertyChangedFor(nameof(CanUseBrokerActions))]
+    [NotifyPropertyChangedFor(nameof(CanSend))]
+    [NotifyPropertyChangedFor(nameof(CanEditAndResend))]
+    [NotifyPropertyChangedFor(nameof(IsEventHubSelection))]
     [NotifyPropertyChangedFor(nameof(EntityHeader))]
     [NotifyPropertyChangedFor(nameof(EntitySummary))]
     TreeNodeViewModel? selectedNode;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedMessage))]
+    [NotifyPropertyChangedFor(nameof(CanEditAndResend))]
     [NotifyPropertyChangedFor(nameof(BodyText))]
     [NotifyPropertyChangedFor(nameof(PropertiesText))]
     [NotifyPropertyChangedFor(nameof(PropertyEntries))]
@@ -83,10 +93,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public SubscriptionNodeViewModel? SelectedSubscription => SelectedNode as SubscriptionNodeViewModel;
 
-    /// <summary>True when the selection is something messages can be read from.</summary>
-    public bool HasMessageEntity => SelectedQueue is not null || SelectedSubscription is not null;
+    public EventHubNodeViewModel? SelectedEventHub => SelectedNode as EventHubNodeViewModel;
+
+    public PartitionNodeViewModel? SelectedPartition => SelectedNode as PartitionNodeViewModel;
+
+    /// <summary>True when the selection is something messages or events can be read from.</summary>
+    public bool HasMessageEntity =>
+        SelectedQueue is not null ||
+        SelectedSubscription is not null ||
+        CurrentEventHubName is not null;
 
     public bool HasSelectedMessage => SelectedMessage is not null;
+
+    /// <summary>Needs both a message to start from and somewhere to send the result.</summary>
+    public bool CanEditAndResend => HasSelectedMessage && CanSend;
 
     public bool CanCreateSubscription => SelectedTopic is not null;
 
@@ -94,11 +114,45 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public bool CanDeleteEntity => CanEditEntity;
 
-    /// <summary>The message path the read/write commands act on.</summary>
+    /// <summary>
+    /// True when the selected namespace has entities SB-Mac can create, edit or move.
+    /// Event hubs are provisioned through ARM rather than the data plane, so they are
+    /// browsed here but not managed here.
+    /// </summary>
+    public bool CanManageEntities => SelectedNamespace is { IsEventHubs: false };
+
+    /// <summary>
+    /// True when the selection supports the actions that depend on a Service Bus broker:
+    /// receiving, deleting, purging and dead-lettering. Event Hubs has none of them — it
+    /// is an append-only log with time-based retention, and reads never remove anything.
+    /// </summary>
+    public bool CanUseBrokerActions => SelectedQueue is not null || SelectedSubscription is not null;
+
+    /// <summary>True when the current selection lives in an event hub rather than Service Bus.</summary>
+    public bool IsEventHubSelection => CurrentEventHubName is not null;
+
+    /// <summary>True when there is somewhere to send to and a live client to send with.</summary>
+    public bool CanSend =>
+        CurrentSendTarget is not null &&
+        (IsEventHubSelection
+            ? SelectedNamespace?.EventHubs is not null
+            : SelectedNamespace?.Messages is not null);
+
+    /// <summary>The message path the read/write commands act on. Null for Event Hubs.</summary>
     EntityPath? CurrentPath => SelectedQueue?.Path ?? SelectedSubscription?.Path;
 
-    /// <summary>Where a resubmit or send goes: the queue itself, or the subscription's topic.</summary>
-    string? CurrentSendTarget => SelectedQueue?.Entity.Name ?? SelectedSubscription?.Entity.TopicName ?? SelectedTopic?.Entity.Name;
+    /// <summary>The event hub the read/write commands act on, whether a hub or a partition is selected.</summary>
+    string? CurrentEventHubName => SelectedEventHub?.Entity.Name ?? SelectedPartition?.EventHubName;
+
+    /// <summary>The partition to read from, or null to read across all of them.</summary>
+    string? CurrentPartitionId => SelectedPartition?.PartitionId;
+
+    /// <summary>Where a resubmit or send goes: the queue itself, the subscription's topic, or the event hub.</summary>
+    string? CurrentSendTarget =>
+        SelectedQueue?.Entity.Name ??
+        SelectedSubscription?.Entity.TopicName ??
+        SelectedTopic?.Entity.Name ??
+        CurrentEventHubName;
 
     // ------------------------------------------------------------ view state
 
@@ -122,7 +176,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     string messageFilter = string.Empty;
 
-    public string MessageSourceLabel => ShowDeadLetter ? "Dead-letter queue" : "Active messages";
+    public string MessageSourceLabel => CurrentEventHubName is not null
+        ? "Events"
+        : ShowDeadLetter ? "Dead-letter queue" : "Active messages";
 
     public string BodyText => SelectedMessage?.BodyText ?? string.Empty;
 
@@ -140,15 +196,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public bool HasNoMessages => Messages.Count == 0;
 
     /// <summary>Short hint shown where the message list would be, when it's empty.</summary>
-    public string EmptyMessagesHint => HasMessageEntity
-        ? $"No messages loaded. Choose Peek to read the {(ShowDeadLetter ? "dead-letter queue" : "first messages")} without removing them."
-        : "Select a queue or subscription in the sidebar to browse its messages.";
+    public string EmptyMessagesHint => (HasMessageEntity, CurrentEventHubName is not null) switch
+    {
+        (true, true) =>
+            "No events loaded. Choose Peek to read the most recent events — Event Hubs reads never remove anything.",
+        (true, false) =>
+            $"No messages loaded. Choose Peek to read the {(ShowDeadLetter ? "dead-letter queue" : "first messages")} without removing them.",
+        _ => "Select a queue, subscription or event hub in the sidebar to browse its messages."
+    };
 
     public string EntityHeader => SelectedNode switch
     {
         QueueNodeViewModel queue => queue.Entity.Name,
         SubscriptionNodeViewModel subscription => $"{subscription.Entity.TopicName} / {subscription.Entity.Name}",
         TopicNodeViewModel topic => topic.Entity.Name,
+        EventHubNodeViewModel hub => hub.Entity.Name,
+        PartitionNodeViewModel partition => $"{partition.EventHubName} / partition {partition.PartitionId}",
         NamespaceNodeViewModel ns => ns.Title,
         _ => "No entity selected"
     };
@@ -165,11 +228,59 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         TopicNodeViewModel topic =>
             $"{topic.Entity.SubscriptionCount} subscriptions · {MessageRowViewModel.FormatBytes(topic.Entity.SizeInBytes)}",
 
+        EventHubNodeViewModel hub => DescribeEventHub(hub),
+
+        PartitionNodeViewModel partition => partition.Entity.IsEmpty
+            ? "No events retained in this partition."
+            : $"{partition.Entity.RetainedEventCount:N0} events retained · sequence {partition.Entity.BeginningSequenceNumber:N0}–" +
+              $"{partition.Entity.LastEnqueuedSequenceNumber:N0} · last at {partition.Entity.LastEnqueuedTime.ToLocalTime():g}",
+
         NamespaceNodeViewModel { IsConnected: true } ns => ns.Connection.ResolvedNamespace,
         NamespaceNodeViewModel ns => ns.ConnectionError ?? "Not connected",
 
-        _ => "Select a queue or subscription to browse its messages."
+        _ => "Select a queue, subscription or event hub to browse its messages."
     };
+
+    string DescribeEventHub(EventHubNodeViewModel hub)
+    {
+        if (hub.Entity.Error is { } error)
+        {
+            return error;
+        }
+
+        var parts = new List<string>(4)
+        {
+            $"{hub.Entity.PartitionCount} partitions",
+            $"{hub.RetainedEventCount:N0} events retained"
+        };
+
+        if (hub.Entity.ConsumerGroups.Count > 0)
+        {
+            parts.Add($"consumer groups: {string.Join(", ", hub.Entity.ConsumerGroups)}");
+        }
+
+        // Which group the reads go through changes what a competing application sees in
+        // its own checkpoints, so it belongs on screen rather than buried in settings.
+        if (SelectedNamespace is { } ns)
+        {
+            parts.Add($"reading through {ns.Connection.EffectiveConsumerGroup}");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// Event Hubs has no dead-letter sub-queue, so the toggle is cleared rather than left
+    /// on from a previous Service Bus selection — otherwise Peek would read the wrong
+    /// thing the moment the user came back.
+    /// </summary>
+    partial void OnSelectedNodeChanged(TreeNodeViewModel? value)
+    {
+        if (CurrentEventHubName is not null)
+        {
+            ShowDeadLetter = false;
+        }
+    }
 
     // ------------------------------------------------------------- lifecycle
 
@@ -403,6 +514,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     async Task PeekAsync()
     {
+        if (CurrentEventHubName is not null)
+        {
+            await PeekEventsAsync().ConfigureAwait(true);
+            return;
+        }
+
         var path = CurrentPath;
         var messages = SelectedNamespace?.Messages;
         if (path is null || messages is null)
@@ -421,6 +538,34 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             ReplaceMessages(records);
             AppendLog($"Peeked {records.Count} message(s) from {path}{(deadLetter ? "/$DeadLetterQueue" : string.Empty)}.");
+        }).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Reads the most recent events from the selected hub or partition. Non-destructive by
+    /// construction — Event Hubs has no operation that removes an event.
+    /// </summary>
+    async Task PeekEventsAsync()
+    {
+        var hubName = CurrentEventHubName;
+        var eventHubs = SelectedNamespace?.EventHubs;
+        if (hubName is null || eventHubs is null)
+        {
+            return;
+        }
+
+        var partitionId = CurrentPartitionId;
+        var count = Math.Max(1, FetchCount);
+        var source = partitionId is null ? hubName : $"{hubName}/partition {partitionId}";
+
+        await RunAsync($"Reading {count} event(s) from {source}…", async cancellationToken =>
+        {
+            var records = await eventHubs
+                .PeekAsync(hubName, partitionId, count, cancellationToken)
+                .ConfigureAwait(true);
+
+            ReplaceMessages(records);
+            AppendLog($"Read {records.Count} event(s) from {source}.");
         }).ConfigureAwait(true);
     }
 
@@ -466,19 +611,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     async Task SendAsync()
     {
         var target = CurrentSendTarget;
-        var messages = SelectedNamespace?.Messages;
-        if (target is null || messages is null || Ui is null)
+        if (target is null || Ui is null || !CanSend)
         {
             return;
         }
 
-        var composed = await Ui.ComposeMessageAsync(new SendMessageRequest(target)).ConfigureAwait(true);
+        var composed = await Ui
+            .ComposeMessageAsync(new SendMessageRequest(target, IsEventHub: IsEventHubSelection))
+            .ConfigureAwait(true);
+
         if (composed is null)
         {
             return;
         }
 
-        await SendComposedAsync(composed, messages).ConfigureAwait(true);
+        await SendComposedAsync(composed).ConfigureAwait(true);
     }
 
     /// <summary>Opens the compose dialog pre-filled from the selected message.</summary>
@@ -486,10 +633,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     async Task ResubmitAsync()
     {
         var target = CurrentSendTarget;
-        var messages = SelectedNamespace?.Messages;
         var selected = SelectedMessage;
 
-        if (target is null || messages is null || selected is null || Ui is null)
+        if (target is null || selected is null || Ui is null || !CanSend)
         {
             return;
         }
@@ -504,7 +650,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             : $"Starting from sequence number {selected.SequenceNumber}.";
 
         var composed = await Ui
-            .ComposeMessageAsync(new SendMessageRequest(seedTarget, selected.Record, description))
+            .ComposeMessageAsync(new SendMessageRequest(
+                seedTarget, selected.Record, description, IsEventHub: IsEventHubSelection))
             .ConfigureAwait(true);
 
         if (composed is null)
@@ -512,11 +659,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await SendComposedAsync(composed, messages).ConfigureAwait(true);
+        await SendComposedAsync(composed).ConfigureAwait(true);
     }
 
-    async Task SendComposedAsync(SendMessageResult composed, MessageService messages)
+    async Task SendComposedAsync(SendMessageResult composed)
     {
+        if (IsEventHubSelection)
+        {
+            await PublishComposedAsync(composed).ConfigureAwait(true);
+            return;
+        }
+
+        var messages = SelectedNamespace?.Messages;
+        if (messages is null)
+        {
+            return;
+        }
+
         await RunAsync($"Sending {composed.Messages.Count} message(s)…", async cancellationToken =>
         {
             if (composed.ScheduledEnqueueTime is { } enqueueTime)
@@ -538,6 +697,44 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
                 AppendLog($"Sent {sent} message(s) to {composed.TargetName}.");
             }
+
+            await RefreshSelectedEntityAsync(cancellationToken).ConfigureAwait(true);
+        }).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Publishes composed events to the selected hub.
+    /// </summary>
+    /// <remarks>
+    /// Routing follows what the user asked for: an explicit partition key wins, because it
+    /// is the only one of the two they can have typed deliberately. Failing that, having a
+    /// partition selected publishes straight to it, which is what makes "select a partition,
+    /// send, peek" work as one loop.
+    /// </remarks>
+    async Task PublishComposedAsync(SendMessageResult composed)
+    {
+        var eventHubs = SelectedNamespace?.EventHubs;
+        if (eventHubs is null)
+        {
+            return;
+        }
+
+        var partitionKey = composed.Messages.Count > 0 ? composed.Messages[0].PartitionKey : null;
+        var partitionId = string.IsNullOrWhiteSpace(partitionKey) ? CurrentPartitionId : null;
+
+        var events = composed.Messages.Select(EventMapper.ToEventData).ToList();
+
+        await RunAsync($"Publishing {events.Count} event(s)…", async cancellationToken =>
+        {
+            var sent = await eventHubs
+                .SendAsync(composed.TargetName, events, partitionKey, partitionId, cancellationToken)
+                .ConfigureAwait(true);
+
+            var routing = partitionKey is { Length: > 0 } key
+                ? $" with partition key “{key}”"
+                : partitionId is not null ? $" to partition {partitionId}" : string.Empty;
+
+            AppendLog($"Published {sent} event(s) to {composed.TargetName}{routing}.");
 
             await RefreshSelectedEntityAsync(cancellationToken).ConfigureAwait(true);
         }).ConfigureAwait(true);

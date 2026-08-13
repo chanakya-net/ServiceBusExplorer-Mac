@@ -3,6 +3,12 @@ using Azure.Messaging.ServiceBus;
 namespace SbMac.Core.Messaging;
 
 /// <summary>
+/// Where in an event hub a record came from. Present only on records read from Event
+/// Hubs, where the partition and offset take the place of Service Bus's broker fields.
+/// </summary>
+public sealed record EventOrigin(string PartitionId, string? Offset);
+
+/// <summary>
 /// A detached snapshot of a received message.
 /// </summary>
 /// <remarks>
@@ -63,6 +69,16 @@ public sealed class MessageRecord
 
     /// <summary>True when the message came from a dead-letter sub-queue.</summary>
     public bool IsDeadLetter { get; init; }
+
+    /// <summary>
+    /// Set when this record is an Event Hubs event rather than a Service Bus message.
+    /// The broker fields Service Bus fills in — delivery count, lock state, expiry,
+    /// dead-lettering — have no meaning for an event and are left at their defaults.
+    /// </summary>
+    public EventOrigin? Event { get; init; }
+
+    /// <summary>True when this record came from an event hub.</summary>
+    public bool IsEvent => Event is not null;
 
     public long SizeInBytes => Body.ToMemory().Length;
 

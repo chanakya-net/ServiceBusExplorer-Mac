@@ -52,7 +52,7 @@
           <TextBox Grid.Column="1" Text="{Binding CorrelationId}" />
         </Grid>
 
-        <Grid ColumnDefinitions="110,*">
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowServiceBusFields}">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Session ID" />
           <TextBox Grid.Column="1" Text="{Binding SessionId}" />
         </Grid>
@@ -62,7 +62,7 @@
           <TextBox Grid.Column="1" Text="{Binding PartitionKey}" />
         </Grid>
 
-        <Grid ColumnDefinitions="110,*">
+        <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowServiceBusFields}">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Reply to" />
           <TextBox Grid.Column="1" Text="{Binding ReplyTo}" />
         </Grid>
@@ -110,7 +110,8 @@
         <CheckBox Content="Replace {n} in the body with the copy number"
                   IsChecked="{Binding NumberCopies}" />
 
-        <CheckBox Content="Schedule for later" IsChecked="{Binding Schedule}" />
+        <CheckBox Content="Schedule for later" IsChecked="{Binding Schedule}"
+                  IsVisible="{Binding ShowServiceBusFields}" />
 
         <Grid ColumnDefinitions="110,*,6,Auto" IsVisible="{Binding ShowScheduleFields}">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Enqueue at" />
