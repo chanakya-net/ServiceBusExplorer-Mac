@@ -22,6 +22,20 @@
       <TextBox Grid.Column="1" Text="{Binding Name}" PlaceholderText="contoso-prod" />
     </Grid>
 
+    <!--
+      Service picker. Event Hubs and Service Bus namespaces share the same DNS suffix, so
+      nothing about a host or connection string reveals which one it is.
+    -->
+    <Grid ColumnDefinitions="150,*">
+      <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Service" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="18">
+        <RadioButton GroupName="service" Content="Service Bus"
+                     IsChecked="{Binding !UseEventHubs}" />
+        <RadioButton GroupName="service" Content="Event Hubs"
+                     IsChecked="{Binding UseEventHubs}" />
+      </StackPanel>
+    </Grid>
+
     <!-- Auth mode picker. The two field sets below are mutually exclusive. -->
     <Grid ColumnDefinitions="150,*">
       <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Authentication" />
@@ -44,7 +58,7 @@
                  TextWrapping="Wrap"
                  Height="86"
                  Classes="mono"
-                 PlaceholderText="Endpoint=sb://contoso.servicebus.windows.net/;SharedAccessKeyName=…;SharedAccessKey=…" />
+                 PlaceholderText="{Binding ConnectionStringPlaceholder}" />
       </Grid>
       <TextBlock Classes="tertiary" Margin="150,0,0,0"
                  TextWrapping="Wrap"
@@ -84,7 +98,35 @@
 
       <TextBlock Classes="tertiary" Margin="150,0,0,0"
                  TextWrapping="Wrap"
-                 Text="Your identity needs the Azure Service Bus Data Owner role on the namespace to browse entities and messages." />
+                 Text="{Binding RoleHint}" />
+    </StackPanel>
+
+    <!-- ───────────────── Event Hubs ───────────────── -->
+    <StackPanel Spacing="12" IsVisible="{Binding ShowEventHubFields}">
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Event hubs"
+                   VerticalAlignment="Top" Margin="0,6,10,0" />
+        <TextBox Grid.Column="1"
+                 Text="{Binding EventHubNames}"
+                 AcceptsReturn="True"
+                 Height="66"
+                 Classes="mono"
+                 PlaceholderText="telemetry" />
+      </Grid>
+      <TextBlock Classes="tertiary" Margin="150,0,0,0"
+                 TextWrapping="Wrap"
+                 Text="One name per line. Only needed when the hubs can't be listed for you — listing is a management-plane call, so a SAS key can never do it." />
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Consumer group" />
+        <TextBox Grid.Column="1" Text="{Binding ConsumerGroup}" PlaceholderText="$Default" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowSubscriptionField}">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Subscription ID" />
+        <TextBox Grid.Column="1" Text="{Binding SubscriptionId}"
+                 PlaceholderText="optional — defaults to your first subscription" />
+      </Grid>
     </StackPanel>
 
     <Grid ColumnDefinitions="150,*">

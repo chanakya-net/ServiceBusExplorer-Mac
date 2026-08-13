@@ -84,7 +84,7 @@
 
         <Button DockPanel.Dock="Left" Classes="toolbar"
                 Command="{Binding ReceiveCommand}"
-                IsEnabled="{Binding HasMessageEntity}"
+                IsEnabled="{Binding CanUseBrokerActions}"
                 ToolTip.Tip="Receive and permanently delete messages">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconReceive}" />
@@ -94,8 +94,8 @@
 
         <Button DockPanel.Dock="Left" Classes="toolbar"
                 Command="{Binding SendCommand}"
-                IsEnabled="{Binding HasMessageEntity}"
-                ToolTip.Tip="Compose and send a message  (⌘D)">
+                IsEnabled="{Binding CanSend}"
+                ToolTip.Tip="Compose and send a message or event  (⌘D)">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconSend}" />
             <TextBlock Text="Send" VerticalAlignment="Center" />
@@ -107,8 +107,8 @@
         <ToggleButton DockPanel.Dock="Left"
                       Classes="toolbarToggle"
                       IsChecked="{Binding ShowDeadLetter}"
-                      IsEnabled="{Binding HasMessageEntity}"
-                      ToolTip.Tip="Read from the dead-letter sub-queue instead of the entity">
+                      IsEnabled="{Binding CanUseBrokerActions}"
+                      ToolTip.Tip="Read from the dead-letter sub-queue instead of the entity. Event Hubs has no dead-letter queue.">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconDeadLetter}"
                   Stroke="{Binding $parent[ToggleButton].Foreground}" />
@@ -123,12 +123,12 @@
                        Minimum="1" Maximum="10000" Increment="50"
                        FormatString="0"
                        Value="{Binding FetchCount}"
-                       ToolTip.Tip="How many messages to read at a time" />
+                       ToolTip.Tip="How many messages or events to read at a time" />
 
         <!-- Right-aligned: destructive actions sit apart from the read actions. -->
         <Button DockPanel.Dock="Right" Classes="toolbar destructive"
                 Command="{Binding PurgeCommand}"
-                IsEnabled="{Binding HasMessageEntity}"
+                IsEnabled="{Binding CanUseBrokerActions}"
                 ToolTip.Tip="Delete every message in the selected entity">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconPurge}" />
@@ -213,8 +213,10 @@
                   <MenuItem Header="Disconnect" Command="{Binding DisconnectCommand}" />
                   <MenuItem Header="Refresh" Command="{Binding RefreshCommand}" />
                   <Separator />
-                  <MenuItem Header="New Queue…" Command="{Binding CreateQueueCommand}" />
-                  <MenuItem Header="New Topic…" Command="{Binding CreateTopicCommand}" />
+                  <MenuItem Header="New Queue…" Command="{Binding CreateQueueCommand}"
+                            IsEnabled="{Binding CanManageEntities}" />
+                  <MenuItem Header="New Topic…" Command="{Binding CreateTopicCommand}"
+                            IsEnabled="{Binding CanManageEntities}" />
                   <MenuItem Header="New Subscription…" Command="{Binding CreateSubscriptionCommand}"
                             IsEnabled="{Binding CanCreateSubscription}" />
                   <Separator />
@@ -223,8 +225,10 @@
                   <MenuItem Header="Enable / Disable" Command="{Binding ToggleEntityStatusCommand}"
                             IsEnabled="{Binding CanEditEntity}" />
                   <Separator />
-                  <MenuItem Header="Import Entities…" Command="{Binding ImportEntitiesCommand}" />
-                  <MenuItem Header="Export Entities…" Command="{Binding ExportEntitiesCommand}" />
+                  <MenuItem Header="Import Entities…" Command="{Binding ImportEntitiesCommand}"
+                            IsEnabled="{Binding CanManageEntities}" />
+                  <MenuItem Header="Export Entities…" Command="{Binding ExportEntitiesCommand}"
+                            IsEnabled="{Binding CanManageEntities}" />
                   <Separator />
                   <MenuItem Header="Edit Namespace…" Command="{Binding EditConnectionCommand}" />
                   <MenuItem Header="Remove Namespace" Command="{Binding RemoveConnectionCommand}" />
@@ -242,7 +246,7 @@
                     Width="30" Height="30" Opacity="0.35" HorizontalAlignment="Center" />
               <TextBlock Text="No namespaces yet" Classes="secondary"
                          HorizontalAlignment="Center" />
-              <TextBlock Text="Add one to start browsing queues and topics."
+              <TextBlock Text="Add one to start browsing queues, topics and event hubs."
                          Classes="tertiary" TextWrapping="Wrap" TextAlignment="Center" />
             </StackPanel>
           </Panel>
@@ -251,7 +255,7 @@
                   BorderBrush="{DynamicResource DividerBrush}" Padding="10,8">
             <Button Classes="toolbar" HorizontalAlignment="Left"
                     Command="{Binding AddConnectionCommand}"
-                    ToolTip.Tip="Add a Service Bus namespace  (⌘N)">
+                    ToolTip.Tip="Add a Service Bus or Event Hubs namespace  (⌘N)">
               <StackPanel Orientation="Horizontal" Spacing="7">
                 <Path Classes="icon" Data="{StaticResource IconAdd}" />
                 <TextBlock Text="Add namespace" VerticalAlignment="Center" />
@@ -286,9 +290,11 @@
 
                 <Button DockPanel.Dock="Right" Classes="toolbar destructive"
                         Content="Delete selected"
+                        IsEnabled="{Binding CanUseBrokerActions}"
                         Command="{Binding DeleteSelectedMessagesCommand}" />
 
                 <Button DockPanel.Dock="Right" Classes="toolbar"
+                        IsEnabled="{Binding CanUseBrokerActions}"
                         Command="{Binding ResubmitSelectedCommand}">
                   <StackPanel Orientation="Horizontal" Spacing="7">
                     <Path Classes="icon" Data="{StaticResource IconResubmit}" />
@@ -299,7 +305,7 @@
                 <Button DockPanel.Dock="Right" Classes="toolbar"
                         Content="Edit and resend"
                         Command="{Binding ResubmitCommand}"
-                        IsEnabled="{Binding HasSelectedMessage}" />
+                        IsEnabled="{Binding CanEditAndResend}" />
               </DockPanel>
             </Border>
 
@@ -324,7 +330,7 @@
                   <DataGridTextColumn Header="SIZE" Width="80"
                                       Binding="{Binding Size}" x:DataType="vm:MessageRowViewModel" />
                   <DataGridTextColumn Header="TRY" Width="72"
-                                      Binding="{Binding DeliveryCount}" x:DataType="vm:MessageRowViewModel" />
+                                      Binding="{Binding DeliveryCountText}" x:DataType="vm:MessageRowViewModel" />
                   <DataGridTextColumn Header="DEAD-LETTER REASON" Width="188"
                                       Binding="{Binding DeadLetterReason}" x:DataType="vm:MessageRowViewModel" />
                   <DataGridTextColumn Header="PREVIEW" Width="*" MinWidth="160"

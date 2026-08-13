@@ -18,6 +18,12 @@
 
   <StreamGeometry x:Key="IconFolder">M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2l2 2.2h7.8A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5V7.5Z</StreamGeometry>
 
+  <!-- An event stream: a log line with the newest events stacked at its head. -->
+  <StreamGeometry x:Key="IconEventHub">M4 5.5v13 M8 8h12 M8 12h12 M8 16h7</StreamGeometry>
+
+  <!-- One partition: a slice of the log, bounded at both ends. -->
+  <StreamGeometry x:Key="IconPartition">M4 6.5h16 M4 17.5h16 M9 6.5v11 M15 6.5v11</StreamGeometry>
+
   <StreamGeometry x:Key="IconRefresh">M20.5 12a8.5 8.5 0 1 1-2.5-6 M20.5 3v5h-5</StreamGeometry>
 
   <StreamGeometry x:Key="IconPeek">M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z</StreamGeometry>

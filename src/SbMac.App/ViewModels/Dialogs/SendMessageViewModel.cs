@@ -11,7 +11,16 @@ using SbMac.Core.Messaging;
 namespace SbMac.App.ViewModels.Dialogs;
 
 /// <summary>What the caller wants composed: the destination and an optional message to start from.</summary>
-public sealed record SendMessageRequest(string TargetName, MessageRecord? Seed = null, string? SeedDescription = null);
+/// <param name="IsEventHub">
+/// True when the destination is an event hub. Sessions, reply-to routing and scheduling
+/// are Service Bus broker features with no Event Hubs equivalent, so the dialog hides
+/// them rather than collecting values that would be silently dropped on the way out.
+/// </param>
+public sealed record SendMessageRequest(
+    string TargetName,
+    MessageRecord? Seed = null,
+    string? SeedDescription = null,
+    bool IsEventHub = false);
 
 /// <summary>The composed messages, ready to hand to <see cref="MessageService"/>.</summary>
 public sealed record SendMessageResult(
@@ -36,6 +45,7 @@ public sealed partial class SendMessageViewModel : ViewModelBase
     {
         TargetName = request.TargetName;
         SeedDescription = request.SeedDescription;
+        IsEventHub = request.IsEventHub;
 
         if (request.Seed is { } seed)
         {
@@ -61,6 +71,12 @@ public sealed partial class SendMessageViewModel : ViewModelBase
 
     /// <summary>Shown at the top of the dialog when composing from an existing message.</summary>
     public string? SeedDescription { get; }
+
+    /// <summary>True when composing an event rather than a Service Bus message.</summary>
+    public bool IsEventHub { get; }
+
+    /// <summary>Hides the broker fields Event Hubs has no equivalent for.</summary>
+    public bool ShowServiceBusFields => !IsEventHub;
 
     public string DialogTitle => $"Send to {TargetName}";
 
@@ -115,7 +131,7 @@ public sealed partial class SendMessageViewModel : ViewModelBase
     [ObservableProperty]
     string? validationError;
 
-    public bool ShowScheduleFields => Schedule;
+    public bool ShowScheduleFields => Schedule && !IsEventHub;
 
     public bool CanSend => Copies >= 1 && Body.Length > 0;
 
@@ -143,7 +159,7 @@ public sealed partial class SendMessageViewModel : ViewModelBase
         }
 
         DateTimeOffset? scheduledEnqueueTime = null;
-        if (Schedule)
+        if (Schedule && !IsEventHub)
         {
             var when = new DateTimeOffset(ScheduledDate.Date + ScheduledTime, ScheduledDate.Offset);
             if (when <= DateTimeOffset.Now)

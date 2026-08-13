@@ -18,6 +18,7 @@ using SbMac.App.Views;
 using SbMac.App.Views.Dialogs;
 using SbMac.Core.Connections;
 using SbMac.Core.Entities;
+using SbMac.Core.EventHubs;
 using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 
@@ -42,7 +43,11 @@ foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
 
     Shoot($"main-{tag}", BuildMainWindow(), 1360, 860);
     Shoot($"props-{tag}", BuildMainWindow(), 1360, 860, selectTab: 1);
+    Shoot($"eventhubs-{tag}", BuildEventHubsWindow(), 1360, 860);
+    Shoot($"eventhubs-props-{tag}", BuildEventHubsWindow(), 1360, 860, selectTab: 1);
     Shoot($"connection-{tag}", new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
+    Shoot($"connection-eventhubs-{tag}",
+        new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel() }, 620, 800);
     Shoot($"send-{tag}", new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
     Shoot($"queue-{tag}", new QueueEditorDialog
     {
@@ -144,6 +149,115 @@ MainWindow BuildMainWindow()
 
     return new MainWindow { DataContext = viewModel };
 }
+
+MainWindow BuildEventHubsWindow()
+{
+    var viewModel = new MainWindowViewModel { StatusText = "Ready" };
+
+    var ns = new NamespaceNodeViewModel(new NamespaceConnection
+    {
+        Name = "contoso-telemetry",
+        Kind = NamespaceKind.EventHubs,
+        AuthenticationMode = AuthenticationMode.EntraId,
+        FullyQualifiedNamespace = "contoso-telemetry.servicebus.windows.net"
+    })
+    { IsExpanded = true };
+
+    var folder = new EventHubFolderNodeViewModel { Parent = ns, IsExpanded = true, Detail = "2" };
+
+    var telemetry = AddEventHub(folder, "device-telemetry", ["0", "1", "2", "3"], ["$Default", "analytics"]);
+    AddPartition(telemetry, "0", 1, 84_120);
+    AddPartition(telemetry, "1", 1, 83_902);
+    AddPartition(telemetry, "2", 1, 84_311);
+    AddPartition(telemetry, "3", 1, 0, isEmpty: true);
+
+    AddEventHub(folder, "audit-trail", ["0", "1"], ["$Default"]);
+
+    ns.Children.Add(folder);
+    viewModel.Namespaces.Add(ns);
+
+    var selected = (EventHubNodeViewModel)folder.Children[0];
+    selected.IsSelected = true;
+    viewModel.SelectedNode = selected;
+
+    foreach (var record in SampleEvents())
+    {
+        viewModel.Messages.Add(new MessageRowViewModel(record));
+    }
+
+    viewModel.SelectedMessage = viewModel.Messages[0];
+
+    viewModel.Log.Insert(0, "09:41:26  Read 6 event(s) from device-telemetry.");
+    viewModel.Log.Insert(0, "09:41:20  Connected to contoso-telemetry.servicebus.windows.net.");
+
+    return new MainWindow { DataContext = viewModel };
+}
+
+EventHubNodeViewModel AddEventHub(
+    TreeNodeViewModel parent,
+    string name,
+    IReadOnlyList<string> partitions,
+    IReadOnlyList<string> consumerGroups)
+{
+    var node = new EventHubNodeViewModel(
+        new EventHubEntity(name, DateTimeOffset.Now.AddMonths(-8), partitions, consumerGroups))
+    {
+        Parent = parent,
+        IsExpanded = true
+    };
+
+    parent.Children.Add(node);
+    return node;
+}
+
+void AddPartition(TreeNodeViewModel parent, string id, long beginning, long last, bool isEmpty = false)
+{
+    parent.Children.Add(new PartitionNodeViewModel(
+        new PartitionEntity("device-telemetry", id, beginning, last, DateTimeOffset.Now.AddSeconds(-9), isEmpty))
+    {
+        Parent = parent
+    });
+}
+
+IEnumerable<MessageRecord> SampleEvents()
+{
+    var now = DateTimeOffset.Now;
+
+    for (var index = 0; index < 6; index++)
+    {
+        var sequence = 84_115 + index;
+        yield return new MessageRecord
+        {
+            Body = BinaryData.FromString(
+                $"{{ \"deviceId\": \"probe-{7 + index}\", \"tempC\": {18.4 + index:0.0}, \"battery\": {96 - index} }}"),
+            SourceEntityPath = "device-telemetry",
+            MessageId = $"e1c7{sequence:x}-9a20-4f31-b6d4-{sequence:x8}",
+            SequenceNumber = sequence,
+            EnqueuedTime = now.AddSeconds(-30 + (index * 5)),
+            ContentType = "application/json",
+            PartitionKey = $"probe-{7 + index}",
+            Event = new EventOrigin((index % 4).ToString(), (112_233 + (index * 512)).ToString()),
+            ApplicationProperties = new Dictionary<string, object?>
+            {
+                ["Subject"] = "device-telemetry",
+                ["firmware"] = "4.2.1",
+                ["site"] = "rotterdam-2"
+            }
+        };
+    }
+}
+
+ConnectionDialogViewModel BuildEventHubsConnectionViewModel() =>
+    new(new NamespaceConnection
+    {
+        Name = "contoso-telemetry",
+        Kind = NamespaceKind.EventHubs,
+        AuthenticationMode = AuthenticationMode.EntraId,
+        FullyQualifiedNamespace = "contoso-telemetry.servicebus.windows.net",
+        EntraCredentialKind = EntraCredentialKind.AzureCli,
+        EventHubNames = ["device-telemetry", "audit-trail"],
+        ConsumerGroup = "analytics"
+    });
 
 void AddQueue(TreeNodeViewModel parent, string name, long active, long dead, long scheduled, bool disabled = false)
 {

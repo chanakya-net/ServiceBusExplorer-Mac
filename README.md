@@ -3,8 +3,9 @@
 [![CI](https://github.com/chanakya-net/ServiceBusExplorer-Mac/actions/workflows/ci.yml/badge.svg)](https://github.com/chanakya-net/ServiceBusExplorer-Mac/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A native macOS app for browsing and operating Azure Service Bus namespaces: queues,
-topics, subscriptions, rules, messages and dead-letter queues.
+A native macOS app for browsing and operating Azure Service Bus and Azure Event Hubs
+namespaces: queues, topics, subscriptions, rules, messages and dead-letter queues on one
+side; event hubs, partitions and events on the other.
 
 Runs on Apple Silicon and Intel. The packaged `.app` is self-contained — no .NET runtime
 required to run it.
@@ -62,8 +63,10 @@ Microsoft recommends for new work. No legacy compatibility shims, and nothing he
 | Dependency | Version | Latest | Role |
 |---|---|---|---|
 | [`Azure.Messaging.ServiceBus`](https://www.nuget.org/packages/Azure.Messaging.ServiceBus) | 7.20.2 | 7.20.2 ✅ | Messaging and entity management |
+| [`Azure.Messaging.EventHubs`](https://www.nuget.org/packages/Azure.Messaging.EventHubs) | 5.12.2 | 5.12.2 ✅ | Reading and publishing events |
 | [`Azure.Identity`](https://www.nuget.org/packages/Azure.Identity) | 1.21.0 | 1.21.0 ✅ | Entra ID authentication |
 | [`Azure.ResourceManager.ServiceBus`](https://www.nuget.org/packages/Azure.ResourceManager.ServiceBus) | 1.2.0 | 1.2.0 ✅ | Namespace-level resource operations |
+| [`Azure.ResourceManager.EventHubs`](https://www.nuget.org/packages/Azure.ResourceManager.EventHubs) | 1.3.0 | 1.3.0 ✅ | Listing event hubs and consumer groups |
 | [`CommunityToolkit.Mvvm`](https://www.nuget.org/packages/CommunityToolkit.Mvvm) | 8.4.2 | 8.4.2 ✅ | View model plumbing |
 
 `dotnet list package --outdated` reports nothing to update for `SbMac.Core`, which is the
@@ -160,6 +163,29 @@ packages on the same version — see the note above.
   or reported as conflicts
 - Per-entity result log, so a partial import tells you exactly what happened
 
+**Event Hubs**
+
+A namespace is added as either Service Bus or Event Hubs, and the tree, toolbar and menus
+follow that choice.
+
+- Browse event hubs and their partitions, with retained event counts and each partition's
+  live sequence range
+- **Peek** the most recent events, from one partition or fanned out across all of them.
+  Reads are non-destructive by construction — Event Hubs is an append-only log with
+  time-based retention, and no consumer operation removes an event
+- **Send** — the same compose dialog, routing by partition key or straight to the selected
+  partition
+- The body viewer, JSON/XML detection and message grid are shared with Service Bus, so an
+  event reads the same way a message does — with partition and offset in place of the
+  broker fields Event Hubs does not have
+- Receive-and-delete, purge, dead-letter and message deletion are disabled for Event Hubs
+  rather than approximated, because the service has no equivalent of any of them
+
+Listing the hubs in a namespace is a management-plane call, so it happens over ARM when
+the signed-in identity can read the namespace resource. It can't be done with a SAS key at
+all, so hub names can also be typed into the connection dialog — either way, everything
+below that point runs over the data plane.
+
 ---
 
 ## Authentication
@@ -182,6 +208,11 @@ Two modes, selectable per namespace.
 
 Entra ID needs the **Azure Service Bus Data Owner** role on the namespace to browse
 entities and messages.
+
+For Event Hubs, it needs **Azure Event Hubs Data Receiver** to read events and **Azure
+Event Hubs Data Sender** to publish them. Listing the hubs in the namespace additionally
+needs **Reader** on the namespace resource, which the data-plane roles do not include; a
+connection without it still works, with the hub names typed in.
 
 Both modes support AMQP over WebSockets (port 443) for networks that block 5671.
 
@@ -249,7 +280,9 @@ A few deliberate choices:
   the common task, reading one body is the occasional one.
 - **Message properties are a real two-column list**, grouped into Identity / Delivery /
   Content / Dead-letter / Application properties, with selectable values — not
-  space-padded monospace.
+  space-padded monospace. An event swaps the Delivery group for Position (partition and
+  offset): showing locks, expiry and redelivery at their defaults would read as fact
+  rather than as absence.
 
 ### Seeing the UI
 
@@ -262,8 +295,9 @@ Avalonia's headless platform with Skia drawing:
 dotnet run --project tools/SbMac.Preview ./artifacts/screenshots
 ```
 
-It writes both themes for the main window, the properties pane, and the connection, send
-and queue dialogs, populated with representative sample data.
+It writes both themes for the main window, the properties pane, the Event Hubs tree and
+its event properties, and the connection, send and queue dialogs — including the Event
+Hubs variant of the connection dialog — populated with representative sample data.
 
 `tools/SbMac.Preview` is **not** in `SB-Mac.sln`, on purpose. It fabricates sample entities
 through the Service Bus SDK's internal constructors, so an SDK upgrade can break it —
@@ -279,7 +313,7 @@ Requires the .NET 10 SDK.
 
 ```bash
 dotnet build          # build everything
-dotnet test           # 106 tests
+dotnet test           # 172 tests
 dotnet run --project src/SbMac.App    # run without packaging
 ```
 
@@ -319,6 +353,7 @@ SB-Mac/
   src/SbMac.Core/          service layer — no UI dependency
     Connections/           auth, keychain, saved namespaces
     Entities/              queue/topic/subscription/rule CRUD
+    EventHubs/             event hubs, partitions, event reading and publishing
     Messaging/             peek, receive, send, purge, body decoding
     ImportExport/          definition DTOs and import/export
   src/SbMac.App/           Avalonia UI
@@ -326,7 +361,7 @@ SB-Mac/
     Views/                 windows and dialogs
     Styles/                Theme.axaml (tokens), Icons.axaml, AppStyles.axaml
     Converters/            icon-name to geometry lookup
-  tests/SbMac.Tests/       106 tests, including headless UI and real-keychain tests
+  tests/SbMac.Tests/       172 tests, including headless UI and real-keychain tests
   tools/SbMac.Preview/     dev-only screenshot harness (not in the solution)
   build/                   Info.plist, icon generator, packaging and signing scripts
 ```
@@ -342,9 +377,9 @@ or tests without a UI.
 dotnet test
 ```
 
-106 tests, all passing, no Azure connection required. They cover message body decoding,
-connection string parsing, secret storage, import/export round-trips, and view model
-logic.
+172 tests, all passing, no Azure connection required. They cover message body decoding,
+connection string parsing, secret storage, import/export round-trips, the Event Hubs
+session, mappers and read-window arithmetic, and view model logic.
 
 The UI tests are not superficial: they instantiate every real window against Avalonia's
 headless platform, which is what catches a bad binding path, a missing style resource or
@@ -420,10 +455,12 @@ the backend explicitly instead of calling `UsePlatformDetect()`.
 
 ## Not carried over
 
-The Windows tool covers more than Service Bus. These were out of scope and are **not**
-in SB-Mac:
+The Windows tool covers more than Service Bus and Event Hubs. These were out of scope and
+are **not** in SB-Mac:
 
-- Event Hubs, Notification Hubs, Relay, Event Grid explorers
+- Notification Hubs, Relay and Event Grid explorers
+- Creating, editing or deleting event hubs and consumer groups — those are ARM operations,
+  and SB-Mac browses Event Hubs over the data plane
 - Message inspector / generator plugin model (`IBrokeredMessageInspector` and friends)
 - Event processor checkpoint management
 - SDK-side chunking and the deflate/zip inspectors
