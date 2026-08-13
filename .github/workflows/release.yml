@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and publish (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  # Needed to create the release and upload the .dmg / .zip assets.
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: macos-14
+
+    strategy:
+      # One architecture failing shouldn't discard the other's finished build.
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runtime: osx-arm64
+            label: Apple Silicon
+          - arch: x64
+            runtime: osx-x64
+            label: Intel
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # A tagged build that ships failing code is worse than no build at all.
+      - name: Test
+        run: dotnet test --configuration Release
+
+      - name: Build .app
+        run: ./build/make-app.sh ${{ matrix.runtime }}
+
+      - name: Package .dmg and .zip
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          ./build/make-dmg.sh artifacts/SB-Mac.app "dist/SB-Mac-${{ matrix.arch }}.dmg" "SB-Mac"
+
+          # ditto preserves the bundle's symlinks and extended attributes, which a
+          # plain `zip` silently mangles and which breaks the code signature.
+          ditto -c -k --sequesterRsrc --keepParent \
+            artifacts/SB-Mac.app "dist/SB-Mac-${{ matrix.arch }}.zip"
+
+      - name: Checksums
+        run: |
+          cd dist
+          shasum -a 256 SB-Mac-${{ matrix.arch }}.dmg SB-Mac-${{ matrix.arch }}.zip \
+            > SB-Mac-${{ matrix.arch }}.sha256
+          cat SB-Mac-${{ matrix.arch }}.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: staging
+
+      - name: Collect assets
+        run: |
+          mkdir -p dist
+          find staging -type f -exec mv {} dist/ \;
+          ls -la dist
+
+      - name: Resolve tag
+        id: tag
+        run: echo "name=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Write release notes
+        run: |
+          cat > notes.md <<'NOTES'
+          ## Install
+
+          Download the `.dmg` for your Mac:
+
+          | Mac | File |
+          |---|---|
+          | Apple Silicon (M1/M2/M3/M4) | `SB-Mac-arm64.dmg` |
+          | Intel | `SB-Mac-x64.dmg` |
+
+          Not sure? Run `uname -m` — `arm64` means Apple Silicon.
+
+          Open the `.dmg` and drag **SB-Mac** to Applications.
+
+          ### First launch
+
+          These builds are ad-hoc signed, not signed with an Apple Developer ID.
+          macOS quarantines apps downloaded from the internet, so the first launch
+          will fail with *"SB-Mac is damaged and can't be opened"* until you clear
+          the quarantine flag:
+
+          ```bash
+          xattr -dr com.apple.quarantine /Applications/SB-Mac.app
+          ```
+
+          Then open it normally. You only need to do this once per install.
+
+          This is a limitation of distributing without a paid Apple Developer
+          account, not a sign anything is wrong with the download — verify the
+          bytes against the `.sha256` files attached below if you want to be sure.
+
+          ### Building it yourself
+
+          If you'd rather not clear the quarantine flag, building locally produces a
+          bundle that never gets quarantined:
+
+          ```bash
+          git clone https://github.com/${{ github.repository }}.git
+          cd ServiceBusExplorer-Mac
+          ./build/make-app.sh
+          open artifacts/SB-Mac.app
+          ```
+
+          Requires the .NET 10 SDK.
+          NOTES
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.tag.outputs.name }}" \
+            --title "SB-Mac ${{ steps.tag.outputs.name }}" \
+            --notes-file notes.md \
+            dist/*

@@ -1,0 +1,131 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Design tokens. Every colour in the app resolves through one of these, so light and
+    dark stay in step and there is exactly one place to retune the palette.
+
+    Layers, back to front:  Canvas → Surface → Elevated
+    Text:                   Primary → Secondary → Tertiary
+  -->
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <!-- ══════════════════════════════ light ══════════════════════════════ -->
+    <ResourceDictionary x:Key="Light">
+
+      <!-- surfaces -->
+      <SolidColorBrush x:Key="CanvasBrush" Color="#F5F5F7" />
+      <SolidColorBrush x:Key="SidebarBrush" Color="#EDEDF0" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ElevatedBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="ChromeBrush" Color="#FAFAFC" />
+
+      <!-- hairlines and dividers, deliberately faint -->
+      <SolidColorBrush x:Key="BorderBrush" Color="#000000" Opacity="0.10" />
+      <SolidColorBrush x:Key="BorderStrongBrush" Color="#000000" Opacity="0.18" />
+      <SolidColorBrush x:Key="DividerBrush" Color="#000000" Opacity="0.07" />
+
+      <!-- text -->
+      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A1A1F" />
+      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#5C5C66" />
+      <SolidColorBrush x:Key="TextTertiaryBrush" Color="#8A8A94" />
+      <SolidColorBrush x:Key="TextOnAccentBrush" Color="#FFFFFF" />
+
+      <!-- accent -->
+      <SolidColorBrush x:Key="AccentBrush" Color="#0A66D0" />
+      <SolidColorBrush x:Key="AccentHoverBrush" Color="#0A5ABA" />
+      <SolidColorBrush x:Key="AccentSoftBrush" Color="#0A66D0" Opacity="0.12" />
+      <SolidColorBrush x:Key="SelectionBrush" Color="#0A66D0" Opacity="0.14" />
+
+      <!-- semantic status -->
+      <SolidColorBrush x:Key="DangerBrush" Color="#C4291C" />
+      <SolidColorBrush x:Key="DangerSoftBrush" Color="#C4291C" Opacity="0.12" />
+      <SolidColorBrush x:Key="WarningBrush" Color="#9A5B00" />
+      <SolidColorBrush x:Key="WarningSoftBrush" Color="#B87400" Opacity="0.16" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="#1B7A3D" />
+      <SolidColorBrush x:Key="SuccessSoftBrush" Color="#1B7A3D" Opacity="0.13" />
+
+      <!-- interaction -->
+      <SolidColorBrush x:Key="HoverBrush" Color="#000000" Opacity="0.05" />
+      <SolidColorBrush x:Key="PressedBrush" Color="#000000" Opacity="0.10" />
+      <SolidColorBrush x:Key="ControlBrush" Color="#FFFFFF" />
+
+      <!--
+        FluentTheme derives checkbox ticks, focus rings, slider fills and the tab
+        underline from these. Overriding them here retunes every built-in template at
+        once, instead of restyling each control by hand.
+      -->
+      <Color x:Key="SystemAccentColor">#0A66D0</Color>
+      <Color x:Key="SystemAccentColorLight1">#3B86DE</Color>
+      <Color x:Key="SystemAccentColorLight2">#6BA5E8</Color>
+      <Color x:Key="SystemAccentColorDark1">#0A5ABA</Color>
+      <Color x:Key="SystemAccentColorDark2">#084E9F</Color>
+    </ResourceDictionary>
+
+    <!-- ═══════════════════════════════ dark ═══════════════════════════════ -->
+    <ResourceDictionary x:Key="Dark">
+
+      <SolidColorBrush x:Key="CanvasBrush" Color="#151518" />
+      <SolidColorBrush x:Key="SidebarBrush" Color="#1B1B1F" />
+      <SolidColorBrush x:Key="SurfaceBrush" Color="#1E1E23" />
+      <SolidColorBrush x:Key="ElevatedBrush" Color="#26262C" />
+      <SolidColorBrush x:Key="ChromeBrush" Color="#1A1A1E" />
+
+      <SolidColorBrush x:Key="BorderBrush" Color="#FFFFFF" Opacity="0.10" />
+      <SolidColorBrush x:Key="BorderStrongBrush" Color="#FFFFFF" Opacity="0.20" />
+      <SolidColorBrush x:Key="DividerBrush" Color="#FFFFFF" Opacity="0.07" />
+
+      <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F2F2F5" />
+      <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A8A8B3" />
+      <SolidColorBrush x:Key="TextTertiaryBrush" Color="#75757F" />
+      <SolidColorBrush x:Key="TextOnAccentBrush" Color="#FFFFFF" />
+
+      <SolidColorBrush x:Key="AccentBrush" Color="#4C9AFF" />
+      <SolidColorBrush x:Key="AccentHoverBrush" Color="#6BAEFF" />
+      <SolidColorBrush x:Key="AccentSoftBrush" Color="#4C9AFF" Opacity="0.18" />
+      <SolidColorBrush x:Key="SelectionBrush" Color="#4C9AFF" Opacity="0.22" />
+
+      <SolidColorBrush x:Key="DangerBrush" Color="#FF6B5E" />
+      <SolidColorBrush x:Key="DangerSoftBrush" Color="#FF6B5E" Opacity="0.18" />
+      <SolidColorBrush x:Key="WarningBrush" Color="#FFB84D" />
+      <SolidColorBrush x:Key="WarningSoftBrush" Color="#FFB84D" Opacity="0.18" />
+      <SolidColorBrush x:Key="SuccessBrush" Color="#5BD07E" />
+      <SolidColorBrush x:Key="SuccessSoftBrush" Color="#5BD07E" Opacity="0.18" />
+
+      <SolidColorBrush x:Key="HoverBrush" Color="#FFFFFF" Opacity="0.07" />
+      <SolidColorBrush x:Key="PressedBrush" Color="#FFFFFF" Opacity="0.12" />
+      <SolidColorBrush x:Key="ControlBrush" Color="#2A2A31" />
+
+      <Color x:Key="SystemAccentColor">#4C9AFF</Color>
+      <Color x:Key="SystemAccentColorLight1">#6BAEFF</Color>
+      <Color x:Key="SystemAccentColorLight2">#8CC2FF</Color>
+      <Color x:Key="SystemAccentColorDark1">#3585EB</Color>
+      <Color x:Key="SystemAccentColorDark2">#2670CE</Color>
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- ═══════════════════ shape and rhythm (theme-independent) ═══════════════════ -->
+
+  <CornerRadius x:Key="RadiusSmall">5</CornerRadius>
+  <CornerRadius x:Key="RadiusMedium">8</CornerRadius>
+  <CornerRadius x:Key="RadiusLarge">11</CornerRadius>
+  <CornerRadius x:Key="RadiusPill">99</CornerRadius>
+
+  <!-- A 4pt spacing scale keeps padding consistent without magic numbers in the views. -->
+  <Thickness x:Key="PadTight">8,5</Thickness>
+  <Thickness x:Key="PadControl">12,7</Thickness>
+  <Thickness x:Key="PadPanel">16</Thickness>
+  <Thickness x:Key="PadDialog">24</Thickness>
+
+  <!-- Type scale. -->
+  <x:Double x:Key="FontCaption">11</x:Double>
+  <x:Double x:Key="FontSmall">12</x:Double>
+  <x:Double x:Key="FontBody">13</x:Double>
+  <x:Double x:Key="FontTitle">15</x:Double>
+  <x:Double x:Key="FontDisplay">19</x:Double>
+
+  <FontFamily x:Key="MonoFont">Menlo, SF Mono, Monaco, Consolas, monospace</FontFamily>
+
+</ResourceDictionary>

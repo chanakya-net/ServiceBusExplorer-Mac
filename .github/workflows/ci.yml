@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # A newer push to the same branch makes an in-flight run redundant.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    # macOS runner: the tests exercise Avalonia's headless platform and the
+    # keychain-backed secret store's availability check, both of which are
+    # platform-sensitive.
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      # Proves the packaging script still produces a launchable bundle, so a broken
+      # release is caught on the PR rather than at tag time.
+      - name: Package .app
+        run: ./build/make-app.sh
+
+      # make-app.sh verifies the bundle itself; this adds the one thing it can't check
+      # about its own output — that a freshly packaged app actually starts.
+      - name: Smoke-test the packaged app
+        run: |
+          set -euo pipefail
+          open artifacts/SB-Mac.app
+          sleep 20
+
+          PID=$(pgrep -f 'SB-Mac.app/Contents/MacOS/SbMac' | head -1 || true)
+          if [ -z "$PID" ]; then
+            echo "::error::The packaged app did not stay running"
+            exit 1
+          fi
+
+          echo "App is running as PID $PID"
+          kill "$PID"
+
+      - name: Upload build for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: SB-Mac-ci-build
+          path: artifacts/SB-Mac.app
+          retention-days: 7
+          if-no-files-found: error

@@ -1,0 +1,31 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:SbMac.App"
+             xmlns:converters="using:SbMac.App.Converters"
+             x:Class="SbMac.App.App"
+             Name="Service Bus Explorer"
+             RequestedThemeVariant="Default">
+
+  <Application.DataTemplates>
+    <local:ViewLocator />
+  </Application.DataTemplates>
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!-- Tokens first: AppStyles and the Fluent templates both resolve against them. -->
+        <ResourceInclude Source="avares://SbMac/Styles/Theme.axaml" />
+        <ResourceInclude Source="avares://SbMac/Styles/Icons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <converters:IconLookupConverter x:Key="IconLookup" />
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+    <StyleInclude Source="avares://SbMac/Styles/AppStyles.axaml" />
+  </Application.Styles>
+
+</Application>

@@ -1,0 +1,23 @@
+SB-Mac (Service Bus Explorer for macOS)
+=======================================
+
+This project is an independent macOS application inspired by, and functionally
+modelled on, the Windows Service Bus Explorer:
+
+    https://github.com/paolosalvatori/ServiceBusExplorer
+    Copyright (c) 2015 Microsoft Azure
+    Licensed under the MIT License
+
+SB-Mac does not contain source code from that project. The Windows application is
+built on WinForms and the legacy WCF-based `WindowsAzure.ServiceBus` SDK, neither
+of which runs on macOS, so both its UI and its service layer were reimplemented
+here on cross-platform foundations:
+
+    Avalonia                        MIT License
+    Azure.Messaging.ServiceBus      MIT License
+    Azure.Identity                  MIT License
+    Azure.ResourceManager.ServiceBus  MIT License
+    CommunityToolkit.Mvvm           MIT License
+
+Naming, terminology and the overall shape of the tool follow the original so that
+people already familiar with it can find their way around.

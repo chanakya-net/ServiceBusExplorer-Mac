@@ -1,0 +1,465 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SbMac.App.ViewModels"
+        xmlns:tree="using:SbMac.App.ViewModels.Tree"
+        mc:Ignorable="d"
+        x:Class="SbMac.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Service Bus Explorer for Mac"
+        Width="1360" Height="860"
+        MinWidth="960" MinHeight="600">
+
+  <!--
+    macOS puts this in the system menu bar rather than inside the window, which is why
+    the window itself has no menu strip.
+  -->
+  <NativeMenu.Menu>
+    <NativeMenu>
+      <NativeMenuItem Header="File">
+        <NativeMenu>
+          <NativeMenuItem Header="Add Namespace…" Command="{Binding AddConnectionCommand}" Gesture="Cmd+N" />
+          <NativeMenuItem Header="Edit Namespace…" Command="{Binding EditConnectionCommand}" />
+          <NativeMenuItem Header="Remove Namespace" Command="{Binding RemoveConnectionCommand}" />
+          <NativeMenuItemSeparator />
+          <NativeMenuItem Header="Import Entities…" Command="{Binding ImportEntitiesCommand}" Gesture="Cmd+I" />
+          <NativeMenuItem Header="Export Entities…" Command="{Binding ExportEntitiesCommand}" Gesture="Cmd+E" />
+          <NativeMenuItemSeparator />
+          <NativeMenuItem Header="Save Messages…" Command="{Binding SaveMessagesCommand}" Gesture="Cmd+S" />
+        </NativeMenu>
+      </NativeMenuItem>
+
+      <NativeMenuItem Header="Entity">
+        <NativeMenu>
+          <NativeMenuItem Header="New Queue…" Command="{Binding CreateQueueCommand}" />
+          <NativeMenuItem Header="New Topic…" Command="{Binding CreateTopicCommand}" />
+          <NativeMenuItem Header="New Subscription…" Command="{Binding CreateSubscriptionCommand}" />
+          <NativeMenuItemSeparator />
+          <NativeMenuItem Header="Properties…" Command="{Binding EditEntityCommand}" />
+          <NativeMenuItem Header="Enable / Disable" Command="{Binding ToggleEntityStatusCommand}" />
+          <NativeMenuItem Header="Delete Entity" Command="{Binding DeleteEntityCommand}" />
+        </NativeMenu>
+      </NativeMenuItem>
+
+      <NativeMenuItem Header="Messages">
+        <NativeMenu>
+          <NativeMenuItem Header="Peek" Command="{Binding PeekCommand}" Gesture="Cmd+R" />
+          <NativeMenuItem Header="Receive and Delete…" Command="{Binding ReceiveCommand}" />
+          <NativeMenuItem Header="Send…" Command="{Binding SendCommand}" Gesture="Cmd+D" />
+          <NativeMenuItemSeparator />
+          <NativeMenuItem Header="Resubmit Selected…" Command="{Binding ResubmitSelectedCommand}" />
+          <NativeMenuItem Header="Edit and Resend…" Command="{Binding ResubmitCommand}" />
+          <NativeMenuItem Header="Delete Selected…" Command="{Binding DeleteSelectedMessagesCommand}" />
+          <NativeMenuItemSeparator />
+          <NativeMenuItem Header="Copy Body" Command="{Binding CopyBodyCommand}" Gesture="Cmd+C" />
+          <NativeMenuItem Header="Purge…" Command="{Binding PurgeCommand}" />
+        </NativeMenu>
+      </NativeMenuItem>
+
+      <NativeMenuItem Header="View">
+        <NativeMenu>
+          <NativeMenuItem Header="Refresh" Command="{Binding RefreshCommand}" Gesture="Cmd+Shift+R" />
+          <NativeMenuItem Header="Clear Log" Command="{Binding ClearLogCommand}" />
+        </NativeMenu>
+      </NativeMenuItem>
+    </NativeMenu>
+  </NativeMenu.Menu>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- ══════════════════════════════ toolbar ══════════════════════════════ -->
+    <Border Grid.Row="0" Classes="toolbar">
+      <DockPanel LastChildFill="False">
+
+        <Button DockPanel.Dock="Left" Classes="toolbar"
+                Command="{Binding PeekCommand}"
+                IsEnabled="{Binding HasMessageEntity}"
+                ToolTip.Tip="Read messages without removing them  (⌘R)">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Path Classes="icon" Data="{StaticResource IconPeek}" />
+            <TextBlock Text="Peek" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <Button DockPanel.Dock="Left" Classes="toolbar"
+                Command="{Binding ReceiveCommand}"
+                IsEnabled="{Binding HasMessageEntity}"
+                ToolTip.Tip="Receive and permanently delete messages">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Path Classes="icon" Data="{StaticResource IconReceive}" />
+            <TextBlock Text="Receive" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <Button DockPanel.Dock="Left" Classes="toolbar"
+                Command="{Binding SendCommand}"
+                IsEnabled="{Binding HasMessageEntity}"
+                ToolTip.Tip="Compose and send a message  (⌘D)">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Path Classes="icon" Data="{StaticResource IconSend}" />
+            <TextBlock Text="Send" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <Rectangle DockPanel.Dock="Left" Classes="toolbarDivider" />
+
+        <ToggleButton DockPanel.Dock="Left"
+                      Classes="toolbarToggle"
+                      IsChecked="{Binding ShowDeadLetter}"
+                      IsEnabled="{Binding HasMessageEntity}"
+                      ToolTip.Tip="Read from the dead-letter sub-queue instead of the entity">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Path Classes="icon" Data="{StaticResource IconDeadLetter}"
+                  Stroke="{Binding $parent[ToggleButton].Foreground}" />
+            <TextBlock Text="Dead-letter" VerticalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
+
+        <Rectangle DockPanel.Dock="Left" Classes="toolbarDivider" />
+
+        <TextBlock DockPanel.Dock="Left" Classes="fieldLabel" Text="Fetch" Margin="2,0,8,0" />
+        <NumericUpDown DockPanel.Dock="Left" Width="112"
+                       Minimum="1" Maximum="10000" Increment="50"
+                       FormatString="0"
+                       Value="{Binding FetchCount}"
+                       ToolTip.Tip="How many messages to read at a time" />
+
+        <!-- Right-aligned: destructive actions sit apart from the read actions. -->
+        <Button DockPanel.Dock="Right" Classes="toolbar destructive"
+                Command="{Binding PurgeCommand}"
+                IsEnabled="{Binding HasMessageEntity}"
+                ToolTip.Tip="Delete every message in the selected entity">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Path Classes="icon" Data="{StaticResource IconPurge}" />
+            <TextBlock Text="Purge" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <Button DockPanel.Dock="Right" Classes="toolbar"
+                Command="{Binding RefreshCommand}"
+                ToolTip.Tip="Reload the selection from Azure  (⌘⇧R)">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Path Classes="icon" Data="{StaticResource IconRefresh}" />
+            <TextBlock Text="Refresh" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+      </DockPanel>
+    </Border>
+
+    <!-- ══════════════════════════ main split view ══════════════════════════ -->
+    <Grid Grid.Row="1" ColumnDefinitions="300,Auto,*">
+
+      <!-- ─────────────── sidebar ─────────────── -->
+      <Border Grid.Column="0" Classes="sidebar">
+        <Grid RowDefinitions="Auto,*,Auto">
+
+          <TextBlock Grid.Row="0" Classes="caption" Text="NAMESPACES" Margin="18,14,16,8" />
+
+          <Panel Grid.Row="1">
+            <TreeView x:Name="EntityTree"
+                      ItemsSource="{Binding Namespaces}"
+                      SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
+                      Padding="6,0,6,10">
+
+              <TreeView.Styles>
+                <!--
+                  Without this, a node's IsExpanded never reaches its container and the
+                  tree stays collapsed after connecting. Selection is deliberately NOT
+                  bound here — TreeView.SelectedItem already owns it, and a second
+                  two-way binding fights it as containers realise, clearing the selection.
+                -->
+                <Style Selector="TreeViewItem" x:DataType="tree:TreeNodeViewModel">
+                  <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                </Style>
+              </TreeView.Styles>
+
+              <TreeView.ItemTemplate>
+                <TreeDataTemplate DataType="tree:TreeNodeViewModel" ItemsSource="{Binding Children}">
+                  <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,1" MinHeight="24">
+
+                    <Path Grid.Column="0"
+                          Classes="treeIcon"
+                          Classes.disabled="{Binding IsDisabled}"
+                          Data="{Binding Icon, Converter={StaticResource IconLookup}}"
+                          Margin="0,0,9,0" />
+
+                    <TextBlock Grid.Column="1"
+                               Classes="entityTitle"
+                               Classes.disabled="{Binding IsDisabled}"
+                               Text="{Binding Title}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" />
+
+                    <!-- Counts read faster as coloured pills than as concatenated text. -->
+                    <Border Grid.Column="2" Classes="badge neutral" Margin="6,0,0,0"
+                            IsVisible="{Binding ActiveBadge, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Text="{Binding ActiveBadge}" />
+                    </Border>
+
+                    <Border Grid.Column="3" Classes="badge danger" Margin="4,0,2,0"
+                            ToolTip.Tip="Dead-lettered messages"
+                            IsVisible="{Binding DeadLetterBadge, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Text="{Binding DeadLetterBadge}" />
+                    </Border>
+                  </Grid>
+                </TreeDataTemplate>
+              </TreeView.ItemTemplate>
+
+              <TreeView.ContextMenu>
+                <ContextMenu x:DataType="vm:MainWindowViewModel">
+                  <MenuItem Header="Connect" Command="{Binding ConnectCommand}" />
+                  <MenuItem Header="Disconnect" Command="{Binding DisconnectCommand}" />
+                  <MenuItem Header="Refresh" Command="{Binding RefreshCommand}" />
+                  <Separator />
+                  <MenuItem Header="New Queue…" Command="{Binding CreateQueueCommand}" />
+                  <MenuItem Header="New Topic…" Command="{Binding CreateTopicCommand}" />
+                  <MenuItem Header="New Subscription…" Command="{Binding CreateSubscriptionCommand}"
+                            IsEnabled="{Binding CanCreateSubscription}" />
+                  <Separator />
+                  <MenuItem Header="Properties…" Command="{Binding EditEntityCommand}"
+                            IsEnabled="{Binding CanEditEntity}" />
+                  <MenuItem Header="Enable / Disable" Command="{Binding ToggleEntityStatusCommand}"
+                            IsEnabled="{Binding CanEditEntity}" />
+                  <Separator />
+                  <MenuItem Header="Import Entities…" Command="{Binding ImportEntitiesCommand}" />
+                  <MenuItem Header="Export Entities…" Command="{Binding ExportEntitiesCommand}" />
+                  <Separator />
+                  <MenuItem Header="Edit Namespace…" Command="{Binding EditConnectionCommand}" />
+                  <MenuItem Header="Remove Namespace" Command="{Binding RemoveConnectionCommand}" />
+                  <MenuItem Header="Delete Entity" Command="{Binding DeleteEntityCommand}"
+                            IsEnabled="{Binding CanDeleteEntity}" />
+                </ContextMenu>
+              </TreeView.ContextMenu>
+            </TreeView>
+
+            <!-- First-run placeholder, shown in place of an empty tree. -->
+            <StackPanel IsVisible="{Binding HasNoNamespaces}"
+                        VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Margin="28" Spacing="10" IsHitTestVisible="False">
+              <Path Classes="treeIcon" Data="{StaticResource IconNamespace}"
+                    Width="30" Height="30" Opacity="0.35" HorizontalAlignment="Center" />
+              <TextBlock Text="No namespaces yet" Classes="secondary"
+                         HorizontalAlignment="Center" />
+              <TextBlock Text="Add one to start browsing queues and topics."
+                         Classes="tertiary" TextWrapping="Wrap" TextAlignment="Center" />
+            </StackPanel>
+          </Panel>
+
+          <Border Grid.Row="2" BorderThickness="0,1,0,0"
+                  BorderBrush="{DynamicResource DividerBrush}" Padding="10,8">
+            <Button Classes="toolbar" HorizontalAlignment="Left"
+                    Command="{Binding AddConnectionCommand}"
+                    ToolTip.Tip="Add a Service Bus namespace  (⌘N)">
+              <StackPanel Orientation="Horizontal" Spacing="7">
+                <Path Classes="icon" Data="{StaticResource IconAdd}" />
+                <TextBlock Text="Add namespace" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+          </Border>
+        </Grid>
+      </Border>
+
+      <GridSplitter Grid.Column="1" Width="5" ResizeDirection="Columns" />
+
+      <!-- ─────────────── entity detail + messages ─────────────── -->
+      <!-- The list carries the scanning work, so it gets the larger share by default. -->
+      <Grid Grid.Column="2" RowDefinitions="Auto,1.7*,Auto,*" Margin="18,0,18,0">
+
+        <!-- entity header -->
+        <StackPanel Grid.Row="0" Margin="2,16,2,12" Spacing="4">
+          <TextBlock Text="{Binding EntityHeader}" Classes="display"
+                     TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding EntitySummary}" Classes="secondary" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <!-- message list -->
+        <Border Grid.Row="1" Classes="card">
+          <Grid RowDefinitions="Auto,*">
+
+            <Border Grid.Row="0" Classes="cardHeader">
+              <DockPanel LastChildFill="False">
+                <TextBlock DockPanel.Dock="Left" Classes="caption"
+                           VerticalAlignment="Center"
+                           Text="{Binding MessageSourceLabel}" />
+
+                <Button DockPanel.Dock="Right" Classes="toolbar destructive"
+                        Content="Delete selected"
+                        Command="{Binding DeleteSelectedMessagesCommand}" />
+
+                <Button DockPanel.Dock="Right" Classes="toolbar"
+                        Command="{Binding ResubmitSelectedCommand}">
+                  <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Path Classes="icon" Data="{StaticResource IconResubmit}" />
+                    <TextBlock Text="Resubmit selected" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+
+                <Button DockPanel.Dock="Right" Classes="toolbar"
+                        Content="Edit and resend"
+                        Command="{Binding ResubmitCommand}"
+                        IsEnabled="{Binding HasSelectedMessage}" />
+              </DockPanel>
+            </Border>
+
+            <Panel Grid.Row="1">
+              <DataGrid x:Name="MessageGrid"
+                        ItemsSource="{Binding Messages}"
+                        SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
+                        SelectionMode="Extended"
+                        IsReadOnly="True"
+                        CanUserResizeColumns="True"
+                        CanUserSortColumns="True"
+                        HeadersVisibility="Column">
+                <DataGrid.Columns>
+                  <DataGridTextColumn Header="SEQ" Width="88"
+                                      Binding="{Binding SequenceNumber}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="ENQUEUED" Width="118"
+                                      Binding="{Binding EnqueuedTime}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="MESSAGE ID" Width="132"
+                                      Binding="{Binding MessageId}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="LABEL" Width="112"
+                                      Binding="{Binding Label}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="SIZE" Width="80"
+                                      Binding="{Binding Size}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="TRY" Width="72"
+                                      Binding="{Binding DeliveryCount}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="DEAD-LETTER REASON" Width="188"
+                                      Binding="{Binding DeadLetterReason}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="PREVIEW" Width="*" MinWidth="160"
+                                      Binding="{Binding Preview}" x:DataType="vm:MessageRowViewModel" />
+                </DataGrid.Columns>
+              </DataGrid>
+
+              <StackPanel IsVisible="{Binding HasNoMessages}"
+                          VerticalAlignment="Center" HorizontalAlignment="Center"
+                          MaxWidth="380" Spacing="10" IsHitTestVisible="False">
+                <Path Classes="treeIcon" Data="{StaticResource IconEmptyState}"
+                      Width="30" Height="30" Opacity="0.3" HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding EmptyMessagesHint}" Classes="tertiary"
+                           TextWrapping="Wrap" TextAlignment="Center" />
+              </StackPanel>
+            </Panel>
+          </Grid>
+        </Border>
+
+        <GridSplitter Grid.Row="2" Height="7"
+                      HorizontalAlignment="Stretch" ResizeDirection="Rows" />
+
+        <!-- message detail -->
+        <Border Grid.Row="3" Classes="card" Margin="0,0,0,14">
+          <TabControl>
+
+            <TabItem Header="Body">
+              <Grid RowDefinitions="Auto,*">
+                <Border Grid.Row="0" Classes="cardHeader" BorderThickness="0,1,0,1">
+                  <DockPanel LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Classes="tertiary" VerticalAlignment="Center"
+                               Text="{Binding BodyFormatLabel}" />
+                    <Button DockPanel.Dock="Right" Classes="toolbar"
+                            Command="{Binding CopyBodyCommand}"
+                            IsEnabled="{Binding HasSelectedMessage}"
+                            ToolTip.Tip="Copy the body to the clipboard  (⌘C)">
+                      <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Path Classes="icon" Data="{StaticResource IconCopy}" />
+                        <TextBlock Text="Copy" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Button>
+                  </DockPanel>
+                </Border>
+
+                <TextBox Grid.Row="1" Classes="mono plain"
+                         Text="{Binding BodyText, Mode=OneWay}"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap"
+                         VerticalContentAlignment="Top" />
+              </Grid>
+            </TabItem>
+
+            <TabItem Header="Properties">
+              <ScrollViewer Padding="14,10">
+                <ItemsControl ItemsSource="{Binding PropertyEntries}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MessagePropertyEntry">
+                      <Panel>
+                        <!-- Section heading -->
+                        <TextBlock Classes="caption" Text="{Binding Name}"
+                                   Margin="0,12,0,5"
+                                   IsVisible="{Binding IsSection}" />
+
+                        <!-- Name / value row -->
+                        <Grid ColumnDefinitions="190,*" Margin="0,2"
+                              IsVisible="{Binding !IsSection}">
+                          <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                     Classes="secondary" FontSize="12"
+                                     TextTrimming="CharacterEllipsis"
+                                     Margin="0,0,12,0" />
+                          <SelectableTextBlock Grid.Column="1" Text="{Binding Value}"
+                                               Classes="mono" TextWrapping="Wrap" />
+                        </Grid>
+                      </Panel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Activity">
+              <Grid RowDefinitions="Auto,*">
+                <Border Grid.Row="0" Classes="cardHeader" BorderThickness="0,1,0,1">
+                  <DockPanel LastChildFill="False">
+                    <TextBlock DockPanel.Dock="Left" Classes="tertiary"
+                               VerticalAlignment="Center" Text="Newest first" />
+                    <Button DockPanel.Dock="Right" Classes="toolbar"
+                            Content="Clear" Command="{Binding ClearLogCommand}" />
+                  </DockPanel>
+                </Border>
+
+                <ListBox Grid.Row="1" ItemsSource="{Binding Log}" Padding="4,6">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                      <TextBlock Classes="mono" Text="{Binding}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Grid>
+            </TabItem>
+
+          </TabControl>
+        </Border>
+      </Grid>
+    </Grid>
+
+    <!-- ═══════════════════════════ status bar ═══════════════════════════ -->
+    <Border Grid.Row="2" Classes="statusBar">
+      <DockPanel LastChildFill="True">
+
+        <ProgressBar DockPanel.Dock="Left" Width="104" Height="3" Margin="0,0,12,0"
+                     IsIndeterminate="True"
+                     IsVisible="{Binding IsBusy}"
+                     VerticalAlignment="Center" />
+
+        <Button DockPanel.Dock="Right" Classes="toolbar"
+                Content="Cancel"
+                Padding="9,3"
+                IsVisible="{Binding IsBusy}"
+                Command="{Binding CancelOperationCommand}" />
+
+        <TextBlock VerticalAlignment="Center"
+                   Classes="secondary"
+                   TextTrimming="CharacterEllipsis"
+                   Text="{Binding BusyDescription, FallbackValue=''}"
+                   IsVisible="{Binding IsBusy}" />
+
+        <TextBlock VerticalAlignment="Center"
+                   Classes="secondary"
+                   TextTrimming="CharacterEllipsis"
+                   Text="{Binding StatusText}"
+                   IsVisible="{Binding !IsBusy}" />
+      </DockPanel>
+    </Border>
+
+  </Grid>
+</Window>

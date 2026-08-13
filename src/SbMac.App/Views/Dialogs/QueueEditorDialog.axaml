@@ -1,0 +1,132 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SbMac.App.ViewModels.Dialogs"
+        mc:Ignorable="d"
+        x:Class="SbMac.App.Views.Dialogs.QueueEditorDialog"
+        x:DataType="vm:QueueEditorViewModel"
+        Title="{Binding DialogTitle}"
+        Width="620" Height="640"
+        MinWidth="560" MinHeight="520"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Grid Margin="22" RowDefinitions="Auto,*,Auto">
+
+    <TextBlock Grid.Row="0" Text="{Binding DialogTitle}" Classes="title"
+               Margin="0,0,0,16" TextTrimming="CharacterEllipsis" />
+
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Spacing="12">
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
+          <TextBox Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
+                   Watermark="orders" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Max size (MB)" />
+          <NumericUpDown Grid.Column="1" Minimum="1024" Maximum="81920" Increment="1024"
+                         FormatString="0" Value="{Binding MaxSizeInMegabytes}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Max delivery count" />
+          <NumericUpDown Grid.Column="1" Minimum="1" Maximum="2000" Increment="1"
+                         FormatString="0" Value="{Binding MaxDeliveryCount}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Lock duration" />
+          <TextBox Grid.Column="1" Text="{Binding LockDuration}" Watermark="00:00:30" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default time to live" />
+          <TextBox Grid.Column="1" Text="{Binding DefaultMessageTimeToLive}" Watermark="blank = service default" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Auto-delete on idle" />
+          <TextBox Grid.Column="1" Text="{Binding AutoDeleteOnIdle}" Watermark="blank = never" />
+        </Grid>
+
+        <TextBlock Classes="tertiary" Margin="190,0,0,0"
+                   Text="Durations accept hh:mm:ss, d.hh:mm:ss or ISO 8601 (PT30S)." />
+
+        <Rectangle Classes="divider" Margin="0,6" />
+
+        <TextBlock Classes="caption" Text="BEHAVIOUR" />
+
+        <CheckBox Content="Dead-letter messages when they expire"
+                  IsChecked="{Binding DeadLetteringOnMessageExpiration}" />
+
+        <CheckBox Content="Enable batched operations"
+                  IsChecked="{Binding EnableBatchedOperations}" />
+
+        <CheckBox Content="Queue is active (uncheck to disable)"
+                  IsChecked="{Binding IsActive}" />
+
+        <Rectangle Classes="divider" Margin="0,6" />
+
+        <StackPanel Spacing="9">
+          <TextBlock Classes="caption" Text="FIXED AT CREATION" />
+
+          <CheckBox Content="Requires sessions"
+                    IsChecked="{Binding RequiresSession}"
+                    IsEnabled="{Binding CanEditCreateOnlySettings}" />
+
+          <CheckBox Content="Enable partitioning"
+                    IsChecked="{Binding EnablePartitioning}"
+                    IsEnabled="{Binding CanEditCreateOnlySettings}" />
+
+          <CheckBox Content="Requires duplicate detection"
+                    IsChecked="{Binding RequiresDuplicateDetection}"
+                    IsEnabled="{Binding CanEditCreateOnlySettings}" />
+
+          <Grid ColumnDefinitions="190,*">
+            <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Duplicate detection window" />
+            <TextBox Grid.Column="1"
+                     Text="{Binding DuplicateDetectionHistoryTimeWindow}"
+                     IsEnabled="{Binding CanEditCreateOnlySettings}"
+                     Watermark="00:10:00" />
+          </Grid>
+
+          <TextBlock Classes="tertiary"
+                     TextWrapping="Wrap"
+                     IsVisible="{Binding !CanEditCreateOnlySettings}"
+                     Text="Azure Service Bus fixes these settings when the queue is created. To change them, create a new queue." />
+        </StackPanel>
+
+        <Rectangle Classes="divider" Margin="0,6" />
+
+        <TextBlock Classes="caption" Text="FORWARDING" />
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward to" />
+          <TextBox Grid.Column="1" Text="{Binding ForwardTo}" Watermark="another queue or topic" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward dead-letters to" />
+          <TextBox Grid.Column="1" Text="{Binding ForwardDeadLetteredMessagesTo}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="User metadata" />
+          <TextBox Grid.Column="1" Text="{Binding UserMetadata}" />
+        </Grid>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="2" Classes="dialogButtons" Orientation="Horizontal"
+                HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button Classes="primary" Content="Save" IsDefault="True" Click="OnSave" IsEnabled="{Binding CanSave}" />
+    </StackPanel>
+
+  </Grid>
+</Window>

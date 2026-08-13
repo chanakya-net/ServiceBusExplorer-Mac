@@ -1,0 +1,98 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SbMac.App.ViewModels.Dialogs"
+        mc:Ignorable="d"
+        x:Class="SbMac.App.Views.Dialogs.RuleEditorDialog"
+        x:DataType="vm:RuleEditorViewModel"
+        Title="{Binding DialogTitle}"
+        Width="600" SizeToContent="Height"
+        MinHeight="360"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+
+  <StackPanel Margin="22" Spacing="12">
+
+    <TextBlock Text="{Binding DialogTitle}" Classes="title"
+               Margin="0,0,0,4" TextTrimming="CharacterEllipsis" />
+
+    <Grid ColumnDefinitions="150,*">
+      <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
+      <TextBox Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}" />
+    </Grid>
+
+    <Grid ColumnDefinitions="150,*">
+      <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Filter type" />
+      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                ItemsSource="{Binding FilterTypes}"
+                SelectedIndex="{Binding SelectedFilterIndex}" />
+    </Grid>
+
+    <!-- ───────────── SQL filter ───────────── -->
+    <StackPanel Spacing="12" IsVisible="{Binding ShowSqlFields}">
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="SQL expression"
+                   VerticalAlignment="Top" Margin="0,6,10,0" />
+        <TextBox Grid.Column="1" Classes="mono" Text="{Binding SqlExpression}"
+                 AcceptsReturn="True" TextWrapping="Wrap" Height="70"
+                 Watermark="region = 'emea' AND priority &gt; 3" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="SQL action" />
+        <TextBox Grid.Column="1" Classes="mono" Text="{Binding SqlAction}"
+                 Watermark="optional, e.g. SET routed = 'yes'" />
+      </Grid>
+    </StackPanel>
+
+    <!-- ───────────── correlation filter ───────────── -->
+    <StackPanel Spacing="10" IsVisible="{Binding ShowCorrelationFields}">
+      <TextBlock Classes="tertiary" TextWrapping="Wrap"
+                 Text="Every value you fill in must match for the rule to fire. Leave a field blank to ignore it." />
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Correlation ID" />
+        <TextBox Grid.Column="1" Text="{Binding CorrelationId}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Message ID" />
+        <TextBox Grid.Column="1" Text="{Binding MessageId}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Label" />
+        <TextBox Grid.Column="1" Text="{Binding Subject}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="To" />
+        <TextBox Grid.Column="1" Text="{Binding To}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Reply to" />
+        <TextBox Grid.Column="1" Text="{Binding ReplyTo}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Session ID" />
+        <TextBox Grid.Column="1" Text="{Binding SessionId}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Content type" />
+        <TextBox Grid.Column="1" Text="{Binding ContentType}" />
+      </Grid>
+    </StackPanel>
+
+    <StackPanel Classes="dialogButtons" Orientation="Horizontal"
+                HorizontalAlignment="Right" Margin="0,6,0,0">
+      <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button Classes="primary" Content="Save" IsDefault="True" Click="OnSave" IsEnabled="{Binding CanSave}" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

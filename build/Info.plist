@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>SB-Mac</string>
+
+  <key>CFBundleDisplayName</key>
+  <string>Service Bus Explorer</string>
+
+  <key>CFBundleIdentifier</key>
+  <string>com.sbmac.servicebusexplorer</string>
+
+  <key>CFBundleVersion</key>
+  <string>1.0.0</string>
+
+  <key>CFBundleShortVersionString</key>
+  <string>1.0.0</string>
+
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+
+  <key>CFBundleExecutable</key>
+  <string>SbMac</string>
+
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+
+  <!-- Avalonia renders its own chrome; without this the app has no Dock icon or menu bar. -->
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.developer-tools</string>
+
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+
+  <key>NSHighResolutionCapable</key>
+  <true/>
+
+  <!-- Follows the system appearance rather than forcing light mode. -->
+  <key>NSRequiresAquaSystemAppearance</key>
+  <false/>
+
+  <key>NSHumanReadableCopyright</key>
+  <string>MIT License</string>
+
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Service Bus entity definitions</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>public.xml</string>
+        <string>public.json</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

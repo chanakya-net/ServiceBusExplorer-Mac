@@ -1,0 +1,105 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SbMac.App.ViewModels.Dialogs"
+        mc:Ignorable="d"
+        x:Class="SbMac.App.Views.Dialogs.ConnectionDialog"
+        x:DataType="vm:ConnectionDialogViewModel"
+        Title="{Binding DialogTitle}"
+        Width="620" SizeToContent="Height"
+        MinHeight="360"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+
+  <StackPanel Margin="22" Spacing="16">
+
+    <TextBlock Text="{Binding DialogTitle}" Classes="title" />
+
+    <Grid ColumnDefinitions="150,*" RowDefinitions="Auto">
+      <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Display name" />
+      <TextBox Grid.Column="1" Text="{Binding Name}" Watermark="contoso-prod" />
+    </Grid>
+
+    <!-- Auth mode picker. The two field sets below are mutually exclusive. -->
+    <Grid ColumnDefinitions="150,*">
+      <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Authentication" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="18">
+        <RadioButton GroupName="auth" Content="Connection string"
+                     IsChecked="{Binding !UseEntraId}" />
+        <RadioButton GroupName="auth" Content="Entra ID"
+                     IsChecked="{Binding UseEntraId}" />
+      </StackPanel>
+    </Grid>
+
+    <!-- ───────────────── connection string ───────────────── -->
+    <StackPanel Spacing="12" IsVisible="{Binding ShowConnectionStringFields}">
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Connection string"
+                   VerticalAlignment="Top" Margin="0,6,10,0" />
+        <TextBox Grid.Column="1"
+                 Text="{Binding ConnectionString}"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 Height="86"
+                 Classes="mono"
+                 Watermark="Endpoint=sb://contoso.servicebus.windows.net/;SharedAccessKeyName=…;SharedAccessKey=…" />
+      </Grid>
+      <TextBlock Classes="tertiary" Margin="150,0,0,0"
+                 TextWrapping="Wrap"
+                 Text="Stored in your macOS login keychain, not in SB-Mac's config file." />
+    </StackPanel>
+
+    <!-- ───────────────── Entra ID ───────────────── -->
+    <StackPanel Spacing="12" IsVisible="{Binding ShowEntraFields}">
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Namespace" />
+        <TextBox Grid.Column="1" Text="{Binding FullyQualifiedNamespace}"
+                 Watermark="contoso.servicebus.windows.net" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Credential" />
+        <ComboBox Grid.Column="1"
+                  HorizontalAlignment="Stretch"
+                  ItemsSource="{Binding CredentialKindLabels}"
+                  SelectedIndex="{Binding SelectedCredentialIndex}" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Tenant ID" />
+        <TextBox Grid.Column="1" Text="{Binding TenantId}" Watermark="optional" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Client ID" />
+        <TextBox Grid.Column="1" Text="{Binding ClientId}" Watermark="optional" />
+      </Grid>
+
+      <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowClientSecretFields}">
+        <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Client secret" />
+        <TextBox Grid.Column="1" Text="{Binding ClientSecret}" PasswordChar="•" />
+      </Grid>
+
+      <TextBlock Classes="tertiary" Margin="150,0,0,0"
+                 TextWrapping="Wrap"
+                 Text="Your identity needs the Azure Service Bus Data Owner role on the namespace to browse entities and messages." />
+    </StackPanel>
+
+    <Grid ColumnDefinitions="150,*">
+      <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Transport" />
+      <CheckBox Grid.Column="1" Content="Use AMQP over WebSockets (port 443)"
+                IsChecked="{Binding UseWebSockets}" />
+    </Grid>
+
+    <TextBlock Classes="error" Text="{Binding ValidationError}"
+               IsVisible="{Binding ValidationError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+    <StackPanel Classes="dialogButtons" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button Classes="primary" Content="Save" IsDefault="True" Click="OnSave" IsEnabled="{Binding CanSave}" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SbMac.App/SbMac.App.csproj" />
+    <Project Path="src/SbMac.Core/SbMac.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SbMac.Tests/SbMac.Tests.csproj" />
+  </Folder>
+</Solution>

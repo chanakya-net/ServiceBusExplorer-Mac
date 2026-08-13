@@ -1,0 +1,134 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SbMac.App.ViewModels.Dialogs"
+        mc:Ignorable="d"
+        x:Class="SbMac.App.Views.Dialogs.SendMessageDialog"
+        x:DataType="vm:SendMessageViewModel"
+        Title="{Binding DialogTitle}"
+        Width="760" Height="700"
+        MinWidth="620" MinHeight="520"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Grid Margin="20" RowDefinitions="Auto,Auto,*,Auto,Auto">
+
+    <StackPanel Grid.Row="0" Spacing="3" Margin="0,0,0,14">
+      <TextBlock Text="{Binding DialogTitle}" Classes="title" />
+      <TextBlock Classes="tertiary" Text="{Binding SeedDescription}"
+                 IsVisible="{Binding SeedDescription, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </StackPanel>
+
+    <TextBlock Grid.Row="1" Classes="caption" Text="BODY" />
+
+    <TextBox Grid.Row="2"
+             Classes="mono"
+             Text="{Binding Body}"
+             AcceptsReturn="True"
+             AcceptsTab="True"
+             TextWrapping="NoWrap"
+             VerticalContentAlignment="Top"
+             Watermark="{}{ &quot;orderId&quot;: 1 }" />
+
+    <!-- Broker properties and custom application properties, side by side. -->
+    <Grid Grid.Row="3" ColumnDefinitions="*,16,*" Margin="0,16,0,0">
+
+      <StackPanel Grid.Column="0" Spacing="9">
+        <TextBlock Classes="caption" Text="PROPERTIES" />
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Content type" />
+          <TextBox Grid.Column="1" Text="{Binding ContentType}" Watermark="application/json" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Label" />
+          <TextBox Grid.Column="1" Text="{Binding Subject}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Correlation ID" />
+          <TextBox Grid.Column="1" Text="{Binding CorrelationId}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Session ID" />
+          <TextBox Grid.Column="1" Text="{Binding SessionId}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Partition key" />
+          <TextBox Grid.Column="1" Text="{Binding PartitionKey}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Reply to" />
+          <TextBox Grid.Column="1" Text="{Binding ReplyTo}" />
+        </Grid>
+      </StackPanel>
+
+      <StackPanel Grid.Column="2" Spacing="9">
+        <DockPanel LastChildFill="False">
+          <TextBlock DockPanel.Dock="Left" Classes="caption" Text="APPLICATION PROPERTIES" />
+          <Button DockPanel.Dock="Right" Classes="iconOnly"
+                  Command="{Binding AddPropertyCommand}"
+                  ToolTip.Tip="Add an application property">
+            <Path Classes="icon" Data="{StaticResource IconAdd}" Width="13" Height="13"
+                  Stroke="{Binding $parent[Button].Foreground}" />
+          </Button>
+        </DockPanel>
+
+        <Border Classes="card" Height="128">
+          <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Properties}" Margin="6">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:PropertyRowViewModel">
+                  <Grid ColumnDefinitions="*,6,*,6,Auto" Margin="0,0,0,5">
+                    <TextBox Grid.Column="0" Text="{Binding Key}" Watermark="key" />
+                    <TextBox Grid.Column="2" Text="{Binding Value}" Watermark="value" />
+                    <Button Grid.Column="4" Classes="iconOnly" Padding="5"
+                            Command="{Binding $parent[ItemsControl].((vm:SendMessageViewModel)DataContext).RemovePropertyCommand}"
+                            CommandParameter="{Binding}"
+                            ToolTip.Tip="Remove this property">
+                      <Path Classes="icon" Data="{StaticResource IconClose}" Width="12" Height="12"
+                            Stroke="{Binding $parent[Button].Foreground}" />
+                    </Button>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Border>
+
+        <Grid ColumnDefinitions="110,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Copies" />
+          <NumericUpDown Grid.Column="1" Minimum="1" Maximum="10000" Increment="1"
+                         FormatString="0" Value="{Binding Copies}" />
+        </Grid>
+
+        <CheckBox Content="Replace {n} in the body with the copy number"
+                  IsChecked="{Binding NumberCopies}" />
+
+        <CheckBox Content="Schedule for later" IsChecked="{Binding Schedule}" />
+
+        <Grid ColumnDefinitions="110,*,6,Auto" IsVisible="{Binding ShowScheduleFields}">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Enqueue at" />
+          <DatePicker Grid.Column="1" SelectedDate="{Binding ScheduledDate}" />
+          <TimePicker Grid.Column="3" SelectedTime="{Binding ScheduledTime}" />
+        </Grid>
+      </StackPanel>
+    </Grid>
+
+    <StackPanel Grid.Row="4" Spacing="10" Margin="0,16,0,0">
+      <TextBlock Classes="error" Text="{Binding ValidationError}"
+                 IsVisible="{Binding ValidationError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+      <StackPanel Classes="dialogButtons" Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
+        <Button Classes="primary" Content="Send" IsDefault="True" Click="OnSend" IsEnabled="{Binding CanSend}" />
+      </StackPanel>
+    </StackPanel>
+
+  </Grid>
+</Window>

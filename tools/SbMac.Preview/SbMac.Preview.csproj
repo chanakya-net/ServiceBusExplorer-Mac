@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Dev-only screenshot harness. Deliberately NOT in SB-Mac.sln: it reaches into the
+    Service Bus SDK's internal constructors to fabricate sample entities, so an SDK
+    upgrade can break it. Keeping it out of the solution means that breaks this tool
+    rather than the build.
+
+      Run it from the repo root against tools/SbMac.Preview, passing an output directory.
+      See the "Seeing the UI" section of README.md for the exact command.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>SbMac.Preview</AssemblyName>
+    <RootNamespace>SbMac.Preview</RootNamespace>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Skia" Version="11.3.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SbMac.App\SbMac.App.csproj" />
+  </ItemGroup>
+
+</Project>

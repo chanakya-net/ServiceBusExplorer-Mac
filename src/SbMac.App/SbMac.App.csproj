@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>SbMac</AssemblyName>
+    <RootNamespace>SbMac.App</RootNamespace>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.13" />
+    <!--
+      macOS backend only, instead of the Avalonia.Desktop metapackage. That package also
+      pulls in the X11 and Win32 backends, neither of which can run here, and X11 drags in
+      a Tmds.DBus.Protocol version with a published advisory. Referencing Avalonia.Native
+      directly keeps the dependency graph to what actually executes on this platform.
+    -->
+    <PackageReference Include="Avalonia.Native" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Skia" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.13" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SbMac.Core\SbMac.Core.csproj" />
+  </ItemGroup>
+
+</Project>

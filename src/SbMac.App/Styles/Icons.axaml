@@ -1,0 +1,53 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Line icons on a 24×24 grid, drawn as strokes rather than fills. Stroked paths stay
+    crisp at the 14–16px the UI actually renders them at, where filled glyphs go muddy.
+    They replace the Unicode symbols the first pass used, which rendered at whatever
+    weight the system font happened to have.
+  -->
+
+  <StreamGeometry x:Key="IconNamespace">M12 2 2 7l10 5 10-5-10-5Z M2 17l10 5 10-5 M2 12l10 5 10-5</StreamGeometry>
+
+  <StreamGeometry x:Key="IconQueue">M3 6h18 M3 12h18 M3 18h11</StreamGeometry>
+
+  <StreamGeometry x:Key="IconTopic">M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z M7.8 16.2a6 6 0 0 1 0-8.4 M16.2 7.8a6 6 0 0 1 0 8.4 M4.9 19.1a10 10 0 0 1 0-14.2 M19.1 4.9a10 10 0 0 1 0 14.2</StreamGeometry>
+
+  <StreamGeometry x:Key="IconSubscription">M3 5h18l-7 8.2V20l-4-2.2v-4.6L3 5Z</StreamGeometry>
+
+  <StreamGeometry x:Key="IconFolder">M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2l2 2.2h7.8A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5V7.5Z</StreamGeometry>
+
+  <StreamGeometry x:Key="IconRefresh">M20.5 12a8.5 8.5 0 1 1-2.5-6 M20.5 3v5h-5</StreamGeometry>
+
+  <StreamGeometry x:Key="IconPeek">M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z</StreamGeometry>
+
+  <StreamGeometry x:Key="IconSend">M21.5 2.5 10.5 13.5 M21.5 2.5l-7 19-4-8.5-8.5-4 19.5-6.5Z</StreamGeometry>
+
+  <StreamGeometry x:Key="IconReceive">M4 15v4a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-4 M12 3.5v11 M7.5 10l4.5 4.5 4.5-4.5</StreamGeometry>
+
+  <StreamGeometry x:Key="IconPurge">M3.5 6.5h17 M9.5 10.5v7 M14.5 10.5v7 M5.5 6.5l.9 13.1a1.5 1.5 0 0 0 1.5 1.4h8.2a1.5 1.5 0 0 0 1.5-1.4l.9-13.1 M9 6.5v-2a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5v2</StreamGeometry>
+
+  <StreamGeometry x:Key="IconAdd">M12 4.5v15 M4.5 12h15</StreamGeometry>
+
+  <StreamGeometry x:Key="IconClose">M6.5 6.5l11 11 M17.5 6.5l-11 11</StreamGeometry>
+
+  <StreamGeometry x:Key="IconCopy">M9.5 8.5h9A1.5 1.5 0 0 1 20 10v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 8 19v-9a1.5 1.5 0 0 1 1.5-1.5Z M5.5 15.5A1.5 1.5 0 0 1 4 14V5a1.5 1.5 0 0 1 1.5-1.5h9A1.5 1.5 0 0 1 16 5</StreamGeometry>
+
+  <StreamGeometry x:Key="IconDeadLetter">M12 3.2 2.4 20h19.2L12 3.2Z M12 10v4.2 M12 17.2h.01</StreamGeometry>
+
+  <StreamGeometry x:Key="IconImport">M4 15v4a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-4 M12 3.5v11 M7.5 10l4.5 4.5 4.5-4.5</StreamGeometry>
+
+  <StreamGeometry x:Key="IconExport">M4 15v4a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-4 M12 14.5v-11 M7.5 8l4.5-4.5 4.5 4.5</StreamGeometry>
+
+  <StreamGeometry x:Key="IconResubmit">M20.5 8a8.5 8.5 0 1 0 .8 6 M20.5 3v5h-5</StreamGeometry>
+
+  <StreamGeometry x:Key="IconProperties">M4 7h9 M17 7h3 M4 17h4 M12 17h8 M15 4.8v4.4 M10 14.8v4.4</StreamGeometry>
+
+  <StreamGeometry x:Key="IconDisabled">M12 3.5v8 M6.9 6.9a8 8 0 1 0 10.2 0</StreamGeometry>
+
+  <StreamGeometry x:Key="IconLink">M10 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.7 1.7 M14 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.7-1.7</StreamGeometry>
+
+  <StreamGeometry x:Key="IconEmptyState">M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11Z M8 9.5h8 M8 14h5</StreamGeometry>
+
+</ResourceDictionary>
