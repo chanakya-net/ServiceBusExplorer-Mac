@@ -4,11 +4,13 @@
 #
 # The published output is self-contained, so the .app runs on a Mac with no .NET
 # runtime installed. Pass the architecture as the first argument; it defaults to
-# whatever this machine is.
+# whatever this machine is. The second argument is the version to stamp into the
+# bundle, which is what Finder's Get Info and the About panel report.
 #
-#   ./build/make-app.sh              # native architecture
-#   ./build/make-app.sh osx-arm64    # Apple Silicon
-#   ./build/make-app.sh osx-x64      # Intel
+#   ./build/make-app.sh                        # native architecture, unversioned
+#   ./build/make-app.sh osx-arm64              # Apple Silicon
+#   ./build/make-app.sh osx-x64 v1.2.0         # Intel, stamped as 1.2.0
+#   SBMAC_VERSION=v1.2.0 ./build/make-app.sh   # same, via the environment
 #
 set -euo pipefail
 
@@ -24,11 +26,36 @@ else
   RUNTIME="osx-x64"
 fi
 
+# The version to stamp, in order of preference: the argument, the environment, the
+# tag this checkout sits exactly on. An untagged build reports 0.0.0 rather than
+# borrowing the last release's number, because claiming to be a release it isn't is
+# how a bundle ends up lying about what's inside it.
+if [[ $# -ge 2 ]]; then
+  VERSION="$2"
+elif [[ -n "${SBMAC_VERSION:-}" ]]; then
+  VERSION="$SBMAC_VERSION"
+else
+  VERSION="$(git describe --tags --exact-match 2>/dev/null || echo '0.0.0')"
+fi
+
+# Tags are written v1.2.0; CFBundleShortVersionString wants 1.2.0. Apple also requires
+# both version keys to be one to three dot-separated integers, so a pre-release suffix
+# is dropped here — the release assets carry the full tag in their filenames.
+REQUESTED_VERSION="$VERSION"
+VERSION="${VERSION#v}"
+VERSION="${VERSION%%-*}"
+VERSION="${VERSION%%+*}"
+
+if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+  echo "warning: '$REQUESTED_VERSION' is not a usable bundle version — stamping 0.0.0 instead" >&2
+  VERSION="0.0.0"
+fi
+
 APP_NAME="SB-Mac"
 BUNDLE="$REPO_ROOT/artifacts/$APP_NAME.app"
 PUBLISH_DIR="$REPO_ROOT/artifacts/publish-$RUNTIME"
 
-echo "==> Publishing for $RUNTIME"
+echo "==> Publishing for $RUNTIME (version $VERSION)"
 rm -rf "$PUBLISH_DIR" "$BUNDLE"
 
 dotnet publish src/SbMac.App/SbMac.App.csproj \
@@ -45,6 +72,14 @@ mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 
 cp "$REPO_ROOT/build/Info.plist" "$BUNDLE/Contents/Info.plist"
 cp -R "$PUBLISH_DIR/." "$BUNDLE/Contents/MacOS/"
+
+# Stamped here rather than committed into build/Info.plist, so the version can't drift
+# from the tag being built. This must happen before codesign below: editing Info.plist
+# after signing invalidates the signature.
+/usr/libexec/PlistBuddy \
+  -c "Set :CFBundleShortVersionString $VERSION" \
+  -c "Set :CFBundleVersion $VERSION" \
+  "$BUNDLE/Contents/Info.plist" >/dev/null
 
 if [[ -f "$REPO_ROOT/build/AppIcon.icns" ]]; then
   cp "$REPO_ROOT/build/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns"
@@ -93,6 +128,13 @@ grep -q 'Signature=adhoc' <<<"$SIGNATURE_INFO" \
 /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$BUNDLE/Contents/Info.plist" >/dev/null \
   || { echo "error: Info.plist is missing or malformed" >&2; exit 1; }
 
+# A bundle that reports the wrong version is the kind of thing nobody notices until a
+# user reports a bug against a release that never shipped the code they're running.
+STAMPED="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$BUNDLE/Contents/Info.plist")"
+
+[[ "$STAMPED" == "$VERSION" ]] \
+  || { echo "error: bundle reports version '$STAMPED', expected '$VERSION'" >&2; exit 1; }
+
 echo
-echo "Built: $BUNDLE"
+echo "Built: $BUNDLE (version $VERSION)"
 echo "Run it with:  open '$BUNDLE'"

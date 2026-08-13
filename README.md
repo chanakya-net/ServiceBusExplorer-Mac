@@ -330,14 +330,24 @@ dotnet run --project src/SbMac.App    # run without packaging
 Package a distributable `.app`, and optionally a `.dmg`:
 
 ```bash
-./build/make-app.sh              # this machine's architecture
-./build/make-app.sh osx-x64      # Intel
-./build/make-app.sh osx-arm64    # Apple Silicon
+./build/make-app.sh                     # this machine's architecture
+./build/make-app.sh osx-x64             # Intel
+./build/make-app.sh osx-arm64           # Apple Silicon
+./build/make-app.sh osx-arm64 v1.2.0    # stamped as version 1.2.0
 
 ./build/make-dmg.sh artifacts/SB-Mac.app dist/SB-Mac.dmg
 ```
 
 The output is self-contained (~112 MB) and ad-hoc code-signed.
+
+**Version stamping.** `build/Info.plist` holds `0.0.0` as a placeholder; `make-app.sh`
+overwrites both version keys from the tag it is given — as the second argument, from
+`SBMAC_VERSION`, or from the tag the checkout sits exactly on — and fails the build if the
+stamp didn't take. The release workflow passes the tag explicitly, because
+`actions/checkout` fetches shallow and without tags, so `git describe` inside the script
+would find nothing. A bundle reporting `0.0.0` was built outside the release workflow.
+The stamp is applied before `codesign`, since editing `Info.plist` afterwards would
+invalidate the signature.
 
 Two things worth knowing about that signature, because they're easy to conflate:
 
