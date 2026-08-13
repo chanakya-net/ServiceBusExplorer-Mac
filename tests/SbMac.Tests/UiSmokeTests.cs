@@ -246,4 +246,17 @@ public class UiSmokeTests
 
         Assert.Same(viewModel.Namespaces, tree.ItemsSource);
     }
+
+    [AvaloniaFact]
+    public void EntitySearchBoxUpdatesTheTreeSearchTextAsTheUserTypes()
+    {
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+
+        var searchBox = window.GetControl<TextBox>("EntitySearchBox");
+        searchBox.Text = "ordres";
+
+        Assert.Equal("ordres", viewModel.EntitySearchText);
+    }
 }

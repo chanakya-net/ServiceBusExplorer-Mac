@@ -102,6 +102,8 @@ public sealed class QueueNodeViewModel : TreeNodeViewModel
 
     public EntityPath Path => EntityPath.ForQueue(Entity.Name);
 
+    protected override bool IsSearchCandidate => true;
+
     public void Apply(QueueEntity entity)
     {
         Entity = entity;
@@ -140,6 +142,10 @@ public sealed class TopicNodeViewModel : TreeNodeViewModel
     }
 
     public TopicEntity Entity { get; private set; } = null!;
+
+    protected override bool IsSearchCandidate => true;
+
+    protected override bool ShowDescendantsWhenSearchMatches => true;
 
     public void Apply(TopicEntity entity)
     {
@@ -196,6 +202,8 @@ public sealed class SubscriptionNodeViewModel : TreeNodeViewModel
     public SubscriptionEntity Entity { get; private set; } = null!;
 
     public EntityPath Path => EntityPath.ForSubscription(Entity.TopicName, Entity.Name);
+
+    protected override bool IsSearchCandidate => true;
 
     public void Apply(SubscriptionEntity entity)
     {

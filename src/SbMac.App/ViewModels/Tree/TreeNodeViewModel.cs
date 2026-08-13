@@ -10,6 +10,30 @@ namespace SbMac.App.ViewModels.Tree;
 /// </summary>
 public abstract partial class TreeNodeViewModel : ViewModelBase
 {
+    string currentSearchText = string.Empty;
+    bool isVisibleBecauseAncestorMatches;
+    bool? expansionBeforeSearch;
+
+    protected TreeNodeViewModel()
+    {
+        Children.CollectionChanged += (_, eventArgs) =>
+        {
+            if (eventArgs.NewItems is not null)
+            {
+                var showAllChildren = isVisibleBecauseAncestorMatches ||
+                    (IsSearchCandidate && ShowDescendantsWhenSearchMatches &&
+                     EntityNameMatcher.IsMatch(Title, currentSearchText));
+
+                foreach (TreeNodeViewModel child in eventArgs.NewItems)
+                {
+                    child.ApplySearchCore(currentSearchText, showAllChildren);
+                }
+            }
+
+            RecalculateSearchVisibility();
+        };
+    }
+
     [ObservableProperty]
     string title = string.Empty;
 
@@ -46,9 +70,19 @@ public abstract partial class TreeNodeViewModel : ViewModelBase
     [ObservableProperty]
     bool isDisabled;
 
+    /// <summary>False hides the tree item while the entity search is active.</summary>
+    [ObservableProperty]
+    bool isVisible = true;
+
     public ObservableCollection<TreeNodeViewModel> Children { get; } = [];
 
     public TreeNodeViewModel? Parent { get; init; }
+
+    /// <summary>Only Service Bus entities participate in the sidebar entity search.</summary>
+    protected virtual bool IsSearchCandidate => false;
+
+    /// <summary>A topic match keeps its subscriptions visible, even when their names differ.</summary>
+    protected virtual bool ShowDescendantsWhenSearchMatches => false;
 
     /// <summary>The namespace this node belongs to, found by walking up the tree.</summary>
     public NamespaceNodeViewModel? Namespace
@@ -69,6 +103,70 @@ public abstract partial class TreeNodeViewModel : ViewModelBase
 
     /// <summary>Reloads this node's children from the service. The base implementation does nothing.</summary>
     public virtual Task RefreshAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    /// <summary>Applies an entity-name search to this node and every descendant.</summary>
+    internal void ApplySearch(string? searchText) =>
+        ApplySearchCore(EntityNameMatcher.Normalize(searchText), ancestorMatches: false);
+
+    void ApplySearchCore(string normalizedSearchText, bool ancestorMatches)
+    {
+        var searchWasActive = currentSearchText.Length > 0;
+        var searchIsActive = normalizedSearchText.Length > 0;
+        if (!searchWasActive && searchIsActive)
+        {
+            expansionBeforeSearch = IsExpanded;
+        }
+
+        currentSearchText = normalizedSearchText;
+        isVisibleBecauseAncestorMatches = ancestorMatches;
+
+        if (!searchIsActive)
+        {
+            IsVisible = true;
+            foreach (var child in Children)
+            {
+                child.ApplySearchCore(normalizedSearchText, ancestorMatches: false);
+            }
+
+            if (searchWasActive && expansionBeforeSearch is { } previousExpansion)
+            {
+                IsExpanded = previousExpansion;
+            }
+
+            expansionBeforeSearch = null;
+
+            return;
+        }
+
+        var selfMatches = IsSearchCandidate && EntityNameMatcher.IsMatch(Title, normalizedSearchText);
+        var showAllChildren = ancestorMatches || (selfMatches && ShowDescendantsWhenSearchMatches);
+
+        foreach (var child in Children)
+        {
+            child.ApplySearchCore(normalizedSearchText, showAllChildren);
+        }
+
+        IsVisible = ancestorMatches || selfMatches || Children.Any(child => child.IsVisible);
+        if (Children.Any(child => child.IsVisible))
+        {
+            IsExpanded = true;
+        }
+    }
+
+    void RecalculateSearchVisibility()
+    {
+        IsVisible = currentSearchText.Length == 0 ||
+            isVisibleBecauseAncestorMatches ||
+            (IsSearchCandidate && EntityNameMatcher.IsMatch(Title, currentSearchText)) ||
+            Children.Any(child => child.IsVisible);
+
+        if (currentSearchText.Length > 0 && Children.Any(child => child.IsVisible))
+        {
+            IsExpanded = true;
+        }
+
+        Parent?.RecalculateSearchVisibility();
+    }
 
     /// <summary>
     /// Refreshes a set of nodes at once, bounded so a large namespace doesn't open hundreds

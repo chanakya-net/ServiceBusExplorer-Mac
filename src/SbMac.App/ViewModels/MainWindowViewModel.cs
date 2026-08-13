@@ -44,7 +44,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         // The placeholders are derived from collection contents, which don't raise
         // property changes of their own.
-        Namespaces.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoNamespaces));
+        Namespaces.CollectionChanged += (_, eventArgs) =>
+        {
+            OnPropertyChanged(nameof(HasNoNamespaces));
+
+            if (eventArgs.NewItems is not null)
+            {
+                foreach (NamespaceNodeViewModel namespaceNode in eventArgs.NewItems)
+                {
+                    namespaceNode.ApplySearch(EntitySearchText);
+                }
+            }
+        };
         Messages.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoMessages));
         Operations.CollectionChanged += (_, _) => RaiseActivityChanged();
     }
@@ -53,6 +64,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public IUiServices? Ui { get; set; }
 
     public ObservableCollection<NamespaceNodeViewModel> Namespaces { get; }
+
+    [ObservableProperty]
+    string entitySearchText = string.Empty;
+
+    partial void OnEntitySearchTextChanged(string value)
+    {
+        foreach (var namespaceNode in Namespaces)
+        {
+            namespaceNode.ApplySearch(value);
+        }
+    }
 
     public ObservableCollection<MessageRowViewModel> Messages { get; }
 
