@@ -19,7 +19,7 @@
 
     <Grid ColumnDefinitions="150,*" RowDefinitions="Auto">
       <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Display name" />
-      <TextBox Grid.Column="1" Text="{Binding Name}" Watermark="contoso-prod" />
+      <TextBox Grid.Column="1" Text="{Binding Name}" PlaceholderText="contoso-prod" />
     </Grid>
 
     <!-- Auth mode picker. The two field sets below are mutually exclusive. -->
@@ -44,7 +44,7 @@
                  TextWrapping="Wrap"
                  Height="86"
                  Classes="mono"
-                 Watermark="Endpoint=sb://contoso.servicebus.windows.net/;SharedAccessKeyName=…;SharedAccessKey=…" />
+                 PlaceholderText="Endpoint=sb://contoso.servicebus.windows.net/;SharedAccessKeyName=…;SharedAccessKey=…" />
       </Grid>
       <TextBlock Classes="tertiary" Margin="150,0,0,0"
                  TextWrapping="Wrap"
@@ -56,7 +56,7 @@
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Namespace" />
         <TextBox Grid.Column="1" Text="{Binding FullyQualifiedNamespace}"
-                 Watermark="contoso.servicebus.windows.net" />
+                 PlaceholderText="contoso.servicebus.windows.net" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
@@ -69,12 +69,12 @@
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Tenant ID" />
-        <TextBox Grid.Column="1" Text="{Binding TenantId}" Watermark="optional" />
+        <TextBox Grid.Column="1" Text="{Binding TenantId}" PlaceholderText="optional" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Client ID" />
-        <TextBox Grid.Column="1" Text="{Binding ClientId}" Watermark="optional" />
+        <TextBox Grid.Column="1" Text="{Binding ClientId}" PlaceholderText="optional" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowClientSecretFields}">

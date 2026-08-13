@@ -137,9 +137,9 @@ public class ConnectionStoreTests
                 ConnectionString = "Endpoint=sb://contoso.servicebus.windows.net/;SharedAccessKey=TOPSECRETKEY"
             };
 
-            await store.SaveAsync([connection]);
+            await store.SaveAsync([connection], TestContext.Current.CancellationToken);
 
-            var fileContents = await File.ReadAllTextAsync(connectionsFile);
+            var fileContents = await File.ReadAllTextAsync(connectionsFile, TestContext.Current.CancellationToken);
             Assert.DoesNotContain("TOPSECRETKEY", fileContents);
             Assert.Contains("contoso", fileContents);
         }
@@ -167,8 +167,8 @@ public class ConnectionStoreTests
                 Transport = ServiceBusTransport.AmqpWebSockets
             };
 
-            await store.SaveAsync([original]);
-            var loaded = await store.LoadAsync();
+            await store.SaveAsync([original], TestContext.Current.CancellationToken);
+            var loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
 
             var restored = Assert.Single(loaded);
             Assert.Equal(original.Id, restored.Id);
@@ -198,11 +198,11 @@ public class ConnectionStoreTests
                 ConnectionString = "Endpoint=sb://contoso.servicebus.windows.net/;SharedAccessKey=TOPSECRETKEY"
             };
 
-            await store.SaveAsync([connection]);
-            await store.DeleteAsync(connection);
+            await store.SaveAsync([connection], TestContext.Current.CancellationToken);
+            await store.DeleteAsync(connection, TestContext.Current.CancellationToken);
 
-            Assert.Empty(await store.LoadAsync());
-            Assert.DoesNotContain("TOPSECRETKEY", await File.ReadAllTextAsync(secretsFile));
+            Assert.Empty(await store.LoadAsync(TestContext.Current.CancellationToken));
+            Assert.DoesNotContain("TOPSECRETKEY", await File.ReadAllTextAsync(secretsFile, TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -220,7 +220,7 @@ public class ConnectionStoreTests
                 Path.Combine(directory.FullName, "does-not-exist.json"),
                 new FileSecretStore(Path.Combine(directory.FullName, "secrets.json")));
 
-            Assert.Empty(await store.LoadAsync());
+            Assert.Empty(await store.LoadAsync(TestContext.Current.CancellationToken));
         }
         finally
         {

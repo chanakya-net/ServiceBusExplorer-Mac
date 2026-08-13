@@ -1,17 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!--
+      xunit v3 test projects are self-executing rather than class libraries loaded by a
+      runner, so this has to be Exe. The migration off v2 was forced: Avalonia 12's
+      Headless.XUnit package depends on xunit.v3.extensibility.core, and referencing both
+      v2 and v3 makes every [Fact] ambiguous.
+    -->
+    <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <RootNamespace>SbMac.Tests</RootNamespace>
-    <!-- Avalonia's headless tests drive a real dispatcher; they must not run in parallel. -->
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
-    <PackageReference Include="Avalonia.Headless.XUnit" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.1" />
   </ItemGroup>
 
   <ItemGroup>

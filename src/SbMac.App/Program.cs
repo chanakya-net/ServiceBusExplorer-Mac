@@ -20,6 +20,9 @@ static class Program
         => AppBuilder.Configure<App>()
             .UseAvaloniaNative()
             .UseSkia()
+            // Avalonia 12 no longer wires text shaping up implicitly; omitting this throws
+            // "No text shaping system configured" during startup.
+            .UseHarfBuzz()
             .WithInterFont()
             .LogToTrace();
 }

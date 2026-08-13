@@ -37,13 +37,13 @@
                    VerticalAlignment="Top" Margin="0,6,10,0" />
         <TextBox Grid.Column="1" Classes="mono" Text="{Binding SqlExpression}"
                  AcceptsReturn="True" TextWrapping="Wrap" Height="70"
-                 Watermark="region = 'emea' AND priority &gt; 3" />
+                 PlaceholderText="region = 'emea' AND priority &gt; 3" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="SQL action" />
         <TextBox Grid.Column="1" Classes="mono" Text="{Binding SqlAction}"
-                 Watermark="optional, e.g. SET routed = 'yes'" />
+                 PlaceholderText="optional, e.g. SET routed = 'yes'" />
       </Grid>
     </StackPanel>
 

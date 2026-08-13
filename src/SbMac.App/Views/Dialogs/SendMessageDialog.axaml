@@ -29,7 +29,7 @@
              AcceptsTab="True"
              TextWrapping="NoWrap"
              VerticalContentAlignment="Top"
-             Watermark="{}{ &quot;orderId&quot;: 1 }" />
+             PlaceholderText="{}{ &quot;orderId&quot;: 1 }" />
 
     <!-- Broker properties and custom application properties, side by side. -->
     <Grid Grid.Row="3" ColumnDefinitions="*,16,*" Margin="0,16,0,0">
@@ -39,7 +39,7 @@
 
         <Grid ColumnDefinitions="110,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Content type" />
-          <TextBox Grid.Column="1" Text="{Binding ContentType}" Watermark="application/json" />
+          <TextBox Grid.Column="1" Text="{Binding ContentType}" PlaceholderText="application/json" />
         </Grid>
 
         <Grid ColumnDefinitions="110,*">
@@ -85,8 +85,8 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:PropertyRowViewModel">
                   <Grid ColumnDefinitions="*,6,*,6,Auto" Margin="0,0,0,5">
-                    <TextBox Grid.Column="0" Text="{Binding Key}" Watermark="key" />
-                    <TextBox Grid.Column="2" Text="{Binding Value}" Watermark="value" />
+                    <TextBox Grid.Column="0" Text="{Binding Key}" PlaceholderText="key" />
+                    <TextBox Grid.Column="2" Text="{Binding Value}" PlaceholderText="value" />
                     <Button Grid.Column="4" Classes="iconOnly" Padding="5"
                             Command="{Binding $parent[ItemsControl].((vm:SendMessageViewModel)DataContext).RemovePropertyCommand}"
                             CommandParameter="{Binding}"
