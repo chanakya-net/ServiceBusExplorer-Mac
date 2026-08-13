@@ -153,11 +153,17 @@
 
       <!-- ─────────────── sidebar ─────────────── -->
       <Border Grid.Column="0" Classes="sidebar">
-        <Grid RowDefinitions="Auto,*,Auto">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
 
           <TextBlock Grid.Row="0" Classes="caption" Text="NAMESPACES" Margin="18,14,16,8" />
 
-          <Panel Grid.Row="1">
+          <TextBox x:Name="EntitySearchBox"
+                   Grid.Row="1"
+                   Margin="12,0,12,10"
+                   Text="{Binding EntitySearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                   PlaceholderText="Search queues, topics, subscriptions" />
+
+          <Panel Grid.Row="2">
             <TreeView x:Name="EntityTree"
                       ItemsSource="{Binding Namespaces}"
                       SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
@@ -172,6 +178,7 @@
                 -->
                 <Style Selector="TreeViewItem" x:DataType="tree:TreeNodeViewModel">
                   <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                  <Setter Property="IsVisible" Value="{Binding IsVisible}" />
                 </Style>
               </TreeView.Styles>
 
@@ -251,7 +258,7 @@
             </StackPanel>
           </Panel>
 
-          <Border Grid.Row="2" BorderThickness="0,1,0,0"
+          <Border Grid.Row="3" BorderThickness="0,1,0,0"
                   BorderBrush="{DynamicResource DividerBrush}" Padding="10,8">
             <Button Classes="toolbar" HorizontalAlignment="Left"
                     Command="{Binding AddConnectionCommand}"
