@@ -23,6 +23,15 @@ public sealed class MessageService
     /// <summary>The service caps a single receive at 250 messages regardless of what we ask for.</summary>
     const int MaxBatchSize = 250;
 
+    /// <summary>
+    /// Receivers a purge drains with by default. Four is where the wall-clock gain flattens
+    /// out on a standard namespace; past that the links mostly queue behind each other.
+    /// </summary>
+    public const int DefaultPurgeConcurrency = 4;
+
+    /// <summary>Upper bound on purge receivers, to stay well clear of the per-namespace link limit.</summary>
+    public const int MaxPurgeConcurrency = 16;
+
     readonly ServiceBusSession session;
 
     public MessageService(ServiceBusSession session)
@@ -293,44 +302,67 @@ public sealed class MessageService
     /// </summary>
     /// <remarks>
     /// Uses receive-and-delete in full batches, which is the fastest way to drain an
-    /// entity over AMQP. Because the service can return an empty batch while messages
-    /// remain, draining is only considered finished after several consecutive empty
-    /// batches.
+    /// entity over AMQP, and runs several receivers at once because a single link spends
+    /// most of a purge waiting on round trips rather than saturating anything. Because the
+    /// service can return an empty batch while messages remain, each receiver only
+    /// considers itself finished after several consecutive empty batches.
     /// </remarks>
+    /// <param name="concurrency">
+    /// How many receivers to drain with. Clamped to a sensible range; one reproduces the
+    /// old sequential behaviour.
+    /// </param>
     /// <returns>The number of messages deleted.</returns>
     public async Task<long> PurgeAsync(
         EntityPath entity,
         bool deadLetter,
         IProgress<PurgeProgress>? progress = null,
+        int concurrency = DefaultPurgeConcurrency,
         CancellationToken cancellationToken = default)
     {
-        const int emptyBatchesBeforeDone = 3;
+        var receivers = Math.Clamp(concurrency, 1, MaxPurgeConcurrency);
+        var deleted = 0L;
 
-        await using var receiver = CreateReceiver(entity, deadLetter, ServiceBusReceiveMode.ReceiveAndDelete);
+        // Started here rather than inside Task.Run so a caller's synchronization context
+        // still owns the progress callbacks; Progress<T> posts them back to it either way.
+        var drains = Enumerable
+            .Range(0, receivers)
+            .Select(_ => DrainAsync())
+            .ToList();
 
-        long deleted = 0;
-        var emptyBatches = 0;
+        await Task.WhenAll(drains).ConfigureAwait(false);
 
-        while (emptyBatches < emptyBatchesBeforeDone)
+        return Interlocked.Read(ref deleted);
+
+        async Task DrainAsync()
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            const int emptyBatchesBeforeDone = 3;
 
-            var batch = await receiver
-                .ReceiveMessagesAsync(MaxBatchSize, BatchWaitTime, cancellationToken)
-                .ConfigureAwait(false);
+            await using var receiver = CreateReceiver(entity, deadLetter, ServiceBusReceiveMode.ReceiveAndDelete);
 
-            if (batch is null || batch.Count == 0)
+            var emptyBatches = 0;
+
+            while (emptyBatches < emptyBatchesBeforeDone)
             {
-                emptyBatches++;
-                continue;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var batch = await receiver
+                    .ReceiveMessagesAsync(MaxBatchSize, BatchWaitTime, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (batch is null || batch.Count == 0)
+                {
+                    emptyBatches++;
+                    continue;
+                }
+
+                emptyBatches = 0;
+
+                // Reported from the running total rather than a per-receiver count, so the
+                // number on screen only ever moves forward.
+                var total = Interlocked.Add(ref deleted, batch.Count);
+                progress?.Report(new PurgeProgress(total, entity.ToString(), deadLetter));
             }
-
-            emptyBatches = 0;
-            deleted += batch.Count;
-            progress?.Report(new PurgeProgress(deleted, entity.ToString(), deadLetter));
         }
-
-        return deleted;
     }
 
     // ------------------------------------------------------------- internals

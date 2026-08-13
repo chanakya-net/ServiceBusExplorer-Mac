@@ -155,7 +155,9 @@ packages on the same version — see the note above.
 - **Resubmit** selected messages back to their entity, keeping or deleting the
   dead-letter copies
 - Delete selected messages by sequence number
-- **Purge** an entity or its dead-letter queue, with a running count and a Cancel button
+- **Purge** an entity or its dead-letter queue, drained by several receivers at once, with
+  a running count, a progress bar sized from the entity's message count, and a Cancel
+  button
 
 **Import / export**
 - Export a whole namespace's entity definitions to XML or JSON
@@ -276,6 +278,13 @@ A few deliberate choices:
   when active, because acting on the wrong sub-queue is a costly mistake.
 - **Destructive actions are separated.** Purge and Delete sit apart from the read actions
   and carry the danger colour.
+- **Operations run side by side, and each one has its own bar.** A namespace enumerating
+  its topics no longer blocks peeking a queue that has already loaded. The status bar
+  carries one small bar per operation, coloured by what it is — connect, refresh, read,
+  receive, send, purge, delete, manage, transfer — so several at once stay tellable apart;
+  clicking it opens the full list, with per-operation progress, outcome and Cancel. The
+  last few finished operations stay in the list, dimmed, so it is visible what just
+  completed and what failed.
 - **The message list gets the larger share** of the vertical split by default: scanning is
   the common task, reading one body is the occasional one.
 - **Message properties are a real two-column list**, grouped into Identity / Delivery /
@@ -295,9 +304,10 @@ Avalonia's headless platform with Skia drawing:
 dotnet run --project tools/SbMac.Preview ./artifacts/screenshots
 ```
 
-It writes both themes for the main window, the properties pane, the Event Hubs tree and
-its event properties, and the connection, send and queue dialogs — including the Event
-Hubs variant of the connection dialog — populated with representative sample data.
+It writes both themes for the main window, the expanded activity panel, the properties
+pane, the Event Hubs tree and its event properties, and the connection, send and queue
+dialogs — including the Event Hubs variant of the connection dialog — populated with
+representative sample data.
 
 `tools/SbMac.Preview` is **not** in `SB-Mac.sln`, on purpose. It fabricates sample entities
 through the Service Bus SDK's internal constructors, so an SDK upgrade can break it —
@@ -430,7 +440,13 @@ Abandoning increments the delivery count on untargeted messages, which matters o
 entity already close to its `MaxDeliveryCount`. The confirmation dialog says so.
 
 **Purge termination.** Service Bus can return an empty batch while messages remain, so
-draining stops only after three consecutive empty batches rather than the first one.
+draining stops only after three consecutive empty batches rather than the first one. Four
+receivers drain in parallel — a single link spends a purge waiting on round trips rather
+than saturating anything — and each applies the empty-batch rule for itself.
+
+**Late reads are discarded, not displayed.** Reads now run alongside each other, so a slow
+peek can return after the user has selected something else. The result is dropped with a
+line in the activity log rather than shown under another entity's name.
 
 **Prefetch is off.** Prefetching would pull messages the user never asked for and, under
 PeekLock, start their lock timers running.

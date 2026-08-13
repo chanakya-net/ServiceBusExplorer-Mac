@@ -46,6 +46,21 @@
       <SolidColorBrush x:Key="SuccessBrush" Color="#1B7A3D" />
       <SolidColorBrush x:Key="SuccessSoftBrush" Color="#1B7A3D" Opacity="0.13" />
 
+      <!--
+        Activity colours. One hue per kind of operation, so several running at once stay
+        tellable apart in the status-bar tray. Chosen for separation from each other
+        rather than from the accent, which some of them deliberately echo.
+      -->
+      <SolidColorBrush x:Key="OpConnectBrush" Color="#6E4BD0" />
+      <SolidColorBrush x:Key="OpRefreshBrush" Color="#0E7C86" />
+      <SolidColorBrush x:Key="OpReadBrush" Color="#0A66D0" />
+      <SolidColorBrush x:Key="OpReceiveBrush" Color="#B06A00" />
+      <SolidColorBrush x:Key="OpSendBrush" Color="#1B7A3D" />
+      <SolidColorBrush x:Key="OpPurgeBrush" Color="#C4291C" />
+      <SolidColorBrush x:Key="OpDeleteBrush" Color="#B02A6B" />
+      <SolidColorBrush x:Key="OpManageBrush" Color="#6B8E23" />
+      <SolidColorBrush x:Key="OpTransferBrush" Color="#8A5A2B" />
+
       <!-- interaction -->
       <SolidColorBrush x:Key="HoverBrush" Color="#000000" Opacity="0.05" />
       <SolidColorBrush x:Key="PressedBrush" Color="#000000" Opacity="0.10" />
@@ -92,6 +107,16 @@
       <SolidColorBrush x:Key="WarningSoftBrush" Color="#FFB84D" Opacity="0.18" />
       <SolidColorBrush x:Key="SuccessBrush" Color="#5BD07E" />
       <SolidColorBrush x:Key="SuccessSoftBrush" Color="#5BD07E" Opacity="0.18" />
+
+      <SolidColorBrush x:Key="OpConnectBrush" Color="#A78BFA" />
+      <SolidColorBrush x:Key="OpRefreshBrush" Color="#4FD1C5" />
+      <SolidColorBrush x:Key="OpReadBrush" Color="#4C9AFF" />
+      <SolidColorBrush x:Key="OpReceiveBrush" Color="#FFB84D" />
+      <SolidColorBrush x:Key="OpSendBrush" Color="#5BD07E" />
+      <SolidColorBrush x:Key="OpPurgeBrush" Color="#FF6B5E" />
+      <SolidColorBrush x:Key="OpDeleteBrush" Color="#FF7AB6" />
+      <SolidColorBrush x:Key="OpManageBrush" Color="#A8D14A" />
+      <SolidColorBrush x:Key="OpTransferBrush" Color="#D9A05B" />
 
       <SolidColorBrush x:Key="HoverBrush" Color="#FFFFFF" Opacity="0.07" />
       <SolidColorBrush x:Key="PressedBrush" Color="#FFFFFF" Opacity="0.12" />

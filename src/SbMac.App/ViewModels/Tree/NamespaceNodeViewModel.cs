@@ -139,8 +139,9 @@ public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDi
         IsConnected = true;
         IsExpanded = true;
 
-        await QueueFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
-        await TopicFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
+        // Queues and topics are independent listings; waiting for one before starting the
+        // other doubled how long the tree took to appear.
+        await RefreshAllAsync([QueueFolder, TopicFolder], cancellationToken).ConfigureAwait(true);
     }
 
     async Task ConnectEventHubsAsync(CancellationToken cancellationToken)
@@ -198,20 +199,10 @@ public sealed partial class NamespaceNodeViewModel : TreeNodeViewModel, IAsyncDi
         IsBusy = true;
         try
         {
-            if (QueueFolder is not null)
-            {
-                await QueueFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
-            }
+            TreeNodeViewModel?[] folders = [QueueFolder, TopicFolder, EventHubFolder];
 
-            if (TopicFolder is not null)
-            {
-                await TopicFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
-            }
-
-            if (EventHubFolder is not null)
-            {
-                await EventHubFolder.RefreshAsync(cancellationToken).ConfigureAwait(true);
-            }
+            await RefreshAllAsync(folders.OfType<TreeNodeViewModel>().ToList(), cancellationToken)
+                .ConfigureAwait(true);
         }
         finally
         {

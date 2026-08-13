@@ -25,19 +25,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 {
     readonly ConnectionStore connectionStore = ConnectionStore.CreateDefault();
 
-    /// <summary>Cancels the operation currently running, so a slow purge or peek can be stopped.</summary>
-    CancellationTokenSource? operationCancellation;
+    /// <summary>
+    /// Descriptions of the operations currently in flight. Different work runs side by
+    /// side; this only stops the same request being started twice, which is what a
+    /// double-tapped keyboard shortcut looks like.
+    /// </summary>
+    readonly HashSet<string> activeOperations = [];
+
+    /// <summary>How many finished operations stay in the tray before the oldest is dropped.</summary>
+    const int FinishedOperationsKept = 5;
 
     public MainWindowViewModel()
     {
         Namespaces = [];
         Messages = [];
         Log = [];
+        Operations = [];
 
         // The placeholders are derived from collection contents, which don't raise
         // property changes of their own.
         Namespaces.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoNamespaces));
         Messages.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoMessages));
+        Operations.CollectionChanged += (_, _) => RaiseActivityChanged();
     }
 
     /// <summary>Set by the window once it's constructed; every dialog goes through this.</summary>
@@ -48,6 +57,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<MessageRowViewModel> Messages { get; }
 
     public ObservableCollection<string> Log { get; }
+
+    /// <summary>
+    /// Everything the window is doing, and the last few things it did. Each entry owns its
+    /// own progress and cancellation, which is what lets a peek run while a namespace is
+    /// still loading its topics.
+    /// </summary>
+    public ObservableCollection<OperationViewModel> Operations { get; }
 
     // ------------------------------------------------------------- selection
 
@@ -167,14 +183,32 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     string statusText = "Ready";
 
+    /// <summary>True while the activity tray is showing every operation rather than its bars alone.</summary>
     [ObservableProperty]
-    bool isBusy;
-
-    [ObservableProperty]
-    string? busyDescription;
+    bool isActivityExpanded;
 
     [ObservableProperty]
     string messageFilter = string.Empty;
+
+    /// <summary>True while any operation is running. Nothing is gated on it — it's for display.</summary>
+    public bool IsBusy => Operations.Any(operation => operation.IsRunning);
+
+    public bool HasOperations => Operations.Count > 0;
+
+    public bool HasFinishedOperations => Operations.Any(operation => operation.IsFinished);
+
+    public int RunningOperationCount => Operations.Count(operation => operation.IsRunning);
+
+    /// <summary>
+    /// What the collapsed tray says next to the bars. One operation names itself; several
+    /// are counted, because their names won't fit and the bars already say which is which.
+    /// </summary>
+    public string ActivitySummary => RunningOperationCount switch
+    {
+        0 => HasOperations ? "Recent activity" : string.Empty,
+        1 => Operations.First(operation => operation.IsRunning).Title,
+        var count => $"{count} operations running"
+    };
 
     public string MessageSourceLabel => CurrentEventHubName is not null
         ? "Events"
@@ -327,7 +361,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>Disposes every open session. Called when the app is shutting down.</summary>
     public void Shutdown()
     {
-        operationCancellation?.Cancel();
+        CancelAllOperations();
 
         foreach (var node in Namespaces)
         {
@@ -445,7 +479,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     async Task ConnectNamespaceAsync(NamespaceNodeViewModel node)
     {
-        await RunAsync($"Connecting to {node.Title}…", async cancellationToken =>
+        await RunAsync(OperationKind.Connect, $"Connecting to {node.Title}…", async cancellationToken =>
         {
             await node.ConnectAsync(cancellationToken).ConfigureAwait(true);
             AppendLog($"Connected to {node.Connection.ResolvedNamespace}.");
@@ -486,7 +520,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync("Refreshing…", async cancellationToken =>
+        await RunAsync(OperationKind.Refresh, $"Refreshing {node.Title}…", async cancellationToken =>
         {
             await node.RefreshAsync(cancellationToken).ConfigureAwait(true);
             RaiseEntityPropertiesChanged();
@@ -502,7 +536,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Refreshing {node.Title}…", async cancellationToken =>
+        await RunAsync(OperationKind.Refresh, $"Refreshing {node.Title}…", async cancellationToken =>
         {
             await node.RefreshAsync(cancellationToken).ConfigureAwait(true);
             RaiseEntityPropertiesChanged();
@@ -529,15 +563,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         var deadLetter = ShowDeadLetter;
         var count = Math.Max(1, FetchCount);
+        var origin = SelectedNode;
 
-        await RunAsync($"Peeking {count} message(s)…", async cancellationToken =>
+        await RunAsync(OperationKind.Read, $"Peeking {count} message(s) from {path}…", async cancellationToken =>
         {
             var records = await messages
                 .PeekAsync(path, deadLetter, count, cancellationToken: cancellationToken)
                 .ConfigureAwait(true);
 
-            ReplaceMessages(records);
-            AppendLog($"Peeked {records.Count} message(s) from {path}{(deadLetter ? "/$DeadLetterQueue" : string.Empty)}.");
+            var label = $"{path}{(deadLetter ? "/$DeadLetterQueue" : string.Empty)}";
+            AppendLog($"Peeked {records.Count} message(s) from {label}.");
+
+            ShowMessagesFor(origin, records, label);
         }).ConfigureAwait(true);
     }
 
@@ -557,15 +594,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var partitionId = CurrentPartitionId;
         var count = Math.Max(1, FetchCount);
         var source = partitionId is null ? hubName : $"{hubName}/partition {partitionId}";
+        var origin = SelectedNode;
 
-        await RunAsync($"Reading {count} event(s) from {source}…", async cancellationToken =>
+        await RunAsync(OperationKind.Read, $"Reading {count} event(s) from {source}…", async cancellationToken =>
         {
             var records = await eventHubs
                 .PeekAsync(hubName, partitionId, count, cancellationToken)
                 .ConfigureAwait(true);
 
-            ReplaceMessages(records);
             AppendLog($"Read {records.Count} event(s) from {source}.");
+
+            ShowMessagesFor(origin, records, source);
         }).ConfigureAwait(true);
     }
 
@@ -594,16 +633,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Receiving {count} message(s)…", async cancellationToken =>
+        var origin = SelectedNode;
+
+        await RunAsync(OperationKind.Receive, $"Receiving {count} message(s) from {path}…", async cancellationToken =>
         {
             var records = await messages
                 .ReceiveAndDeleteAsync(path, deadLetter, count, cancellationToken)
                 .ConfigureAwait(true);
 
-            ReplaceMessages(records);
             AppendLog($"Received and deleted {records.Count} message(s) from {path}.");
 
-            await RefreshSelectedEntityAsync(cancellationToken).ConfigureAwait(true);
+            ShowMessagesFor(origin, records, path.ToString());
+            await RefreshNodeAsync(origin, cancellationToken).ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
 
@@ -676,7 +717,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Sending {composed.Messages.Count} message(s)…", async cancellationToken =>
+        var origin = SelectedNode;
+
+        await RunAsync(
+            OperationKind.Send,
+            $"Sending {composed.Messages.Count} message(s) to {composed.TargetName}…",
+            async cancellationToken =>
         {
             if (composed.ScheduledEnqueueTime is { } enqueueTime)
             {
@@ -698,7 +744,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 AppendLog($"Sent {sent} message(s) to {composed.TargetName}.");
             }
 
-            await RefreshSelectedEntityAsync(cancellationToken).ConfigureAwait(true);
+            await RefreshNodeAsync(origin, cancellationToken).ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
 
@@ -723,8 +769,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var partitionId = string.IsNullOrWhiteSpace(partitionKey) ? CurrentPartitionId : null;
 
         var events = composed.Messages.Select(EventMapper.ToEventData).ToList();
+        var origin = SelectedNode;
 
-        await RunAsync($"Publishing {events.Count} event(s)…", async cancellationToken =>
+        await RunAsync(
+            OperationKind.Send,
+            $"Publishing {events.Count} event(s) to {composed.TargetName}…",
+            async cancellationToken =>
         {
             var sent = await eventHubs
                 .SendAsync(composed.TargetName, events, partitionKey, partitionId, cancellationToken)
@@ -736,7 +786,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             AppendLog($"Published {sent} event(s) to {composed.TargetName}{routing}.");
 
-            await RefreshSelectedEntityAsync(cancellationToken).ConfigureAwait(true);
+            await RefreshNodeAsync(origin, cancellationToken).ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
 
@@ -764,8 +814,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         var removeOriginals = action == ResubmitAction.ResubmitAndDelete;
+        var origin = SelectedNode;
 
-        await RunAsync($"Resubmitting {selected.Count} message(s)…", async cancellationToken =>
+        await RunAsync(
+            OperationKind.Send,
+            $"Resubmitting {selected.Count} message(s) to {target}…",
+            async cancellationToken =>
         {
             var sent = await messages.ResubmitAsync(
                 target,
@@ -778,7 +832,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 ? $"Resubmitted {sent} message(s) to {target} and removed the dead-letter copies."
                 : $"Resubmitted {sent} message(s) to {target}.");
 
-            await RefreshSelectedEntityAsync(cancellationToken).ConfigureAwait(true);
+            await RefreshNodeAsync(origin, cancellationToken).ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
 
@@ -810,7 +864,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Deleting {selected.Count} message(s)…", async cancellationToken =>
+        var origin = SelectedNode;
+
+        await RunAsync(
+            OperationKind.Delete,
+            $"Deleting {selected.Count} message(s) from {path}…",
+            async cancellationToken =>
         {
             var deleted = await messages.DeleteMessagesAsync(
                 path,
@@ -825,12 +884,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 AppendLog("Some messages were not found — they may have been consumed or locked by another receiver.");
             }
 
-            foreach (var row in selected)
+            // Only touch the grid if it is still showing the entity these came from.
+            if (ReferenceEquals(SelectedNode, origin))
             {
-                Messages.Remove(row);
+                foreach (var row in selected)
+                {
+                    Messages.Remove(row);
+                }
             }
 
-            await RefreshSelectedEntityAsync(cancellationToken).ConfigureAwait(true);
+            await RefreshNodeAsync(origin, cancellationToken).ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
 
@@ -858,21 +921,45 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Purging {label}…", async cancellationToken =>
+        // The counts on the selected node are a moment old and a live entity keeps
+        // filling, so this drives the progress bar but never the stopping condition.
+        var expected = ExpectedMessageCount(SelectedNode, deadLetter);
+        var origin = SelectedNode;
+
+        await RunAsync(OperationKind.Purge, $"Purging {label}…", async (operation, cancellationToken) =>
         {
             var progress = new Progress<PurgeProgress>(report =>
-                BusyDescription = $"Purging {label} — {report.DeletedCount:N0} deleted…");
+                operation.Report($"{report.DeletedCount:N0} deleted", report.DeletedCount, expected));
 
             var deleted = await messages
-                .PurgeAsync(path, deadLetter, progress, cancellationToken)
+                .PurgeAsync(path, deadLetter, progress, cancellationToken: cancellationToken)
                 .ConfigureAwait(true);
 
-            Messages.Clear();
             AppendLog($"Purged {deleted:N0} message(s) from {label}.");
 
-            await RefreshSelectedEntityAsync(cancellationToken).ConfigureAwait(true);
+            if (ReferenceEquals(SelectedNode, origin))
+            {
+                Messages.Clear();
+            }
+
+            await RefreshNodeAsync(origin, cancellationToken).ConfigureAwait(true);
         }).ConfigureAwait(true);
     }
+
+    /// <summary>
+    /// How many messages a purge is expected to remove, for the progress bar. Null when the
+    /// selection doesn't carry a count.
+    /// </summary>
+    static long? ExpectedMessageCount(TreeNodeViewModel? node, bool deadLetter) => node switch
+    {
+        QueueNodeViewModel queue =>
+            deadLetter ? queue.Entity.DeadLetterMessageCount : queue.Entity.ActiveMessageCount,
+
+        SubscriptionNodeViewModel subscription =>
+            deadLetter ? subscription.Entity.DeadLetterMessageCount : subscription.Entity.ActiveMessageCount,
+
+        _ => null
+    };
 
     [RelayCommand]
     async Task CopyBodyAsync()
@@ -906,7 +993,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync("Saving messages…", async _ =>
+        await RunAsync(OperationKind.Transfer, $"Saving {rows.Count} message(s)…", async _ =>
         {
             var builder = new StringBuilder();
             builder.Append("[\n");
@@ -951,7 +1038,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Creating queue {definition.Name}…", async cancellationToken =>
+        await RunAsync(OperationKind.Manage, $"Creating queue {definition.Name}…", async cancellationToken =>
         {
             await node.Entities.CreateQueueAsync(
                 ImportExportService.ToCreateOptions(definition), cancellationToken).ConfigureAwait(true);
@@ -983,7 +1070,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Creating topic {definition.Name}…", async cancellationToken =>
+        await RunAsync(OperationKind.Manage, $"Creating topic {definition.Name}…", async cancellationToken =>
         {
             await node.Entities.CreateTopicAsync(
                 ImportExportService.ToCreateOptions(definition), cancellationToken).ConfigureAwait(true);
@@ -1018,7 +1105,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Creating subscription {definition.Name}…", async cancellationToken =>
+        await RunAsync(OperationKind.Manage, $"Creating subscription {topicName}/{definition.Name}…", async cancellationToken =>
         {
             var options = ImportExportService.ToCreateOptions(topicName, definition);
             var defaultRule = definition.Rules.FirstOrDefault();
@@ -1060,7 +1147,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 return;
             }
 
-            await RunAsync($"Updating queue {edited.Name}…", async cancellationToken =>
+            await RunAsync(OperationKind.Manage, $"Updating queue {edited.Name}…", async cancellationToken =>
             {
                 // Start from the live properties so create-only settings keep the values
                 // the service already has rather than whatever the form defaulted to.
@@ -1089,7 +1176,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 return;
             }
 
-            await RunAsync($"Updating topic {edited.Name}…", async cancellationToken =>
+            await RunAsync(OperationKind.Manage, $"Updating topic {edited.Name}…", async cancellationToken =>
             {
                 var properties = (await entities.GetTopicAsync(topicNode.Entity.Name, cancellationToken)
                     .ConfigureAwait(true)).Properties;
@@ -1119,7 +1206,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 return;
             }
 
-            await RunAsync($"Updating subscription {edited.Name}…", async cancellationToken =>
+            await RunAsync(OperationKind.Manage, $"Updating subscription {topicName}/{edited.Name}…", async cancellationToken =>
             {
                 var properties = (await entities
                     .GetSubscriptionAsync(topicName, subscriptionNode.Entity.Name, cancellationToken)
@@ -1183,7 +1270,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync($"Deleting {description}…", async cancellationToken =>
+        await RunAsync(OperationKind.Delete, $"Deleting {description}…", async cancellationToken =>
         {
             await deleteAsync(cancellationToken).ConfigureAwait(true);
             AppendLog($"Deleted {description}.");
@@ -1233,7 +1320,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var (description, apply) = target.Value;
         var enabling = node.IsDisabled;
 
-        await RunAsync($"{(enabling ? "Enabling" : "Disabling")} {description}…", async cancellationToken =>
+        await RunAsync(OperationKind.Manage, $"{(enabling ? "Enabling" : "Disabling")} {description}…", async cancellationToken =>
         {
             await apply(cancellationToken).ConfigureAwait(true);
             await node.RefreshAsync(cancellationToken).ConfigureAwait(true);
@@ -1268,7 +1355,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync("Exporting entity definitions…", async cancellationToken =>
+        await RunAsync(OperationKind.Transfer, $"Exporting {node.Title} entity definitions…", async cancellationToken =>
         {
             var definition = await node.ImportExport
                 .ExportAsync(node.Connection.ResolvedNamespace, cancellationToken: cancellationToken)
@@ -1322,10 +1409,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        await RunAsync("Importing entity definitions…", async cancellationToken =>
+        // Every queue, topic and subscription in the file is one step, so the bar can fill
+        // rather than sweep.
+        var steps = definition.Queues.Count +
+            definition.Topics.Count +
+            definition.Topics.Sum(topic => topic.Subscriptions.Count);
+
+        await RunAsync(
+            OperationKind.Transfer,
+            $"Importing entity definitions into {node.Title}…",
+            async (operation, cancellationToken) =>
         {
+            var completed = 0L;
+
             var progress = new Progress<ImportStep>(step =>
-                BusyDescription = $"Importing — {step.Action} {step.EntityPath}");
+                operation.Report($"{step.Action} {step.EntityPath}", ++completed, steps));
 
             var result = await node.ImportExport
                 .ImportAsync(definition, policy.Value, progress, cancellationToken)
@@ -1343,47 +1441,90 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ------------------------------------------------------------- internals
 
     [RelayCommand]
-    void CancelOperation()
+    void ToggleActivity() => IsActivityExpanded = !IsActivityExpanded;
+
+    [RelayCommand]
+    void CancelAllOperations()
     {
-        operationCancellation?.Cancel();
+        foreach (var operation in Operations.Where(operation => operation.IsRunning).ToList())
+        {
+            operation.Cancel();
+        }
+
         StatusText = "Cancelling…";
+    }
+
+    /// <summary>Drops the finished entries, leaving whatever is still running.</summary>
+    [RelayCommand]
+    void ClearFinishedOperations()
+    {
+        foreach (var operation in Operations.Where(operation => operation.IsFinished).ToList())
+        {
+            Operations.Remove(operation);
+        }
+
+        if (Operations.Count == 0)
+        {
+            IsActivityExpanded = false;
+        }
     }
 
     [RelayCommand]
     void ClearLog() => Log.Clear();
 
     /// <summary>
-    /// Runs an operation with the busy indicator on, funnelling any failure into the
-    /// log and an error dialog rather than letting it reach the dispatcher.
+    /// Runs an operation as its own tracked activity, funnelling any failure into the log
+    /// and an error dialog rather than letting it reach the dispatcher.
     /// </summary>
-    async Task RunAsync(string description, Func<CancellationToken, Task> operation)
+    Task RunAsync(OperationKind kind, string description, Func<CancellationToken, Task> operation) =>
+        RunAsync(kind, description, (_, cancellationToken) => operation(cancellationToken));
+
+    /// <summary>
+    /// As above, but hands the operation its own tray entry so it can report progress
+    /// against it.
+    /// </summary>
+    /// <remarks>
+    /// Several of these can be in flight at once — that is the point, so that browsing an
+    /// entity that has already loaded isn't blocked by a namespace still enumerating its
+    /// topics. Everything here runs on the UI thread and only interleaves at await points,
+    /// so the bound collections need no locking.
+    /// </remarks>
+    async Task RunAsync(
+        OperationKind kind,
+        string description,
+        Func<OperationViewModel, CancellationToken, Task> operation)
     {
-        if (IsBusy)
+        if (!activeOperations.Add(description))
         {
-            // Commands are disabled while busy, but a keyboard shortcut can still slip
-            // through; ignoring the second request is friendlier than queueing it.
+            // The same request is already running — a double-tapped shortcut, usually.
+            // Ignoring it is friendlier than queueing a duplicate.
             return;
         }
 
-        using var cancellation = new CancellationTokenSource();
-        operationCancellation = cancellation;
+        var tracked = new OperationViewModel(kind, description);
 
-        IsBusy = true;
-        BusyDescription = description;
+        TrimFinishedOperations();
+        Operations.Add(tracked);
+        tracked.PropertyChanged += OnOperationChanged;
+
         StatusText = description;
 
         try
         {
-            await operation(cancellation.Token).ConfigureAwait(true);
+            await operation(tracked, tracked.Token).ConfigureAwait(true);
+
+            tracked.Finish(OperationState.Completed);
             StatusText = "Ready";
         }
         catch (OperationCanceledException)
         {
+            tracked.Finish(OperationState.Cancelled);
             StatusText = "Cancelled";
             AppendLog($"Cancelled: {description}");
         }
         catch (Exception exception)
         {
+            tracked.Finish(OperationState.Failed, exception.Message);
             StatusText = "Failed";
             AppendLog($"Error: {exception.Message}");
 
@@ -1394,14 +1535,59 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         finally
         {
-            IsBusy = false;
-            BusyDescription = null;
-            operationCancellation = null;
+            // Its state is settled by now, so the subscription has nothing left to report.
+            tracked.PropertyChanged -= OnOperationChanged;
+
+            activeOperations.Remove(description);
+            RaiseActivityChanged();
         }
     }
 
-    void ReplaceMessages(IReadOnlyList<MessageRecord> records)
+    void OnOperationChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
+        if (args.PropertyName is nameof(OperationViewModel.State))
+        {
+            RaiseActivityChanged();
+        }
+    }
+
+    /// <summary>
+    /// Keeps the last few finished entries so it stays visible what just completed, without
+    /// letting the tray grow for the length of a session.
+    /// </summary>
+    void TrimFinishedOperations()
+    {
+        var finished = Operations.Where(operation => operation.IsFinished).ToList();
+
+        for (var index = 0; index <= finished.Count - FinishedOperationsKept; index++)
+        {
+            Operations.Remove(finished[index]);
+        }
+    }
+
+    void RaiseActivityChanged()
+    {
+        OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(HasOperations));
+        OnPropertyChanged(nameof(HasFinishedOperations));
+        OnPropertyChanged(nameof(RunningOperationCount));
+        OnPropertyChanged(nameof(ActivitySummary));
+    }
+
+    /// <summary>
+    /// Puts freshly read messages in the grid, but only while the selection they came from
+    /// is still the one on screen. Reads now run alongside each other, so a slow one can
+    /// finish after the user has moved on — and dropping those results is better than
+    /// showing one entity's messages under another's name.
+    /// </summary>
+    void ShowMessagesFor(TreeNodeViewModel? origin, IReadOnlyList<MessageRecord> records, string source)
+    {
+        if (!ReferenceEquals(SelectedNode, origin))
+        {
+            AppendLog($"Discarded {records.Count} message(s) read from {source} — the selection moved on.");
+            return;
+        }
+
         Messages.Clear();
         SelectedMessages.Clear();
 
@@ -1413,11 +1599,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         SelectedMessage = Messages.FirstOrDefault();
     }
 
-    async Task RefreshSelectedEntityAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Reloads the node an operation acted on, whether or not it is still selected — its
+    /// counts changed either way.
+    /// </summary>
+    async Task RefreshNodeAsync(TreeNodeViewModel? node, CancellationToken cancellationToken)
     {
-        if (SelectedNode is not null)
+        if (node is null)
         {
-            await SelectedNode.RefreshAsync(cancellationToken).ConfigureAwait(true);
+            return;
+        }
+
+        await node.RefreshAsync(cancellationToken).ConfigureAwait(true);
+
+        if (ReferenceEquals(SelectedNode, node))
+        {
             RaiseEntityPropertiesChanged();
         }
     }

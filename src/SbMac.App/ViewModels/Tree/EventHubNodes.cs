@@ -25,15 +25,14 @@ public sealed class EventHubFolderNodeViewModel : TreeNodeViewModel
         {
             var hubs = await service.GetEventHubsAsync(cancellationToken).ConfigureAwait(true);
 
-            Children.Clear();
-            foreach (var hub in hubs)
-            {
-                var node = new EventHubNodeViewModel(hub) { Parent = this };
-                Children.Add(node);
+            var nodes = hubs
+                .Select(hub => new EventHubNodeViewModel(hub) { Parent = this })
+                .ToList();
 
-                // Partition cursors are the reason to open a hub at all, and a namespace
-                // holds few enough hubs that loading them up front stays quick.
-                await node.RefreshAsync(cancellationToken).ConfigureAwait(true);
+            Children.Clear();
+            foreach (var node in nodes)
+            {
+                Children.Add(node);
             }
 
             Detail = hubs.Count switch
@@ -41,6 +40,10 @@ public sealed class EventHubFolderNodeViewModel : TreeNodeViewModel
                 0 => "none configured",
                 var count => count.ToString("N0")
             };
+
+            // Partition cursors are the reason to open a hub at all, so they're loaded up
+            // front — together, since each one is a separate round trip per partition.
+            await RefreshAllAsync(nodes, cancellationToken).ConfigureAwait(true);
         }
         finally
         {

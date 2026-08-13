@@ -42,6 +42,7 @@ foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
     var tag = variant == ThemeVariant.Light ? "light" : "dark";
 
     Shoot($"main-{tag}", BuildMainWindow(), 1360, 860);
+    Shoot($"activity-{tag}", BuildActivityWindow(), 1360, 860);
     Shoot($"props-{tag}", BuildMainWindow(), 1360, 860, selectTab: 1);
     Shoot($"eventhubs-{tag}", BuildEventHubsWindow(), 1360, 860);
     Shoot($"eventhubs-props-{tag}", BuildEventHubsWindow(), 1360, 860, selectTab: 1);
@@ -148,6 +149,36 @@ MainWindow BuildMainWindow()
     viewModel.Log.Insert(0, "09:41:20  Connected to contoso-prod.servicebus.windows.net.");
 
     return new MainWindow { DataContext = viewModel };
+}
+
+// Several operations at once, which is the state the activity tray exists for.
+MainWindow BuildActivityWindow()
+{
+    var window = BuildMainWindow();
+    var viewModel = (MainWindowViewModel)window.DataContext!;
+
+    viewModel.IsActivityExpanded = true;
+
+    var purge = new OperationViewModel(OperationKind.Purge, "Purging orders-retry…");
+    purge.Report("18,400 deleted", 18_400, 42_000);
+
+    var peek = new OperationViewModel(OperationKind.Read, "Peeking 100 message(s) from orders…");
+
+    var refresh = new OperationViewModel(OperationKind.Refresh, "Refreshing contoso-prod…");
+    refresh.Report("order-events / billing");
+
+    var connect = new OperationViewModel(OperationKind.Connect, "Connecting to contoso-staging…");
+    connect.Finish(OperationState.Failed, "The messaging entity could not be found.");
+
+    var send = new OperationViewModel(OperationKind.Send, "Sending 3 message(s) to orders…");
+    send.Finish(OperationState.Completed);
+
+    foreach (var operation in new[] { send, connect, purge, refresh, peek })
+    {
+        viewModel.Operations.Add(operation);
+    }
+
+    return window;
 }
 
 MainWindow BuildEventHubsWindow()

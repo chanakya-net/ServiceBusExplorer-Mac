@@ -141,6 +141,31 @@ public class UiSmokeTests
         Assert.NotNull(window.GetControl<DataGrid>("MessageGrid"));
     }
 
+    /// <summary>
+    /// The activity rows resolve their bar colour through a converter, which only runs when
+    /// the template is actually instantiated — so the panel is shown with entries in it.
+    /// </summary>
+    [AvaloniaFact]
+    public void MainWindowRendersTheActivityPanel()
+    {
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+
+        var purging = new OperationViewModel(OperationKind.Purge, "Purging orders…");
+        purging.Report("4,000 deleted", 4_000, 20_000);
+
+        var failed = new OperationViewModel(OperationKind.Connect, "Connecting to contoso…");
+        failed.Finish(OperationState.Failed, "No such host is known.");
+
+        viewModel.Operations.Add(purging);
+        viewModel.Operations.Add(failed);
+        viewModel.IsActivityExpanded = true;
+
+        Assert.True(viewModel.IsBusy);
+        Assert.Equal("Purging orders…", viewModel.ActivitySummary);
+    }
+
     [AvaloniaFact]
     public void QueueEditorLoadsInBothCreateAndEditModes()
     {
