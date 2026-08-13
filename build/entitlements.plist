@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for Developer ID signing with the hardened runtime, which notarization
+  requires. Only used by the signed release path; ad-hoc builds don't need them.
+
+  Every entry here is a .NET runtime requirement rather than an app feature:
+
+  - allow-jit / allow-unsigned-executable-memory
+      The CoreCLR JIT writes machine code at runtime. The hardened runtime blocks that by
+      default, and the app crashes on startup without these.
+
+  - disable-library-validation
+      A self-contained publish loads its own native libraries (libSkiaSharp, libHarfBuzzSharp,
+      libAvaloniaNative) which are signed with our identity but are not part of the main
+      binary's team-signed set. Library validation rejects them.
+
+  - allow-dyld-environment-variables
+      The .NET host sets DYLD_ variables while resolving those native libraries.
+
+  Deliberately NOT granted: network server, camera, microphone, address book, file access
+  beyond user-selected. SB-Mac only makes outbound AMQP/HTTPS connections, which need no
+  entitlement, and reads files the user picks through the standard open panel.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+</dict>
+</plist>

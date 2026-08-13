@@ -311,7 +311,7 @@ SB-Mac/
     Converters/            icon-name to geometry lookup
   tests/SbMac.Tests/       96 tests, including headless UI tests
   tools/SbMac.Preview/     dev-only screenshot harness (not in the solution)
-  build/                   Info.plist, icon generator, bundling script
+  build/                   Info.plist, icon generator, packaging and signing scripts
 ```
 
 `SbMac.Core` has no reference to Avalonia, so the service layer can be driven from a CLI
@@ -433,16 +433,57 @@ each, and opens a GitHub Release with install instructions. `.zip` archives are 
 `ditto` rather than `zip`, which preserves the bundle's symlinks and extended attributes —
 plain `zip` mangles them and invalidates the code signature.
 
-### Adding real code signing later
+### Turning on Developer ID signing and notarization
 
-The workflow ad-hoc signs. To ship without the quarantine step, you'd need an Apple
-Developer ID ($99/year) and would add, after `make-app.sh` in `release.yml`:
+The pipeline already does this — it just needs credentials. With no secrets configured it
+ad-hoc signs and writes the quarantine workaround into the release notes. Add the five
+secrets below and the same tag produces a notarized release that opens on a double-click,
+with the workaround removed from the notes automatically.
 
-1. Import the Developer ID certificate into a temporary keychain
-2. `codesign --deep --options runtime --sign "Developer ID Application: …"`
-3. `xcrun notarytool submit --wait` and then `xcrun stapler staple`
+You need an [Apple Developer Program](https://developer.apple.com/programs/) membership
+($99/year) for a **Developer ID Application** certificate.
 
-Everything else in the pipeline stays as it is.
+Export the certificate and key from Keychain Access as a `.p12`, then base64 it:
+
+```bash
+base64 -i DeveloperID.p12 | pbcopy
+```
+
+Add these under **Settings → Secrets and variables → Actions**:
+
+| Secret | What it is |
+|---|---|
+| `APPLE_CERTIFICATE_P12` | The base64 blob from above |
+| `APPLE_CERTIFICATE_PASSWORD` | Password you set when exporting the `.p12` |
+| `APPLE_SIGNING_IDENTITY` | e.g. `Developer ID Application: Jane Doe (ABCDE12345)` |
+| `APPLE_ID` | Apple ID email used for notarization |
+| `APPLE_TEAM_ID` | Ten-character team identifier |
+| `APPLE_APP_PASSWORD` | An [app-specific password](https://support.apple.com/en-us/102654) — **not** your account password |
+
+`APPLE_CERTIFICATE_P12` is the switch: the workflow resolves its presence into a step
+output and skips every signing step when it's empty, because GitHub doesn't allow secrets
+in `if:` expressions directly.
+
+What the signing path does, in `build/sign-and-notarize.sh`:
+
+1. Imports the certificate into a throwaway keychain that is deleted in an `always()` step,
+   so the key never outlives the job even if the build fails.
+2. Signs nested `.dylib`s **before** the bundle. Order matters — signing the bundle seals
+   its contents, so anything signed afterwards invalidates the outer signature.
+3. Signs with `--options runtime` and `build/entitlements.plist`. Notarization requires the
+   hardened runtime, and .NET needs specific exemptions from it: the CoreCLR JIT writes
+   executable memory at runtime, and a self-contained publish loads its own native
+   libraries. Without `allow-jit`, `allow-unsigned-executable-memory` and
+   `disable-library-validation`, a hardened .NET app crashes on launch.
+4. Submits with `notarytool --wait`, then **staples** the ticket. Stapling is what makes
+   first launch work offline; without it a user with no network sees the same rejection.
+5. Asserts the result with `spctl --assess --type execute` — the check macOS actually runs
+   on a quarantined download.
+
+The `.dmg` is signed, notarized and stapled separately, because a disk image is its own
+artifact and gets its own assessment when mounted.
+
+Nothing in the ad-hoc path changes, so there's no risk in adding the secrets later.
 
 ---
 
