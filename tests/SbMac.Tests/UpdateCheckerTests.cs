@@ -20,7 +20,7 @@ public sealed class UpdateCheckerTests
             """{"tag_name":"v1.4.0","html_url":"https://github.com/chanakya-net/ServiceBusExplorer-Mac/releases/tag/v1.4.0"}""")), events);
         var checker = Build(new Version(1, 3, 2), state, handler);
 
-        var update = await checker.CheckAsync();
+        var update = await checker.CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new Version(1, 3, 2), update!.InstalledVersion);
         Assert.Equal(new Version(1, 4, 0), update.AvailableVersion);
@@ -28,19 +28,30 @@ public sealed class UpdateCheckerTests
         Assert.Equal(Now, state.LastCheckUtc);
         Assert.Equal(["state", "request"], events);
         Assert.Contains("SB-Mac", handler.Request!.Headers.UserAgent.ToString());
+        Assert.Equal(
+            new Uri("https://api.github.com/repos/chanakya-net/ServiceBusExplorer-Mac/releases/latest"),
+            handler.Request.RequestUri);
     }
+
+    [Fact]
+    public void ProductionRequestTimeoutIsFiveSeconds() =>
+        Assert.Equal(TimeSpan.FromSeconds(5), UpdateChecker.DefaultRequestTimeout);
 
     [Theory]
     [InlineData("v1.3.2")]
     [InlineData("v1.2.9")]
     [InlineData("1.4")]
     [InlineData("preview")]
+    [InlineData("v+2.0.0")]
+    [InlineData("v1. 4.0")]
+    [InlineData("v1.4.+0")]
     public async Task EqualOlderOrMalformedReleaseDoesNotNotify(string tag)
     {
         var handler = new RecordingHandler((_, _) => Task.FromResult(JsonResponse(
             $$"""{"tag_name":"{{tag}}","html_url":"https://github.com/chanakya-net/ServiceBusExplorer-Mac/releases/tag/{{tag}}"}""")));
 
-        Assert.Null(await Build(new Version(1, 3, 2), new RecordingStateStore(), handler).CheckAsync());
+        Assert.Null(await Build(new Version(1, 3, 2), new RecordingStateStore(), handler)
+            .CheckAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -50,7 +61,8 @@ public sealed class UpdateCheckerTests
         var previous = Now.AddHours(-23).AddMinutes(-59);
         var state = new RecordingStateStore { LastCheckUtc = previous };
 
-        Assert.Null(await Build(new Version(1, 3, 2), state, handler).CheckAsync());
+        Assert.Null(await Build(new Version(1, 3, 2), state, handler)
+            .CheckAsync(TestContext.Current.CancellationToken));
         Assert.Null(handler.Request);
         Assert.Equal(previous, state.LastCheckUtc);
         Assert.Equal(0, state.SetCallCount);
@@ -62,7 +74,8 @@ public sealed class UpdateCheckerTests
         var handler = new RecordingHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent)));
         var state = new RecordingStateStore { LastCheckUtc = Now.AddHours(-24) };
 
-        await Build(new Version(1, 3, 2), state, handler).CheckAsync();
+        await Build(new Version(1, 3, 2), state, handler)
+            .CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(handler.Request);
         Assert.Equal(Now, state.LastCheckUtc);
@@ -78,7 +91,8 @@ public sealed class UpdateCheckerTests
         var state = new RecordingStateStore();
         var timeProvider = new RecordingTimeProvider(Now);
 
-        Assert.Null(await Build(parsed, state, handler, timeProvider: timeProvider).CheckAsync());
+        Assert.Null(await Build(parsed, state, handler, timeProvider: timeProvider)
+            .CheckAsync(TestContext.Current.CancellationToken));
         Assert.Null(handler.Request);
         Assert.Equal(0, timeProvider.GetUtcNowCallCount);
         Assert.Equal(0, state.GetCallCount);
@@ -96,7 +110,7 @@ public sealed class UpdateCheckerTests
             new StubTimeProvider(Now),
             TimeSpan.FromSeconds(1));
 
-        Assert.Null(await checker.CheckAsync());
+        Assert.Null(await checker.CheckAsync(TestContext.Current.CancellationToken));
         Assert.Null(handler.Request);
     }
 
@@ -110,7 +124,8 @@ public sealed class UpdateCheckerTests
         var handler = new RecordingHandler(
             (_, _) => Task.FromResult(new HttpResponseMessage(status)), events);
 
-        Assert.Null(await Build(new Version(1, 3, 2), state, handler).CheckAsync());
+        Assert.Null(await Build(new Version(1, 3, 2), state, handler)
+            .CheckAsync(TestContext.Current.CancellationToken));
         Assert.Equal(Now, state.LastCheckUtc);
         Assert.Equal(["state", "request"], events);
     }
@@ -121,7 +136,8 @@ public sealed class UpdateCheckerTests
         var handler = new RecordingHandler((_, _) => Task.FromResult(JsonResponse(
             """{"tag_name":"v1.4.0","html_url":"https://github.com/chanakya-net/ServiceBusExplorer-Mac/releases/tag/v1.4.0"}""")));
 
-        var update = await Build(new Version(1, 3, 2), new ThrowingStateStore(), handler).CheckAsync();
+        var update = await Build(new Version(1, 3, 2), new ThrowingStateStore(), handler)
+            .CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new Version(1, 4, 0), update!.AvailableVersion);
     }
@@ -137,9 +153,9 @@ public sealed class UpdateCheckerTests
             new StubTimeProvider(Now),
             TimeSpan.FromSeconds(1));
 
-        var first = checker.CheckAsync();
-        await handler.WaitForFirstRequestAsync();
-        var second = checker.CheckAsync();
+        var first = checker.CheckAsync(TestContext.Current.CancellationToken);
+        await handler.WaitForFirstRequestAsync(TestContext.Current.CancellationToken);
+        var second = checker.CheckAsync(TestContext.Current.CancellationToken);
         handler.Complete();
 
         await Task.WhenAll(first, second);
@@ -154,8 +170,8 @@ public sealed class UpdateCheckerTests
             """{"tag_name":"v1.4.0","html_url":"https://github.com/chanakya-net/ServiceBusExplorer-Mac/releases/tag/v1.4.0"}""")));
         var checker = Build(new Version(1, 3, 2), new ThrowingStateStore(), handler);
 
-        await checker.CheckAsync();
-        await checker.CheckAsync();
+        await checker.CheckAsync(TestContext.Current.CancellationToken);
+        await checker.CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(1, handler.RequestCount);
     }
@@ -170,7 +186,8 @@ public sealed class UpdateCheckerTests
         });
 
         Assert.Null(await Build(
-            new Version(1, 3, 2), new RecordingStateStore(), handler, TimeSpan.FromMilliseconds(10)).CheckAsync());
+                new Version(1, 3, 2), new RecordingStateStore(), handler, TimeSpan.FromMilliseconds(10))
+            .CheckAsync(TestContext.Current.CancellationToken));
     }
 
     [Theory]
@@ -182,7 +199,8 @@ public sealed class UpdateCheckerTests
     {
         var handler = new RecordingHandler((_, _) => Task.FromResult(JsonResponse(json)));
 
-        Assert.Null(await Build(new Version(1, 3, 2), new RecordingStateStore(), handler).CheckAsync());
+        Assert.Null(await Build(new Version(1, 3, 2), new RecordingStateStore(), handler)
+            .CheckAsync(TestContext.Current.CancellationToken));
     }
 
     static UpdateChecker Build(
@@ -286,7 +304,8 @@ public sealed class UpdateCheckerTests
 
         public int RequestCount { get; private set; }
 
-        public Task WaitForFirstRequestAsync() => firstRequest.Task;
+        public Task WaitForFirstRequestAsync(CancellationToken cancellationToken) =>
+            firstRequest.Task.WaitAsync(cancellationToken);
 
         public void Complete() => completion.TrySetResult();
 

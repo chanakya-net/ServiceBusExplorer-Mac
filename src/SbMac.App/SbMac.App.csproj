@@ -39,4 +39,8 @@
     <ProjectReference Include="..\SbMac.Core\SbMac.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SbMac.Tests" />
+  </ItemGroup>
+
 </Project>

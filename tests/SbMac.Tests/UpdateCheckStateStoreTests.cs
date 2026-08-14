@@ -15,7 +15,8 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
     [Fact]
     public async Task MissingSettingsBehaveLikeNoPreviousCheck()
     {
-        Assert.Null(await new JsonUpdateCheckStateStore(SettingsFile).GetLastCheckUtcAsync());
+        Assert.Null(await new JsonUpdateCheckStateStore(SettingsFile)
+            .GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -24,21 +25,27 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
         var store = new JsonUpdateCheckStateStore(SettingsFile);
         var timestamp = new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
 
-        await store.SetLastCheckUtcAsync(timestamp);
+        await store.SetLastCheckUtcAsync(timestamp, TestContext.Current.CancellationToken);
 
-        Assert.Equal(timestamp, await store.GetLastCheckUtcAsync());
+        Assert.Equal(timestamp, await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task UpdatingTimestampPreservesUnknownSettings()
     {
         Directory.CreateDirectory(directory);
-        await File.WriteAllTextAsync(SettingsFile, """{"theme":"system","futureFlag":true}""");
+        await File.WriteAllTextAsync(
+            SettingsFile,
+            """{"theme":"system","futureFlag":true}""",
+            TestContext.Current.CancellationToken);
 
         await new JsonUpdateCheckStateStore(SettingsFile)
-            .SetLastCheckUtcAsync(new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero));
+            .SetLastCheckUtcAsync(
+                new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero),
+                TestContext.Current.CancellationToken);
 
-        var root = Assert.IsType<JsonObject>(JsonNode.Parse(await File.ReadAllTextAsync(SettingsFile)));
+        var root = Assert.IsType<JsonObject>(JsonNode.Parse(
+            await File.ReadAllTextAsync(SettingsFile, TestContext.Current.CancellationToken)));
         Assert.Equal("system", root["theme"]!.GetValue<string>());
         Assert.True(root["futureFlag"]!.GetValue<bool>());
         Assert.NotNull(root["lastUpdateCheckUtc"]);
@@ -51,22 +58,23 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
     public async Task InvalidStateBehavesLikeNoPreviousCheck(string json)
     {
         Directory.CreateDirectory(directory);
-        await File.WriteAllTextAsync(SettingsFile, json);
+        await File.WriteAllTextAsync(SettingsFile, json, TestContext.Current.CancellationToken);
 
-        Assert.Null(await new JsonUpdateCheckStateStore(SettingsFile).GetLastCheckUtcAsync());
+        Assert.Null(await new JsonUpdateCheckStateStore(SettingsFile)
+            .GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task SavingReplacesInvalidJsonWithValidState()
     {
         Directory.CreateDirectory(directory);
-        await File.WriteAllTextAsync(SettingsFile, "not json");
+        await File.WriteAllTextAsync(SettingsFile, "not json", TestContext.Current.CancellationToken);
         var timestamp = new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
 
         var store = new JsonUpdateCheckStateStore(SettingsFile);
-        await store.SetLastCheckUtcAsync(timestamp);
+        await store.SetLastCheckUtcAsync(timestamp, TestContext.Current.CancellationToken);
 
-        Assert.Equal(timestamp, await store.GetLastCheckUtcAsync());
+        Assert.Equal(timestamp, await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -79,10 +87,10 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
         {
             var store = new JsonUpdateCheckStateStore(fileName);
 
-            await store.SetLastCheckUtcAsync(timestamp);
+            await store.SetLastCheckUtcAsync(timestamp, TestContext.Current.CancellationToken);
 
             Assert.True(File.Exists(fileName));
-            Assert.Equal(timestamp, await store.GetLastCheckUtcAsync());
+            Assert.Equal(timestamp, await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -98,11 +106,14 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
     {
         Directory.CreateDirectory(directory);
         var fileWhereDirectoryIsNeeded = Path.Combine(directory, "blocked");
-        await File.WriteAllTextAsync(fileWhereDirectoryIsNeeded, "content");
+        await File.WriteAllTextAsync(
+            fileWhereDirectoryIsNeeded,
+            "content",
+            TestContext.Current.CancellationToken);
 
         var store = new JsonUpdateCheckStateStore(Path.Combine(fileWhereDirectoryIsNeeded, "settings.json"));
 
-        await store.SetLastCheckUtcAsync(DateTimeOffset.UtcNow);
+        await store.SetLastCheckUtcAsync(DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
     }
 
     public void Dispose()

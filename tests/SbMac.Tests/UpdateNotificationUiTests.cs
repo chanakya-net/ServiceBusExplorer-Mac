@@ -1,10 +1,14 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 
 using SbMac.App.Services;
+using SbMac.App.ViewModels;
 using SbMac.App.Views;
 using SbMac.App.Views.Dialogs;
+
+using SbMac.Core.Connections;
 
 using Xunit;
 
@@ -16,6 +20,32 @@ public sealed class UpdateNotificationUiTests
         new Version(1, 3, 2),
         new Version(1, 4, 0),
         new Uri("https://github.com/chanakya-net/ServiceBusExplorer-Mac/releases/tag/v1.4.0"));
+
+    [AvaloniaFact]
+    public async Task LoadedWindowChecksForUpdateAndShowsPrompt()
+    {
+        var checker = new RecordingUpdateChecker();
+        var root = Path.Combine(Path.GetTempPath(), $"sbmac-startup-{Guid.NewGuid():N}");
+        var connections = new ConnectionStore(
+            Path.Combine(root, "connections.json"),
+            new FileSecretStore(Path.Combine(root, "secrets.json")));
+        var owner = new MainWindow(new RecordingUriLauncher())
+        {
+            DataContext = new MainWindowViewModel(checker, connections)
+        };
+
+        owner.Show();
+        await checker.WaitForCheckAsync(TestContext.Current.CancellationToken);
+        await Dispatcher.UIThread.InvokeAsync(() => { });
+
+        Assert.Equal(1, checker.CheckCount);
+        var dialog = Assert.IsType<MessageDialog>(Assert.Single(owner.OwnedWindows));
+        GetButtons(dialog)[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        await Dispatcher.UIThread.InvokeAsync(() => { });
+        Assert.Empty(owner.OwnedWindows);
+
+        owner.Close();
+    }
 
     [AvaloniaFact]
     public async Task LaterClosesPromptWithoutOpeningBrowser()
@@ -90,6 +120,23 @@ public sealed class UpdateNotificationUiTests
             OpenedUri = uri;
             return Task.CompletedTask;
         }
+    }
+
+    sealed class RecordingUpdateChecker : IUpdateChecker
+    {
+        readonly TaskCompletionSource checkedForUpdate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int CheckCount { get; private set; }
+
+        public Task<UpdateInfo?> CheckAsync(CancellationToken cancellationToken = default)
+        {
+            CheckCount++;
+            checkedForUpdate.TrySetResult();
+            return Task.FromResult<UpdateInfo?>(Update);
+        }
+
+        public Task WaitForCheckAsync(CancellationToken cancellationToken) =>
+            checkedForUpdate.Task.WaitAsync(TimeSpan.FromSeconds(2), cancellationToken);
     }
 
     sealed class ThrowingUriLauncher : IUriLauncher

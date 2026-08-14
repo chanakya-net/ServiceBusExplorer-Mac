@@ -24,6 +24,9 @@ public sealed class BundleVersionProviderTests
     [InlineData("1.2.3.4")]
     [InlineData("v1.2.3")]
     [InlineData("one.two.three")]
+    [InlineData("+2.3.4")]
+    [InlineData("-0.2.3")]
+    [InlineData("1. 2.3")]
     public void RejectsInvalidBundleVersion(string text)
     {
         using var bundle = TestBundle.Create(text);

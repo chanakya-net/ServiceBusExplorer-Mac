@@ -23,7 +23,7 @@ namespace SbMac.App.ViewModels;
 /// </summary>
 public sealed partial class MainWindowViewModel : ViewModelBase
 {
-    readonly ConnectionStore connectionStore = ConnectionStore.CreateDefault();
+    readonly ConnectionStore connectionStore;
     readonly IUpdateChecker? updateChecker;
 
     /// <summary>
@@ -37,8 +37,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     const int FinishedOperationsKept = 5;
 
     public MainWindowViewModel(IUpdateChecker? updateChecker = null)
+        : this(updateChecker, ConnectionStore.CreateDefault())
+    {
+    }
+
+    internal MainWindowViewModel(IUpdateChecker? updateChecker, ConnectionStore connectionStore)
     {
         this.updateChecker = updateChecker;
+        this.connectionStore = connectionStore;
         Namespaces = [];
         Messages = [];
         Log = [];

@@ -17,6 +17,8 @@ public sealed class UpdateChecker(
 
     static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
 
+    internal static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(5);
+
     readonly SemaphoreSlim checkGate = new(1, 1);
     DateTimeOffset? lastAttemptUtc;
 
@@ -29,7 +31,7 @@ public sealed class UpdateChecker(
                 new BundleVersionProvider(),
                 new JsonUpdateCheckStateStore(AppPaths.SettingsFile),
                 TimeProvider.System,
-                TimeSpan.FromSeconds(5));
+                DefaultRequestTimeout);
         }
         catch
         {
