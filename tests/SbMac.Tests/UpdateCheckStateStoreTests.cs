@@ -70,6 +70,29 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RelativeFilenameSavesInCurrentDirectory()
+    {
+        Directory.CreateDirectory(directory);
+        var originalDirectory = Environment.CurrentDirectory;
+        var timestamp = new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
+
+        try
+        {
+            Environment.CurrentDirectory = directory;
+            var store = new JsonUpdateCheckStateStore("settings.json");
+
+            await store.SetLastCheckUtcAsync(timestamp);
+
+            Assert.True(File.Exists("settings.json"));
+            Assert.Equal(timestamp, await store.GetLastCheckUtcAsync());
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalDirectory;
+        }
+    }
+
+    [Fact]
     public async Task WriteFailureDoesNotEscape()
     {
         Directory.CreateDirectory(directory);

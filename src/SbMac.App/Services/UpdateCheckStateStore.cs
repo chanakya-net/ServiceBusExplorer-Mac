@@ -60,7 +60,12 @@ public sealed class JsonUpdateCheckStateStore(string filePath) : IUpdateCheckSta
             }
 
             root["lastUpdateCheckUtc"] = value.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
-            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
             await File.WriteAllTextAsync(
                 filePath,
                 root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
