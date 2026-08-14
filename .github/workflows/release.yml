@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
@@ -13,9 +13,57 @@ permissions:
   # Needed to create the release and upload the .dmg / .zip assets.
   contents: write
 
+concurrency:
+  # Version selection happens inside the workflow. Queueing releases ensures every
+  # merge is retained and each run sees the tag created by the preceding run.
+  group: release-${{ github.repository }}
+  queue: max
+
 jobs:
+  prepare:
+    name: Choose release version
+    runs-on: ubuntu-latest
+
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      source_sha: ${{ steps.release.outputs.source_sha }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A main push must build the exact triggering commit, even when another merge
+          # lands while this run is queued. Manual releases retain their explicit tag.
+          ref: ${{ github.event.inputs.tag || github.sha }}
+          fetch-depth: 0
+
+      - name: Resolve version and source
+        id: release
+        env:
+          REQUESTED_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          if [ -n "$REQUESTED_TAG" ]; then
+            TAG="$REQUESTED_TAG"
+          else
+            LATEST_TAG="$(git tag --list 'v*' --sort=-v:refname |
+              awk '/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ && !found { print; found=1 }')"
+            TAG="$(bash build/next-release-version.sh "${LATEST_TAG:-v0.0.0}")"
+          fi
+
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Release tag must look like v1.3.0, got '$TAG'"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "Releasing $SOURCE_SHA as $TAG"
+
   build:
     name: Build ${{ matrix.arch }}
+    needs: prepare
     runs-on: macos-14
 
     strategy:
@@ -37,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
@@ -48,11 +96,11 @@ jobs:
       - name: Test
         run: dotnet test --configuration Release
 
-      # The tag is passed in rather than derived from the checkout: actions/checkout
-      # fetches shallow and without tags, so `git describe` inside the script would
-      # find nothing and stamp 0.0.0 onto a real release.
+      # The prepared version is passed in rather than derived from the checkout:
+      # actions/checkout fetches shallow and without tags, so `git describe` inside
+      # the script would find nothing and stamp 0.0.0 onto a real release.
       - name: Build .app
-        run: ./build/make-app.sh ${{ matrix.runtime }} "${{ github.event.inputs.tag || github.ref_name }}"
+        run: ./build/make-app.sh ${{ matrix.runtime }} "${{ needs.prepare.outputs.tag }}"
 
       # ── Developer ID signing, only when the secrets are configured ──────────────
       #
@@ -167,11 +215,13 @@ jobs:
 
   publish:
     name: Publish release
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -182,10 +232,6 @@ jobs:
           mkdir -p dist
           find staging -type f -exec mv {} dist/ \;
           ls -la dist
-
-      - name: Resolve tag
-        id: tag
-        run: echo "name=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
 
       - name: Write release notes
         env:
@@ -260,7 +306,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.tag.outputs.name }}" \
-            --title "SB-Mac ${{ steps.tag.outputs.name }}" \
+          gh release create "${{ needs.prepare.outputs.tag }}" \
+            --target "${{ needs.prepare.outputs.source_sha }}" \
+            --title "SB-Mac ${{ needs.prepare.outputs.tag }}" \
             --notes-file notes.md \
             dist/*

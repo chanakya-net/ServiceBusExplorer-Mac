@@ -341,9 +341,9 @@ Package a distributable `.app`, and optionally a `.dmg`:
 The output is self-contained (~112 MB) and ad-hoc code-signed.
 
 **Version stamping.** `build/Info.plist` holds `0.0.0` as a placeholder; `make-app.sh`
-overwrites both version keys from the tag it is given — as the second argument, from
-`SBMAC_VERSION`, or from the tag the checkout sits exactly on — and fails the build if the
-stamp didn't take. The release workflow passes the tag explicitly, because
+overwrites both version keys from the release version it is given — as the second argument,
+from `SBMAC_VERSION`, or from the tag the checkout sits exactly on — and fails the build if
+the stamp didn't take. The release workflow passes the prepared version explicitly, because
 `actions/checkout` fetches shallow and without tags, so `git describe` inside the script
 would find nothing. A bundle reporting `0.0.0` was built outside the release workflow.
 The stamp is applied before `codesign`, since editing `Info.plist` afterwards would
@@ -499,13 +499,20 @@ additional entity kinds without restructuring.
 ## Releasing
 
 CI builds, tests and packages on every push and pull request, so a broken bundle is
-caught before it can be tagged.
+caught before it reaches `main`.
 
-To publish a release, push a tag:
+Every push to `main` starts a queued release (up to GitHub Actions' 100-run queue limit). The
+workflow finds the latest stable tag, increments its patch number (for example `v1.3.0` →
+`v1.3.1`), builds the exact triggering commit for both architectures, and creates the tag and
+GitHub Release only after every test and build succeeds.
+
+For an intentional major or minor bump, create the desired tag and run the Release workflow
+manually with that tag:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v2.0.0
+git push origin v2.0.0
+gh workflow run Release -f tag=v2.0.0
 ```
 
 That builds and tests both architectures, produces a `.dmg`, a `.zip` and a `.sha256` for
@@ -517,7 +524,7 @@ plain `zip` mangles them and invalidates the code signature.
 
 The pipeline already does this — it just needs credentials. With no secrets configured it
 ad-hoc signs and writes the quarantine workaround into the release notes. Add the five
-secrets below and the same tag produces a notarized release that opens on a double-click,
+secrets below and the same workflow produces a notarized release that opens on a double-click,
 with the workaround removed from the notes automatically.
 
 You need an [Apple Developer Program](https://developer.apple.com/programs/) membership
