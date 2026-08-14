@@ -47,10 +47,13 @@ public sealed class UpdateCheckerTests
     public async Task CheckInside24HoursMakesNoRequest()
     {
         var handler = new RecordingHandler((_, _) => throw new InvalidOperationException("must not request"));
-        var state = new RecordingStateStore { LastCheckUtc = Now.AddHours(-23).AddMinutes(-59) };
+        var previous = Now.AddHours(-23).AddMinutes(-59);
+        var state = new RecordingStateStore { LastCheckUtc = previous };
 
         Assert.Null(await Build(new Version(1, 3, 2), state, handler).CheckAsync());
         Assert.Null(handler.Request);
+        Assert.Equal(previous, state.LastCheckUtc);
+        Assert.Equal(0, state.SetCallCount);
     }
 
     [Fact]
@@ -72,9 +75,14 @@ public sealed class UpdateCheckerTests
     {
         var parsed = version is null ? null : Version.Parse(version);
         var handler = new RecordingHandler((_, _) => throw new InvalidOperationException("must not request"));
+        var state = new RecordingStateStore();
+        var timeProvider = new RecordingTimeProvider(Now);
 
-        Assert.Null(await Build(parsed, new RecordingStateStore(), handler).CheckAsync());
+        Assert.Null(await Build(parsed, state, handler, timeProvider: timeProvider).CheckAsync());
         Assert.Null(handler.Request);
+        Assert.Equal(0, timeProvider.GetUtcNowCallCount);
+        Assert.Equal(0, state.GetCallCount);
+        Assert.Equal(0, state.SetCallCount);
     }
 
     [Fact]
@@ -119,6 +127,40 @@ public sealed class UpdateCheckerTests
     }
 
     [Fact]
+    public async Task ConcurrentChecksIssueOneRequest()
+    {
+        var handler = new BlockingHandler();
+        var checker = new UpdateChecker(
+            new HttpClient(handler),
+            new StubVersionProvider(new Version(1, 3, 2)),
+            new ThrowingStateStore(),
+            new StubTimeProvider(Now),
+            TimeSpan.FromSeconds(1));
+
+        var first = checker.CheckAsync();
+        await handler.WaitForFirstRequestAsync();
+        var second = checker.CheckAsync();
+        handler.Complete();
+
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task WriteFailureStillAllowsOnlyOneRequestPerChecker()
+    {
+        var handler = new RecordingHandler((_, _) => Task.FromResult(JsonResponse(
+            """{"tag_name":"v1.4.0","html_url":"https://github.com/chanakya-net/ServiceBusExplorer-Mac/releases/tag/v1.4.0"}""")));
+        var checker = Build(new Version(1, 3, 2), new ThrowingStateStore(), handler);
+
+        await checker.CheckAsync();
+        await checker.CheckAsync();
+
+        Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
     public async Task TimeoutIsSilent()
     {
         var handler = new RecordingHandler(async (_, token) =>
@@ -147,12 +189,13 @@ public sealed class UpdateCheckerTests
         Version? installed,
         IUpdateCheckStateStore state,
         RecordingHandler handler,
-        TimeSpan? timeout = null) =>
+        TimeSpan? timeout = null,
+        TimeProvider? timeProvider = null) =>
         new(
             new HttpClient(handler),
             new StubVersionProvider(installed),
             state,
-            new StubTimeProvider(Now),
+            timeProvider ?? new StubTimeProvider(Now),
             timeout ?? TimeSpan.FromSeconds(1));
 
     static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
@@ -175,15 +218,32 @@ public sealed class UpdateCheckerTests
         public override DateTimeOffset GetUtcNow() => value;
     }
 
+    sealed class RecordingTimeProvider(DateTimeOffset value) : TimeProvider
+    {
+        public int GetUtcNowCallCount { get; private set; }
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            GetUtcNowCallCount++;
+            return value;
+        }
+    }
+
     sealed class RecordingStateStore(List<string>? events = null) : IUpdateCheckStateStore
     {
         public DateTimeOffset? LastCheckUtc { get; set; }
+        public int GetCallCount { get; private set; }
+        public int SetCallCount { get; private set; }
 
-        public Task<DateTimeOffset?> GetLastCheckUtcAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(LastCheckUtc);
+        public Task<DateTimeOffset?> GetLastCheckUtcAsync(CancellationToken cancellationToken = default)
+        {
+            GetCallCount++;
+            return Task.FromResult(LastCheckUtc);
+        }
 
         public Task SetLastCheckUtcAsync(DateTimeOffset value, CancellationToken cancellationToken = default)
         {
+            SetCallCount++;
             LastCheckUtc = value;
             events?.Add("state");
             return Task.CompletedTask;
@@ -206,14 +266,39 @@ public sealed class UpdateCheckerTests
         List<string>? events = null) : HttpMessageHandler
     {
         public HttpRequestMessage? Request { get; private set; }
+        public int RequestCount { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             Request = request;
+            RequestCount++;
             events?.Add("request");
             return send(request, cancellationToken);
+        }
+    }
+
+    sealed class BlockingHandler : HttpMessageHandler
+    {
+        readonly TaskCompletionSource firstRequest = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        readonly TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int RequestCount { get; private set; }
+
+        public Task WaitForFirstRequestAsync() => firstRequest.Task;
+
+        public void Complete() => completion.TrySetResult();
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            firstRequest.TrySetResult();
+            await completion.Task.WaitAsync(cancellationToken);
+            return JsonResponse(
+                """{"tag_name":"v1.4.0","html_url":"https://github.com/chanakya-net/ServiceBusExplorer-Mac/releases/tag/v1.4.0"}""");
         }
     }
 }
