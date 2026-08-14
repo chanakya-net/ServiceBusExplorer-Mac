@@ -72,23 +72,24 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
     [Fact]
     public async Task RelativeFilenameSavesInCurrentDirectory()
     {
-        Directory.CreateDirectory(directory);
-        var originalDirectory = Environment.CurrentDirectory;
+        var fileName = $"settings-{Guid.NewGuid():N}.json";
         var timestamp = new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
 
         try
         {
-            Environment.CurrentDirectory = directory;
-            var store = new JsonUpdateCheckStateStore("settings.json");
+            var store = new JsonUpdateCheckStateStore(fileName);
 
             await store.SetLastCheckUtcAsync(timestamp);
 
-            Assert.True(File.Exists("settings.json"));
+            Assert.True(File.Exists(fileName));
             Assert.Equal(timestamp, await store.GetLastCheckUtcAsync());
         }
         finally
         {
-            Environment.CurrentDirectory = originalDirectory;
+            if (File.Exists(fileName))
+            {
+                File.Delete(fileName);
+            }
         }
     }
 
