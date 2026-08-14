@@ -30,6 +30,8 @@ public interface IUiServices
 
     Task ShowInfoAsync(string title, string message);
 
+    Task ShowUpdateAvailableAsync(UpdateInfo update);
+
     /// <summary>Add or edit a saved namespace. Returns null when the user cancels.</summary>
     Task<NamespaceConnection?> EditConnectionAsync(NamespaceConnection? existing);
 

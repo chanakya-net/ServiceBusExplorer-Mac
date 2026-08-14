@@ -17,8 +17,15 @@ namespace SbMac.App.Views;
 
 public partial class MainWindow : Window, IUiServices
 {
-    public MainWindow()
+    readonly IUriLauncher uriLauncher;
+
+    public MainWindow() : this(new SystemUriLauncher())
     {
+    }
+
+    public MainWindow(IUriLauncher uriLauncher)
+    {
+        this.uriLauncher = uriLauncher;
         InitializeComponent();
 
         // The grid's SelectedItems isn't a bindable property in Avalonia's DataGrid, so
@@ -75,6 +82,29 @@ public partial class MainWindow : Window, IUiServices
 
     public Task ShowInfoAsync(string title, string message) =>
         MessageDialog.ShowAsync(this, title, message, MessageDialogKind.Info);
+
+    public async Task ShowUpdateAvailableAsync(UpdateInfo update)
+    {
+        var viewRelease = await MessageDialog.ConfirmAsync(
+            this,
+            "Update available",
+            $"Version {update.AvailableVersion} is available. You are using {update.InstalledVersion}.",
+            "View Release",
+            destructive: false,
+            dismissText: "Later");
+
+        if (viewRelease)
+        {
+            try
+            {
+                await uriLauncher.OpenAsync(update.ReleaseUri);
+            }
+            catch
+            {
+                // Opening the release page is best-effort.
+            }
+        }
+    }
 
     public async Task<NamespaceConnection?> EditConnectionAsync(NamespaceConnection? existing)
     {

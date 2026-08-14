@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
+using SbMac.App.Services;
 using SbMac.App.ViewModels;
 using SbMac.App.Views;
 
@@ -19,7 +20,7 @@ public partial class App : Application
             // duplicated every error the view models raise themselves, so it had to be
             // removed here. Avalonia 12 no longer registers it — and made BindingPlugins
             // internal — so there is nothing left to undo.
-            var viewModel = new MainWindowViewModel();
+            var viewModel = new MainWindowViewModel(UpdateChecker.CreateDefault());
             desktop.MainWindow = new MainWindow { DataContext = viewModel };
 
             // Close cleanly so in-flight sessions get disposed rather than torn down.
