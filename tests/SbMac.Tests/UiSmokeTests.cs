@@ -1,5 +1,12 @@
+using Azure.Messaging.ServiceBus.Administration;
+
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
@@ -9,7 +16,9 @@ using SbMac.App.Views.Dialogs;
 
 using SbMac.Core.Connections;
 using SbMac.Core.EventHubs;
+using SbMac.Core.Entities;
 using SbMac.Core.ImportExport;
+using SbMac.Core.Messaging;
 
 using Xunit;
 
@@ -128,7 +137,10 @@ public class UiSmokeTests
 
         var folder = new EventHubFolderNodeViewModel { Parent = namespaceNode };
         var hub = new EventHubNodeViewModel(
-            new EventHubEntity("telemetry", DateTimeOffset.UtcNow, ["0", "1"], ["$Default"])) { Parent = folder };
+            new EventHubEntity("telemetry", DateTimeOffset.UtcNow, ["0", "1"], ["$Default"]))
+        {
+            Parent = folder
+        };
 
         var viewModel = new MainWindowViewModel();
         var window = new MainWindow { DataContext = viewModel };
@@ -233,6 +245,161 @@ public class UiSmokeTests
         var grid = window.GetControl<DataGrid>("MessageGrid");
 
         Assert.Same(viewModel.Messages, grid.ItemsSource);
+    }
+
+    [AvaloniaFact]
+    public void ShowingMessageDetailsDoesNotImplicitlySelectItForBulkActions()
+    {
+        var first = BuildMessageRow(1);
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        viewModel.Messages.Add(first);
+
+        // Peek focuses the first message so its body is immediately visible. Detail focus
+        // must stay separate from the explicit checkbox selection used by bulk actions.
+        viewModel.SelectedMessage = first;
+
+        Assert.Same(first, viewModel.SelectedMessage);
+        Assert.Empty(viewModel.SelectedMessages);
+        Assert.False(first.IsSelected);
+    }
+
+    [AvaloniaFact]
+    public void SelectingAMessageRowStillShowsItsDetails()
+    {
+        var first = BuildMessageRow(1);
+        var second = BuildMessageRow(2);
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        viewModel.Messages.Add(first);
+        viewModel.Messages.Add(second);
+
+        window.GetControl<DataGrid>("MessageGrid").SelectedItem = second;
+
+        Assert.Same(second, viewModel.SelectedMessage);
+        Assert.Equal("message-2", viewModel.BodyText);
+    }
+
+    [AvaloniaFact]
+    public void BulkSelectionControlsSelectAndClearEveryLoadedMessage()
+    {
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+
+        viewModel.Messages.Add(BuildMessageRow(1));
+        viewModel.Messages.Add(BuildMessageRow(2));
+
+        var selectAll = window.FindControl<Button>("SelectAllMessagesButton");
+        var clear = window.FindControl<Button>("ClearMessageSelectionButton");
+        var summary = window.FindControl<TextBlock>("MessageSelectionSummary");
+
+        Assert.NotNull(selectAll);
+        Assert.NotNull(clear);
+        Assert.NotNull(summary);
+        Assert.Equal("No messages selected", summary.Text);
+        Assert.False(clear.IsEnabled);
+
+        selectAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.Equal(2, viewModel.SelectedMessages.Count);
+        Assert.Equal("2 selected", summary.Text);
+        Assert.True(clear.IsEnabled);
+
+        clear.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        Assert.Empty(viewModel.SelectedMessages);
+        Assert.Equal("No messages selected", summary.Text);
+        Assert.False(clear.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void MessageCheckboxesToggleRowsWithoutClearingTheExistingSelection()
+    {
+        var first = BuildMessageRow(1);
+        var second = BuildMessageRow(2);
+        var viewModel = new MainWindowViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+
+        viewModel.Messages.Add(first);
+        viewModel.Messages.Add(second);
+        window.UpdateLayout();
+
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        var checkboxes = grid.GetVisualDescendants()
+            .OfType<CheckBox>()
+            .Where(checkBox => checkBox.DataContext is MessageRowViewModel)
+            .ToDictionary(checkBox => (MessageRowViewModel)checkBox.DataContext!);
+
+        Assert.Equal(2, checkboxes.Count);
+
+        Click(window, checkboxes[first]);
+        Click(window, checkboxes[second]);
+
+        Assert.Equal(2, viewModel.SelectedMessages.Count);
+
+        Click(window, checkboxes[first]);
+
+        Assert.Equal(second, Assert.Single(viewModel.SelectedMessages));
+    }
+
+    [AvaloniaFact]
+    public void BulkMessageActionsRequireAtLeastOneSelectedMessage()
+    {
+        var namespaceNode = new NamespaceNodeViewModel(new NamespaceConnection { Name = "contoso" });
+        var queueFolder = new QueueFolderNodeViewModel { Parent = namespaceNode };
+        var queue = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("orders"), null))
+        {
+            Parent = queueFolder
+        };
+
+        var row = BuildMessageRow(1);
+        var viewModel = new MainWindowViewModel { SelectedNode = queue };
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        viewModel.Messages.Add(row);
+
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        var resubmit = window.GetControl<Button>("ResubmitSelectedMessagesButton");
+        var delete = window.GetControl<Button>("DeleteSelectedMessagesButton");
+
+        Assert.False(resubmit.IsEnabled);
+        Assert.False(delete.IsEnabled);
+
+        grid.SelectedItems.Add(row);
+
+        Assert.True(resubmit.IsEnabled);
+        Assert.True(delete.IsEnabled);
+
+        grid.SelectedItems.Clear();
+
+        Assert.False(resubmit.IsEnabled);
+        Assert.False(delete.IsEnabled);
+    }
+
+    static MessageRowViewModel BuildMessageRow(long sequenceNumber) => new(new MessageRecord
+    {
+        Body = BinaryData.FromString($"message-{sequenceNumber}"),
+        SourceEntityPath = "orders",
+        SequenceNumber = sequenceNumber
+    });
+
+    static T Model<T>(params object[] arguments) => (T)Activator.CreateInstance(
+        typeof(T), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+        null, arguments, null)!;
+
+    static void Click(Window window, Control control)
+    {
+        var point = control.TranslatePoint(
+            new Point(control.Bounds.Width / 2, control.Bounds.Height / 2),
+            window);
+
+        Assert.NotNull(point);
+        window.MouseDown(point.Value, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(point.Value, MouseButton.Left, RawInputModifiers.None);
     }
 
     [AvaloniaFact]

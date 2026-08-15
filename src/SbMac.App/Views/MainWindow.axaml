@@ -48,9 +48,11 @@
           <NativeMenuItem Header="Receive and Delete…" Command="{Binding ReceiveCommand}" />
           <NativeMenuItem Header="Send…" Command="{Binding SendCommand}" Gesture="Cmd+D" />
           <NativeMenuItemSeparator />
-          <NativeMenuItem Header="Resubmit Selected…" Command="{Binding ResubmitSelectedCommand}" />
+          <NativeMenuItem Header="Resubmit Selected…" Command="{Binding ResubmitSelectedCommand}"
+                          IsEnabled="{Binding CanUseSelectedBrokerActions}" />
           <NativeMenuItem Header="Edit and Resend…" Command="{Binding ResubmitCommand}" />
-          <NativeMenuItem Header="Delete Selected…" Command="{Binding DeleteSelectedMessagesCommand}" />
+          <NativeMenuItem Header="Delete Selected…" Command="{Binding DeleteSelectedMessagesCommand}"
+                          IsEnabled="{Binding CanUseSelectedBrokerActions}" />
           <NativeMenuItemSeparator />
           <NativeMenuItem Header="Copy Body" Command="{Binding CopyBodyCommand}" Gesture="Cmd+C" />
           <NativeMenuItem Header="Purge…" Command="{Binding PurgeCommand}" />
@@ -291,17 +293,34 @@
 
             <Border Grid.Row="0" Classes="cardHeader">
               <DockPanel LastChildFill="False">
-                <TextBlock DockPanel.Dock="Left" Classes="caption"
-                           VerticalAlignment="Center"
-                           Text="{Binding MessageSourceLabel}" />
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6">
+                  <TextBlock Classes="caption"
+                             VerticalAlignment="Center"
+                             Text="{Binding MessageSourceLabel}" />
+                  <TextBlock x:Name="MessageSelectionSummary"
+                             Classes="tertiary"
+                             VerticalAlignment="Center"
+                             Text="{Binding MessageSelectionSummary}" />
+                  <Button x:Name="SelectAllMessagesButton"
+                          Classes="toolbar"
+                          Content="Select all"
+                          Click="OnSelectAllMessages" />
+                  <Button x:Name="ClearMessageSelectionButton"
+                          Classes="toolbar"
+                          Content="Clear"
+                          IsEnabled="{Binding HasSelectedMessages}"
+                          Click="OnClearMessageSelection" />
+                </StackPanel>
 
-                <Button DockPanel.Dock="Right" Classes="toolbar destructive"
+                <Button x:Name="DeleteSelectedMessagesButton"
+                        DockPanel.Dock="Right" Classes="toolbar destructive"
                         Content="Delete selected"
-                        IsEnabled="{Binding CanUseBrokerActions}"
+                        IsEnabled="{Binding CanUseSelectedBrokerActions}"
                         Command="{Binding DeleteSelectedMessagesCommand}" />
 
-                <Button DockPanel.Dock="Right" Classes="toolbar"
-                        IsEnabled="{Binding CanUseBrokerActions}"
+                <Button x:Name="ResubmitSelectedMessagesButton"
+                        DockPanel.Dock="Right" Classes="toolbar"
+                        IsEnabled="{Binding CanUseSelectedBrokerActions}"
                         Command="{Binding ResubmitSelectedCommand}">
                   <StackPanel Orientation="Horizontal" Spacing="7">
                     <Path Classes="icon" Data="{StaticResource IconResubmit}" />
@@ -319,13 +338,28 @@
             <Panel Grid.Row="1">
               <DataGrid x:Name="MessageGrid"
                         ItemsSource="{Binding Messages}"
-                        SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
                         SelectionMode="Extended"
                         IsReadOnly="True"
                         CanUserResizeColumns="True"
                         CanUserSortColumns="True"
                         HeadersVisibility="Column">
+                <DataGrid.Styles>
+                  <Style Selector="DataGridRow">
+                    <Setter Property="IsSelected"
+                            Value="{ReflectionBinding IsSelected, Mode=TwoWay}" />
+                  </Style>
+                </DataGrid.Styles>
                 <DataGrid.Columns>
+                  <DataGridTemplateColumn Header="✓" Width="48" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate x:DataType="vm:MessageRowViewModel">
+                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  ToolTip.Tip="Include this message in bulk actions" />
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
                   <DataGridTextColumn Header="SEQ" Width="88"
                                       Binding="{Binding SequenceNumber}" x:DataType="vm:MessageRowViewModel" />
                   <DataGridTextColumn Header="ENQUEUED" Width="118"
