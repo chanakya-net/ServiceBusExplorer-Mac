@@ -16,7 +16,13 @@ public enum MessageDialogKind
 /// </summary>
 public sealed class MessageDialog : Window
 {
-    MessageDialog(string title, string message, MessageDialogKind kind, string? confirmText, bool destructive)
+    MessageDialog(
+        string title,
+        string message,
+        MessageDialogKind kind,
+        string? confirmText,
+        bool destructive,
+        string dismissText)
     {
         Title = title;
         Width = 460;
@@ -56,7 +62,7 @@ public sealed class MessageDialog : Window
         // A confirmation gets Cancel + the action; a plain alert only needs a dismiss button.
         if (confirmText is not null)
         {
-            var cancel = new Button { Content = "Cancel", MinWidth = 88, IsCancel = true };
+            var cancel = new Button { Content = dismissText, MinWidth = 88, IsCancel = true };
             cancel.Click += (_, _) => Close(false);
             buttons.Children.Add(cancel);
 
@@ -99,15 +105,18 @@ public sealed class MessageDialog : Window
         string title,
         string message,
         string confirmText,
-        bool destructive)
+        bool destructive,
+        string dismissText = "Cancel")
     {
-        var dialog = new MessageDialog(title, message, MessageDialogKind.Info, confirmText, destructive);
+        var dialog = new MessageDialog(
+            title, message, MessageDialogKind.Info, confirmText, destructive, dismissText);
         return await dialog.ShowDialog<bool>(owner);
     }
 
     public static async Task ShowAsync(Window owner, string title, string message, MessageDialogKind kind)
     {
-        var dialog = new MessageDialog(title, message, kind, confirmText: null, destructive: false);
+        var dialog = new MessageDialog(
+            title, message, kind, confirmText: null, destructive: false, dismissText: "OK");
         await dialog.ShowDialog<bool>(owner);
     }
 }

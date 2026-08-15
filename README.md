@@ -22,6 +22,11 @@ Grab the `.dmg` for your Mac from the
 | Apple Silicon (M1/M2/M3/M4) | `SB-Mac-arm64.dmg` |
 | Intel | `SB-Mac-x64.dmg` |
 
+SB-Mac checks for a newer stable release when it opens, at most once every 24
+hours. If one is available, **View Release** opens its GitHub page; **Later**
+defers the same notification for another day. The app never downloads or
+installs an update itself.
+
 Not sure which you have? Run `uname -m` — `arm64` means Apple Silicon.
 
 Open the `.dmg` and drag **SB-Mac** to Applications.

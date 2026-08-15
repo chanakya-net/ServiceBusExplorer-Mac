@@ -23,7 +23,8 @@ namespace SbMac.App.ViewModels;
 /// </summary>
 public sealed partial class MainWindowViewModel : ViewModelBase
 {
-    readonly ConnectionStore connectionStore = ConnectionStore.CreateDefault();
+    readonly ConnectionStore connectionStore;
+    readonly IUpdateChecker? updateChecker;
 
     /// <summary>
     /// Descriptions of the operations currently in flight. Different work runs side by
@@ -35,8 +36,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>How many finished operations stay in the tray before the oldest is dropped.</summary>
     const int FinishedOperationsKept = 5;
 
-    public MainWindowViewModel()
+    public MainWindowViewModel(IUpdateChecker? updateChecker = null)
+        : this(updateChecker, ConnectionStore.CreateDefault())
     {
+    }
+
+    internal MainWindowViewModel(IUpdateChecker? updateChecker, ConnectionStore connectionStore)
+    {
+        this.updateChecker = updateChecker;
+        this.connectionStore = connectionStore;
         Namespaces = [];
         Messages = [];
         Log = [];
@@ -377,6 +385,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception exception)
         {
             AppendLog($"Could not load saved namespaces: {exception.Message}");
+        }
+
+        await NotifyAboutUpdatesAsync().ConfigureAwait(true);
+    }
+
+    async Task NotifyAboutUpdatesAsync()
+    {
+        if (updateChecker is null || Ui is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (await updateChecker.CheckAsync().ConfigureAwait(true) is { } update)
+            {
+                await Ui.ShowUpdateAvailableAsync(update).ConfigureAwait(true);
+            }
+        }
+        catch
+        {
+            // Update notification is ancillary and cannot fail application startup.
         }
     }
 
