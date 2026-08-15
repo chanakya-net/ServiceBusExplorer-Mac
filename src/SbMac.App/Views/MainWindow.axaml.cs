@@ -70,7 +70,18 @@ public partial class MainWindow : Window, IUiServices
                 viewModel.SelectedMessages.Add(row);
             }
         }
+
+        // Detail focus is intentionally one-way from grid selection. Peek can show the
+        // first message without silently adding it to the destructive bulk selection.
+        if (MessageGrid.SelectedItem is MessageRowViewModel focusedRow)
+        {
+            viewModel.SelectedMessage = focusedRow;
+        }
     }
+
+    void OnSelectAllMessages(object? sender, RoutedEventArgs e) => MessageGrid.SelectAll();
+
+    void OnClearMessageSelection(object? sender, RoutedEventArgs e) => MessageGrid.SelectedItems.Clear();
 
     // ------------------------------------------------------------ IUiServices
 

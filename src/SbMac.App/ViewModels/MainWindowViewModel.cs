@@ -65,6 +65,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             }
         };
         Messages.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoMessages));
+        SelectedMessages.CollectionChanged += (_, _) => RaiseMessageSelectionChanged();
         Operations.CollectionChanged += (_, _) => RaiseActivityChanged();
     }
 
@@ -112,6 +113,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(CanDeleteEntity))]
     [NotifyPropertyChangedFor(nameof(CanManageEntities))]
     [NotifyPropertyChangedFor(nameof(CanUseBrokerActions))]
+    [NotifyPropertyChangedFor(nameof(CanUseSelectedBrokerActions))]
     [NotifyPropertyChangedFor(nameof(CanSend))]
     [NotifyPropertyChangedFor(nameof(CanEditAndResend))]
     [NotifyPropertyChangedFor(nameof(IsEventHubSelection))]
@@ -151,6 +153,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public bool HasSelectedMessage => SelectedMessage is not null;
 
+    public bool HasSelectedMessages => SelectedMessages.Count > 0;
+
+    public int SelectedMessageCount => SelectedMessages.Count;
+
+    public string MessageSelectionSummary => SelectedMessageCount switch
+    {
+        0 => "No messages selected",
+        1 => "1 selected",
+        var count => $"{count:N0} selected"
+    };
+
     /// <summary>Needs both a message to start from and somewhere to send the result.</summary>
     public bool CanEditAndResend => HasSelectedMessage && CanSend;
 
@@ -173,6 +186,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// is an append-only log with time-based retention, and reads never remove anything.
     /// </summary>
     public bool CanUseBrokerActions => SelectedQueue is not null || SelectedSubscription is not null;
+
+    public bool CanUseSelectedBrokerActions => CanUseBrokerActions && HasSelectedMessages;
 
     /// <summary>True when the current selection lives in an event hub rather than Service Bus.</summary>
     public bool IsEventHubSelection => CurrentEventHubName is not null;
@@ -1624,6 +1639,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasFinishedOperations));
         OnPropertyChanged(nameof(RunningOperationCount));
         OnPropertyChanged(nameof(ActivitySummary));
+    }
+
+    void RaiseMessageSelectionChanged()
+    {
+        OnPropertyChanged(nameof(HasSelectedMessages));
+        OnPropertyChanged(nameof(SelectedMessageCount));
+        OnPropertyChanged(nameof(MessageSelectionSummary));
+        OnPropertyChanged(nameof(CanUseSelectedBrokerActions));
     }
 
     /// <summary>

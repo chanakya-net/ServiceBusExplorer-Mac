@@ -16,12 +16,21 @@ public sealed record MessagePropertyEntry(string Name, string Value, bool IsSect
 /// </summary>
 public sealed class MessageRowViewModel : ViewModelBase
 {
+    bool isSelected;
+
     public MessageRowViewModel(MessageRecord record)
     {
         Record = record;
     }
 
     public MessageRecord Record { get; }
+
+    /// <summary>Shared by the row highlight and its checkbox so either interaction updates the bulk selection.</summary>
+    public bool IsSelected
+    {
+        get => isSelected;
+        set => SetProperty(ref isSelected, value);
+    }
 
     public long SequenceNumber => Record.SequenceNumber;
 
