@@ -226,6 +226,65 @@ public partial class UiSmokeTests
         Assert.Equal("Send to telemetry", window.Title);
     }
 
+    static readonly string[] SecondaryActionHeaders =
+    [
+        "Receive and delete…", "Purge…", "Resubmit selected…", "Delete selected…",
+        "Edit and resend…", "Copy body", "Save messages…"
+    ];
+
+    [AvaloniaFact]
+    public void ToolbarExposesEverySecondaryActionWithoutASelection()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        var actions = window.GetControl<Button>("ActionsButton");
+        var flyout = Assert.IsType<MenuFlyout>(actions.Flyout);
+        flyout.ShowAt(actions);
+        var items = flyout.Items.OfType<MenuItem>().ToList();
+
+        foreach (var header in SecondaryActionHeaders)
+            Assert.Contains(items, item => Equals(item.Header, header));
+
+        Assert.False(items.Single(item => Equals(item.Header, "Receive and delete…")).IsEnabled);
+        Assert.Same(viewModel.ReceiveCommand, items.Single(item => Equals(item.Header, "Receive and delete…")).Command);
+        flyout.Hide();
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ServiceBusQueueSelectionEnablesReceiveAndPurge(bool deadLetter)
+    {
+        var namespaceNode = new NamespaceNodeViewModel(new NamespaceConnection { Name = "contoso" });
+        var queue = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("orders"), null))
+        {
+            Parent = new QueueFolderNodeViewModel { Parent = namespaceNode }
+        };
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        viewModel.SelectedNode = queue;
+        viewModel.ShowDeadLetter = deadLetter;
+
+        var actions = window.GetControl<Button>("ActionsButton");
+        var flyout = Assert.IsType<MenuFlyout>(actions.Flyout);
+        flyout.ShowAt(actions);
+        var items = flyout.Items.OfType<MenuItem>().ToList();
+
+        foreach (var header in SecondaryActionHeaders)
+            Assert.Contains(items, item => Equals(item.Header, header));
+
+        var receive = items.Single(item => Equals(item.Header, "Receive and delete…"));
+        var purge = items.Single(item => Equals(item.Header, "Purge…"));
+        Assert.True(receive.IsEnabled);
+        Assert.True(purge.IsEnabled);
+        Assert.Same(viewModel.ReceiveCommand, receive.Command);
+        Assert.Same(viewModel.PurgeCommand, purge.Command);
+        Assert.Equal(deadLetter ? "Dead-letter queue" : "Active messages", viewModel.MessageSourceLabel);
+        flyout.Hide();
+    }
+
     /// <summary>
     /// The toolbar's enabled states are bound to properties that only an Event Hubs
     /// selection exercises, so the window is shown with one selected.
@@ -255,6 +314,12 @@ public partial class UiSmokeTests
 
         Assert.Equal("Events", viewModel.MessageSourceLabel);
         Assert.NotNull(window.GetControl<DataGrid>("MessageGrid"));
+        var actions = window.GetControl<Button>("ActionsButton");
+        var flyout = Assert.IsType<MenuFlyout>(actions.Flyout);
+        flyout.ShowAt(actions);
+        foreach (var label in new[] { "Receive and delete…", "Purge…", "Delete selected…", "Resubmit selected…" })
+            Assert.False(flyout.Items.OfType<MenuItem>().Single(item => Equals(item.Header, label)).IsEnabled);
+        flyout.Hide();
     }
 
     /// <summary>

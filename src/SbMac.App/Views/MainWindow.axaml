@@ -45,7 +45,7 @@
       <NativeMenuItem Header="Messages">
         <NativeMenu>
           <NativeMenuItem Header="Peek" Command="{Binding PeekCommand}" Gesture="Cmd+R" />
-          <NativeMenuItem Header="Receive and Delete…" Command="{Binding ReceiveCommand}" />
+          <NativeMenuItem Header="Receive and Delete…" Command="{Binding ReceiveCommand}" IsEnabled="{Binding CanUseBrokerActions}" />
           <NativeMenuItem Header="Send…" Command="{Binding SendCommand}" Gesture="Cmd+D" />
           <NativeMenuItemSeparator />
           <NativeMenuItem Header="Resubmit Selected…" Command="{Binding ResubmitSelectedCommand}"
@@ -55,7 +55,7 @@
                           IsEnabled="{Binding CanUseSelectedBrokerActions}" />
           <NativeMenuItemSeparator />
           <NativeMenuItem Header="Copy Body" Command="{Binding CopyBodyCommand}" Gesture="Cmd+C" />
-          <NativeMenuItem Header="Purge…" Command="{Binding PurgeCommand}" />
+          <NativeMenuItem Header="Purge…" Command="{Binding PurgeCommand}" IsEnabled="{Binding CanUseBrokerActions}" />
         </NativeMenu>
       </NativeMenuItem>
 
@@ -81,16 +81,6 @@
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconPeek}" />
             <TextBlock Text="Peek" VerticalAlignment="Center" />
-          </StackPanel>
-        </Button>
-
-        <Button DockPanel.Dock="Left" Classes="toolbar"
-                Command="{Binding ReceiveCommand}"
-                IsEnabled="{Binding CanUseBrokerActions}"
-                ToolTip.Tip="Receive and permanently delete messages">
-          <StackPanel Orientation="Horizontal" Spacing="7">
-            <Path Classes="icon" Data="{StaticResource IconReceive}" />
-            <TextBlock Text="Receive" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
 
@@ -127,15 +117,24 @@
                        Value="{Binding FetchCount}"
                        ToolTip.Tip="How many messages or events to read at a time" />
 
-        <!-- Right-aligned: destructive actions sit apart from the read actions. -->
-        <Button DockPanel.Dock="Right" Classes="toolbar destructive"
-                Command="{Binding PurgeCommand}"
-                IsEnabled="{Binding CanUseBrokerActions}"
-                ToolTip.Tip="Delete every message in the selected entity">
-          <StackPanel Orientation="Horizontal" Spacing="7">
-            <Path Classes="icon" Data="{StaticResource IconPurge}" />
-            <TextBlock Text="Purge" VerticalAlignment="Center" />
-          </StackPanel>
+        <Button x:Name="ActionsButton" DockPanel.Dock="Right" Classes="toolbar" Content="Actions ▾">
+          <Button.Flyout>
+            <MenuFlyout>
+              <MenuItem Header="Receive and delete…" Command="{Binding ReceiveCommand}"
+                        IsEnabled="{Binding CanUseBrokerActions}" />
+              <MenuItem Header="Purge…" Command="{Binding PurgeCommand}"
+                        IsEnabled="{Binding CanUseBrokerActions}" />
+              <Separator />
+              <MenuItem Header="Resubmit selected…" Command="{Binding ResubmitSelectedCommand}"
+                        IsEnabled="{Binding CanUseSelectedBrokerActions}" />
+              <MenuItem Header="Delete selected…" Command="{Binding DeleteSelectedMessagesCommand}"
+                        IsEnabled="{Binding CanUseSelectedBrokerActions}" />
+              <MenuItem Header="Edit and resend…" Command="{Binding ResubmitCommand}"
+                        IsEnabled="{Binding CanEditAndResend}" />
+              <MenuItem Header="Copy body" Command="{Binding CopyBodyCommand}" />
+              <MenuItem Header="Save messages…" Command="{Binding SaveMessagesCommand}" />
+            </MenuFlyout>
+          </Button.Flyout>
         </Button>
 
         <Button DockPanel.Dock="Right" Classes="toolbar"

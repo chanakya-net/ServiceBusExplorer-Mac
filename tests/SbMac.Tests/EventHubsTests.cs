@@ -1,11 +1,13 @@
 using Azure.Messaging.EventHubs;
 using Azure.Messaging.ServiceBus;
+using Azure.Messaging.ServiceBus.Administration;
 
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
 using SbMac.App.ViewModels.Tree;
 
 using SbMac.Core.Connections;
+using SbMac.Core.Entities;
 using SbMac.Core.EventHubs;
 using SbMac.Core.Messaging;
 
@@ -496,6 +498,62 @@ public class EventHubSelectionTests
         Assert.False(viewModel.CanEditEntity);
         Assert.False(viewModel.CanDeleteEntity);
         Assert.False(viewModel.CanManageEntities);
+    }
+
+    [Fact]
+    public async Task EventHubSelectionsCannotExecuteBrokerOnlyCommandsOrSelectionActions()
+    {
+        var (namespaceNode, hub, partition) = EventHubFixtures.Tree();
+        // Worst case: broker services and a UI are present, so only the guards stop execution.
+        RecordingUi.AttachOfflineMessages(namespaceNode);
+
+        foreach (var node in new TreeNodeViewModel[] { hub, partition })
+        {
+            var (ui, recorder) = RecordingUi.Create();
+            var viewModel = new MainWindowViewModel { SelectedNode = node, Ui = ui };
+
+            Assert.False(viewModel.CanUseBrokerActions);
+            Assert.False(viewModel.CanUseSelectedBrokerActions);
+            Assert.False(viewModel.CanEditAndResend);
+
+            // A menu or shortcut that bypasses IsEnabled must still reach a no-op.
+            await viewModel.ReceiveCommand.ExecuteAsync(null);
+            await viewModel.PurgeCommand.ExecuteAsync(null);
+            await viewModel.DeleteSelectedMessagesCommand.ExecuteAsync(null);
+            await viewModel.ResubmitSelectedCommand.ExecuteAsync(null);
+
+            Assert.Empty(recorder.Calls);
+            Assert.Empty(viewModel.Operations);
+            Assert.Empty(viewModel.Messages);
+        }
+    }
+
+    /// <summary>Control: proves the recording fake would detect a command reaching its confirmation.</summary>
+    [Fact]
+    public async Task ServiceBusQueueSelectionReachesTheReceiveAndPurgeConfirmations()
+    {
+        var namespaceNode = new NamespaceNodeViewModel(new NamespaceConnection
+        {
+            Name = "contoso",
+            AuthenticationMode = AuthenticationMode.ConnectionString,
+            ConnectionString = EventHubFixtures.NamespaceConnectionString
+        });
+        var queue = new QueueNodeViewModel(new QueueEntity(
+            (QueueProperties)Activator.CreateInstance(
+                typeof(QueueProperties), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                null, ["orders"], null)!, null))
+        { Parent = new QueueFolderNodeViewModel { Parent = namespaceNode } };
+        RecordingUi.AttachOfflineMessages(namespaceNode);
+        var (ui, recorder) = RecordingUi.Create();
+        recorder.Approve = false; // decline: the command stops at the prompt, offline
+        var viewModel = new MainWindowViewModel { SelectedNode = queue, Ui = ui };
+
+        Assert.True(viewModel.CanUseBrokerActions);
+        await viewModel.ReceiveCommand.ExecuteAsync(null);
+        await viewModel.PurgeCommand.ExecuteAsync(null);
+
+        Assert.Equal(["ConfirmAsync", "ConfirmAsync"], recorder.Calls);
+        Assert.Empty(viewModel.Operations);
     }
 
     [Fact]
