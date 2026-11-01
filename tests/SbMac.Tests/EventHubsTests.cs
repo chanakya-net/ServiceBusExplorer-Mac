@@ -499,6 +499,28 @@ public class EventHubSelectionTests
     }
 
     [Fact]
+    public async Task EventHubSelectionsCannotExecuteBrokerOnlyCommandsOrSelectionActions()
+    {
+        var (_, hub, partition) = EventHubFixtures.Tree();
+        foreach (var viewModel in new[]
+                 {
+                     new MainWindowViewModel { SelectedNode = hub },
+                     new MainWindowViewModel { SelectedNode = partition },
+                 })
+        {
+
+            Assert.False(viewModel.CanUseBrokerActions);
+            Assert.False(viewModel.CanUseSelectedBrokerActions);
+            Assert.False(viewModel.CanEditAndResend);
+
+            // A menu or shortcut that bypasses IsEnabled still reaches a no-op.
+            await viewModel.ReceiveCommand.ExecuteAsync(null);
+            await viewModel.PurgeCommand.ExecuteAsync(null);
+            Assert.Empty(viewModel.Messages);
+        }
+    }
+
+    [Fact]
     public void SelectingAPartitionAlsoCountsAsAReadableEntity()
     {
         var (_, _, partition) = EventHubFixtures.Tree();

@@ -226,6 +226,23 @@ public partial class UiSmokeTests
         Assert.Equal("Send to telemetry", window.Title);
     }
 
+    [AvaloniaFact]
+    public void ToolbarExposesContextualActions()
+    {
+        var window = new MainWindow { DataContext = NewIsolatedViewModel() };
+        window.Show();
+        var actions = window.FindControl<Button>("ActionsButton");
+        Assert.NotNull(actions);
+        var flyout = Assert.IsType<MenuFlyout>(actions.Flyout);
+        Assert.Contains(flyout.Items.OfType<MenuItem>(), item => Equals(item.Header, "Receive and delete…"));
+        Assert.Contains(flyout.Items.OfType<MenuItem>(), item => Equals(item.Header, "Purge…"));
+        flyout.ShowAt(actions);
+        var receive = flyout.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Receive and delete…"));
+        Assert.False(receive.IsEnabled);
+        Assert.Same(((MainWindowViewModel)window.DataContext!).ReceiveCommand, receive.Command);
+        flyout.Hide();
+    }
+
     /// <summary>
     /// The toolbar's enabled states are bound to properties that only an Event Hubs
     /// selection exercises, so the window is shown with one selected.
@@ -255,6 +272,12 @@ public partial class UiSmokeTests
 
         Assert.Equal("Events", viewModel.MessageSourceLabel);
         Assert.NotNull(window.GetControl<DataGrid>("MessageGrid"));
+        var actions = window.GetControl<Button>("ActionsButton");
+        var flyout = Assert.IsType<MenuFlyout>(actions.Flyout);
+        flyout.ShowAt(actions);
+        foreach (var label in new[] { "Receive and delete…", "Purge…", "Delete selected…", "Resubmit selected…" })
+            Assert.False(flyout.Items.OfType<MenuItem>().Single(item => Equals(item.Header, label)).IsEnabled);
+        flyout.Hide();
     }
 
     /// <summary>

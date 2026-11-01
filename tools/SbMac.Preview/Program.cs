@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "preference-failure", "states" };
+var screens = new[] { "main", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "preference-failure", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null;
@@ -107,6 +107,10 @@ try
         if (theme != "both" && theme != tag) continue;
         Application.Current!.RequestedThemeVariant = variant;
         Render("main", () => BuildMainWindow(), 1360, 860);
+        Render("deadletter", BuildDeadLetterWindow, 1360, 860);
+        Render("main-actions", () => BuildMainWindow(), 1360, 860);
+        Render("deadletter-actions", BuildDeadLetterWindow, 1360, 860);
+        Render("eventhubs-actions", BuildEventHubsWindow, 1360, 860);
         Render("preference-failure", () => BuildMainWindow(true), 1360, 860);
         Render("activity", BuildActivityWindow, 1360, 860);
         Render("props", () => BuildMainWindow(), 1360, 860, 1);
@@ -189,6 +193,16 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
         }
     }
 
+    if (name.Contains("-actions-"))
+    {
+        var button = window.FindControl<Button>("ActionsButton")!;
+        button.Flyout!.ShowAt(button);
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
     var frame = window.CaptureRenderedFrame();
     var path = Path.Combine(outDir, name + ".png");
 
@@ -311,6 +325,13 @@ MainWindow BuildMainWindow(bool preferenceFailure = false)
     viewModel.Log.Insert(0, "09:41:20  Connected to contoso-prod.servicebus.windows.net.");
 
     return new MainWindow { DataContext = viewModel };
+}
+
+MainWindow BuildDeadLetterWindow()
+{
+    var window = BuildMainWindow();
+    ((MainWindowViewModel)window.DataContext!).ShowDeadLetter = true;
+    return window;
 }
 
 // Several operations at once, which is the state the activity tray exists for.
