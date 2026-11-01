@@ -49,7 +49,9 @@ static class NativePreview
         {
             var viewModel = MainWindowViewModel.CreateIsolated(connections, RejectAzure, loaded);
             var window = new MainWindow { DataContext = viewModel };
-            if (screen is not null) window.Opened += (_, _) => (screen == "rule" ? (Window)BuildRuleFixture() : screen == "topic" ? BuildTopicFixture() : screen == "subscription" ? BuildSubscriptionFixture() : BuildSendFixture(screen)).Show();
+            if (screen is "resubmit" or "resubmit-long")
+                window.Opened += async (_, _) => await ShowResubmitFixture(window, screen);
+            else if (screen is not null) window.Opened += (_, _) => (screen == "rule" ? (Window)BuildRuleFixture() : screen == "topic" ? BuildTopicFixture() : screen == "subscription" ? BuildSubscriptionFixture() : BuildSendFixture(screen)).Show();
             if (width is { } w) window.Width = w;
             if (height is { } h) window.Height = h;
             return window;
@@ -63,6 +65,30 @@ static class NativePreview
             .UseHarfBuzz()
             .WithInterFont()
             .StartWithClassicDesktopLifetime([]);
+    }
+
+    // Uses only synthetic data; when available, the secondary screen tests real screen bounds.
+    static async Task ShowResubmitFixture(Window owner, string screen)
+    {
+        if (screen == "resubmit-long")
+        {
+            var secondary = owner.Screens.All.FirstOrDefault(s => !s.IsPrimary);
+            if (secondary is not null)
+            {
+                owner.Width = 500;
+                owner.Height = 250;
+                owner.Position = secondary.WorkingArea.Position;
+                await Task.Delay(500); // Allow the native window move to settle before centering the dialog.
+                Console.WriteLine($"FIXTURE_SCREEN={secondary.WorkingArea}, scale={secondary.Scaling} OWNER={owner.Position}");
+            }
+        }
+        var target = screen == "resubmit" ? "orders" : string.Concat(Enumerable.Repeat("very-long-dead-letter-target-", 40));
+        var pending = ResubmitDialog.ShowAsync(owner, 12, target);
+        var dialog = owner.OwnedWindows.Single();
+        Console.WriteLine($"DIALOG_SCREEN={dialog.Screens.ScreenFromWindow(dialog)?.WorkingArea} POSITION={dialog.Position}");
+        var result = await pending;
+        Console.WriteLine($"RESUBMIT_RESULT={result?.ToString() ?? "Cancel"}");
+        owner.Close();
     }
 
     /// <summary>Standalone deterministic Send dialog, so native keyboard checks reach it without Azure.</summary>

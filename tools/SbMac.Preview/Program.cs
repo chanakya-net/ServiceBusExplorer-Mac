@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long" };
+var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -61,7 +61,7 @@ try
     if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
     if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
     if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
-    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule"))) throw new ArgumentException("--native-screen needs --native and one of send|send-empty|send-delivery|topic.");
+    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule" or "resubmit" or "resubmit-long"))) throw new ArgumentException("--native-screen needs --native and a supported screen.");
     if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
     if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
     if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
@@ -90,7 +90,7 @@ static int FontCheck()
 }
 
 void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
-    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen send|send-empty|send-delivery|topic|subscription|rule]\n" +
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen send|send-empty|send-delivery|topic|subscription|rule|resubmit|resubmit-long]\n" +
     "       SbMac.Preview --font-check   (macOS only: native system-font resolution)");
 Directory.CreateDirectory(outDir);
 var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
@@ -160,6 +160,8 @@ try
             Render(name, () => BuildMessageDialog(name), null, null);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
+        Render("resubmit", () => BuildResubmitDialog(3, "orders"), null, null);
+        Render("resubmit-long", () => BuildResubmitDialog(12, string.Concat(Enumerable.Repeat("very-long-dead-letter-target-", 40))), null, null);
         Render("states", BuildStatesWindow, 760, 560);
         void Render(string name, Func<Window> build, int? defaultWidth, int? defaultHeight, int tab = -1)
         {
@@ -295,6 +297,11 @@ static Window BuildMessageDialog(string name)
     return (Window)Activator.CreateInstance(typeof(MessageDialog), BindingFlags.Instance | BindingFlags.NonPublic,
         null, [title, message, kind, confirm, destructive, dismiss], null)!;
 }
+
+// Uses the real resubmit dialog constructor with synthetic count and target; no Azure or store access.
+static Window BuildResubmitDialog(int count, string target) =>
+    (Window)Activator.CreateInstance(typeof(ResubmitDialog), BindingFlags.Instance | BindingFlags.NonPublic,
+        null, [count, target], null)!;
 
 // Representative control states on one canvas: normal, disabled, selected, destructive,
 // status and keyboard focus. Pure static content, so nothing touches Azure or preferences.

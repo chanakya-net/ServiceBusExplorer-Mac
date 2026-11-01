@@ -1,6 +1,7 @@
 using Azure.Messaging.ServiceBus.Administration;
 
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -8,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 
+using SbMac.App.Services;
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
 using SbMac.App.ViewModels.Tree;
@@ -410,6 +412,146 @@ public partial class UiSmokeTests
         window.Show();
 
         Assert.Equal("Send to telemetry", window.Title);
+    }
+
+    static Task<ResubmitAction?> OpenResubmit(Window owner, out ResubmitDialog dialog, int count = 3, string target = "orders")
+    {
+        var result = ResubmitDialog.ShowAsync(owner, count, target);
+        dialog = Assert.IsType<ResubmitDialog>(Assert.Single(owner.OwnedWindows));
+        dialog.UpdateLayout();
+        return result;
+    }
+
+    static Button ResubmitButton(ResubmitDialog dialog, string label) =>
+        dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, label));
+
+    [AvaloniaFact]
+    public async Task ResubmitDialogNamesCountAndTargetAndDefaultsToKeepingCopies()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog, 3, "orders");
+        var text = string.Join("\n", dialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text));
+        var keep = ResubmitButton(dialog, "Resubmit only");
+        var delete = ResubmitButton(dialog, "Resubmit and delete");
+        var cancel = ResubmitButton(dialog, "Cancel");
+        Assert.Contains("Send 3 message(s) back to “orders”.", text);
+        Assert.Contains("Resubmit only keeps the dead-lettered copies", text);
+        Assert.Contains("Resubmit and delete removes them", text);
+        Assert.True(keep.IsDefault);
+        Assert.False(delete.IsDefault);
+        Assert.True(cancel.IsCancel);
+        Assert.Contains("destructive", delete.Classes);
+        Assert.Contains("keep", AutomationProperties.GetName(keep)!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("delete", AutomationProperties.GetName(delete)!, StringComparison.OrdinalIgnoreCase);
+        cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitOnlyChoiceReturnsKeepAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        ResubmitButton(dialog, "Resubmit only").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ResubmitAction.ResubmitOnly, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitAndDeleteChoiceReturnsDeleteAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        ResubmitButton(dialog, "Resubmit and delete").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ResubmitAction.ResubmitAndDelete, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitEscapeCancelsWithoutAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitWindowCloseCancelsWithoutAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        dialog.Close();
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void ResubmitLongTargetKeepsDescriptionScrollableAndActionsReachable()
+    {
+        var owner = new Window();
+        owner.Show();
+        _ = OpenResubmit(owner, out var dialog, 12, string.Concat(Enumerable.Repeat("very-long-queue-name-", 60)));
+        dialog.UpdateLayout();
+        var scroller = Assert.Single(dialog.GetVisualDescendants().OfType<ScrollViewer>());
+        Assert.True(double.IsFinite(scroller.MaxHeight));
+        Assert.True(scroller.MaxHeight <= 340);
+        foreach (var label in new[] { "Cancel", "Resubmit only", "Resubmit and delete" })
+        {
+            var button = ResubmitButton(dialog, label);
+            var origin = button.TranslatePoint(new Point(), dialog)!.Value;
+            Assert.True(origin.Y >= 0 && origin.Y + button.Bounds.Height <= dialog.ClientSize.Height);
+        }
+        dialog.Close();
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitInitialFocusIsKeepAndEnterReturnsKeepAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        var keep = ResubmitButton(dialog, "Resubmit only");
+        Assert.True(keep.IsFocused);
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.Equal(ResubmitAction.ResubmitOnly, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitEscapeCancelsFromKeepFocusWithoutAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void ResubmitLongDescriptionScrollsToHiddenText()
+    {
+        var owner = new Window();
+        owner.Show();
+        _ = OpenResubmit(owner, out var dialog, 12, string.Concat(Enumerable.Repeat("very-long-queue-name-", 60)));
+        dialog.UpdateLayout();
+        var scroller = Assert.Single(dialog.GetVisualDescendants().OfType<ScrollViewer>());
+        Assert.True(scroller.Extent.Height > scroller.Viewport.Height);
+        scroller.Offset = new Vector(0, scroller.Extent.Height);
+        dialog.UpdateLayout();
+        Assert.True(scroller.Offset.Y > 0);
+        Assert.Equal(scroller.Extent.Height - scroller.Viewport.Height, scroller.Offset.Y, 1);
+        dialog.Close();
+        owner.Close();
     }
 
     static readonly string[] SecondaryActionHeaders =
