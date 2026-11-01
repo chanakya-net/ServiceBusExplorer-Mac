@@ -531,4 +531,105 @@ public partial class UiSmokeTests
 
         Assert.Equal("ordres", viewModel.EntitySearchText);
     }
+
+    // ── S03 palette contrast: evaluates the actual resolved colour pairs in both themes ──
+
+    static readonly Avalonia.Styling.ThemeVariant[] BothThemes =
+        [Avalonia.Styling.ThemeVariant.Light, Avalonia.Styling.ThemeVariant.Dark];
+
+    /// <summary>Resolves a brush and flattens its opacity onto <paramref name="backdrop"/>.</summary>
+    static Avalonia.Media.Color Flatten(string key, Avalonia.Styling.ThemeVariant variant, Avalonia.Media.Color backdrop)
+    {
+        Assert.True(Application.Current!.Resources.TryGetResource(key, variant, out var resource), $"{key} missing in {variant}");
+        var brush = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(resource);
+        var a = brush.Opacity * brush.Color.A / 255.0;
+        byte Mix(byte f, byte b) => (byte)Math.Round(f * a + b * (1 - a));
+        return Avalonia.Media.Color.FromRgb(Mix(brush.Color.R, backdrop.R), Mix(brush.Color.G, backdrop.G), Mix(brush.Color.B, backdrop.B));
+    }
+
+    static double Luminance(Avalonia.Media.Color c)
+    {
+        static double Lin(byte v) { var x = v / 255.0; return x <= 0.03928 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4); }
+        return 0.2126 * Lin(c.R) + 0.7152 * Lin(c.G) + 0.0722 * Lin(c.B);
+    }
+
+    static double Contrast(Avalonia.Media.Color a, Avalonia.Media.Color b)
+    {
+        var (hi, lo) = (Math.Max(Luminance(a), Luminance(b)), Math.Min(Luminance(a), Luminance(b)));
+        return (hi + 0.05) / (lo + 0.05);
+    }
+
+    [AvaloniaFact]
+    public void TextAndStatusColorsMeetNormalTextContrastOnEverySurface()
+    {
+        string[] surfaces = ["CanvasBrush", "SidebarBrush", "SurfaceBrush", "ElevatedBrush", "ChromeBrush", "ControlBrush"];
+        string[] texts = ["TextPrimaryBrush", "TextSecondaryBrush", "TextTertiaryBrush", "AccentBrush", "DangerBrush", "WarningBrush", "SuccessBrush"];
+        var failures = new List<string>();
+        foreach (var theme in BothThemes)
+            foreach (var surfaceKey in surfaces)
+            {
+                var surface = Flatten(surfaceKey, theme, Avalonia.Media.Colors.White);
+                foreach (var textKey in texts)
+                {
+                    var ratio = Contrast(Flatten(textKey, theme, surface), surface);
+                    if (ratio < 4.5) failures.Add($"{theme} {textKey} on {surfaceKey}: {ratio:0.00}");
+                }
+            }
+        Assert.Empty(failures);
+    }
+
+    [AvaloniaFact]
+    public void SoftStatusFillsKeepTheirTextReadable()
+    {
+        var failures = new List<string>();
+        foreach (var theme in BothThemes)
+        {
+            var surface = Flatten("SurfaceBrush", theme, Avalonia.Media.Colors.White);
+            foreach (var (fill, text) in new[] { ("DangerSoftBrush", "DangerBrush"), ("WarningSoftBrush", "WarningBrush"),
+                         ("SuccessSoftBrush", "SuccessBrush"), ("AccentSoftBrush", "AccentBrush"), ("SelectionBrush", "TextPrimaryBrush") })
+            {
+                var bg = Flatten(fill, theme, surface);
+                var ratio = Contrast(Flatten(text, theme, bg), bg);
+                if (ratio < 4.5) failures.Add($"{theme} {text} on {fill}: {ratio:0.00}");
+            }
+        }
+        Assert.Empty(failures);
+    }
+
+    [AvaloniaFact]
+    public void AccentButtonTextAndFocusCuesMeetControlContrast()
+    {
+        var failures = new List<string>();
+        foreach (var theme in BothThemes)
+        {
+            var surface = Flatten("SurfaceBrush", theme, Avalonia.Media.Colors.White);
+            var accent = Flatten("AccentBrush", theme, surface);
+            var hover = Flatten("AccentHoverBrush", theme, surface);
+            if (Contrast(Flatten("TextOnAccentBrush", theme, accent), accent) < 4.5) failures.Add($"{theme} text on accent");
+            if (Contrast(Flatten("TextOnAccentBrush", theme, hover), hover) < 4.5) failures.Add($"{theme} text on accent hover");
+            Assert.True(Application.Current!.Resources.TryGetResource("SystemAccentColor", theme, out var ring));
+            foreach (var key in new[] { "CanvasBrush", "SurfaceBrush", "ControlBrush" })
+            {
+                var bg = Flatten(key, theme, Avalonia.Media.Colors.White);
+                var ratio = Contrast((Avalonia.Media.Color)ring!, bg);
+                if (ratio < 3.0) failures.Add($"{theme} focus ring on {key}: {ratio:0.00}");
+            }
+            var control = Flatten("ControlBrush", theme, surface);
+            var edge = Flatten("ControlBorderBrush", theme, control);
+            if (Contrast(edge, control) < 3.0) failures.Add($"{theme} control border: {Contrast(edge, control):0.00}");
+        }
+        Assert.Empty(failures);
+    }
+
+    [AvaloniaFact]
+    public void SharedTypographyResolvesSystemFontWithBundledInterFallback()
+    {
+        Assert.True(Application.Current!.Resources.TryGetResource("UiFont", null, out var font));
+        var family = Assert.IsType<Avalonia.Media.FontFamily>(font);
+        Assert.Contains(family.FamilyNames, n => n.Contains("Inter"));
+        Assert.True(family.FamilyNames.Count > 1);
+        var window = new MainWindow { DataContext = NewIsolatedViewModel() };
+        window.Show();
+        Assert.Equal(family, window.FontFamily);
+    }
 }

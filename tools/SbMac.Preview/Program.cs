@@ -24,7 +24,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings" };
+var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null;
@@ -96,6 +96,7 @@ try
         Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
+        Render("states", BuildStatesWindow, 760, 560);
         void Render(string name, Func<Window> build, int? defaultWidth, int? defaultHeight, int tab = -1)
         {
             if (screen == "all" || screen == name) Shoot($"{name}-{tag}", build(), width ?? defaultWidth, height ?? defaultHeight, tab);
@@ -172,6 +173,56 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
     }
 
     window.Close();
+}
+
+// Representative control states on one canvas: normal, disabled, selected, destructive,
+// status and keyboard focus. Pure static content, so nothing touches Azure or preferences.
+static Window BuildStatesWindow()
+{
+    TextBlock Label(string text, string? cls = null)
+    {
+        var t = new TextBlock { Text = text };
+        if (cls is not null) t.Classes.Add(cls);
+        return t;
+    }
+    Button Btn(string text, string cls, bool enabled = true)
+    {
+        var b = new Button { Content = text, IsEnabled = enabled };
+        foreach (var c in cls.Split(' ')) b.Classes.Add(c);
+        return b;
+    }
+    static Avalonia.Media.IBrush Themed(string key) =>
+        Application.Current!.TryGetResource(key, Application.Current.ActualThemeVariant, out var r)
+            ? (Avalonia.Media.IBrush)r! : throw new InvalidOperationException(key + " missing");
+    Border Status(string text, string brush, string soft) => new()
+    {
+        Padding = new Thickness(8, 3), CornerRadius = new CornerRadius(99), Margin = new Thickness(0, 0, 8, 0),
+        Background = Themed(soft),
+        Child = new TextBlock { Text = text, FontSize = 12, Foreground = Themed(brush) },
+    };
+
+    var focused = Btn("Focused (keyboard)", "secondary");
+    var panel = new StackPanel { Margin = new Thickness(24), Spacing = 12 };
+    panel.Children.Add(Label("Control states", "display"));
+    panel.Children.Add(Label("TYPOGRAPHY", "caption"));
+    panel.Children.Add(Label("Title 15 semibold / body 13 primary text"));
+    panel.Children.Add(Label("Secondary and tertiary text"));
+    panel.Children.Add(new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8, Children =
+        { Btn("Primary", "primary"), Btn("Primary disabled", "primary", false), Btn("Secondary", "secondary"),
+          Btn("Disabled", "secondary", false), Btn("Delete", "toolbar destructive"), focused } });
+    panel.Children.Add(new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Children =
+        { Status("Danger", "DangerBrush", "DangerSoftBrush"), Status("Warning", "WarningBrush", "WarningSoftBrush"),
+          Status("Success", "SuccessBrush", "SuccessSoftBrush"), Status("Accent", "AccentBrush", "AccentSoftBrush") } });
+    panel.Children.Add(new TextBox { Text = "Text input", Width = 260, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left });
+    panel.Children.Add(new TextBox { Text = "Disabled input", Width = 260, IsEnabled = false, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left });
+    panel.Children.Add(new CheckBox { Content = "Checked option", IsChecked = true });
+    panel.Children.Add(new CheckBox { Content = "Disabled option", IsEnabled = false });
+    var list = new ListBox { Width = 260, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+        ItemsSource = new[] { "Unselected row", "Selected row", "Another row" }, SelectedIndex = 1 };
+    panel.Children.Add(list);
+    var window = new Window { Content = panel, SizeToContent = SizeToContent.Manual };
+    window.Opened += (_, _) => focused.Focus(Avalonia.Input.NavigationMethod.Tab);
+    return window;
 }
 
 // Each Settings fixture saves into its own temporary file, seeded with the shown theme.
