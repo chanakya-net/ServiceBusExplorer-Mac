@@ -36,6 +36,40 @@ public class EntityPathTests
 public class SendMessageViewModelTests
 {
     [Fact]
+    public void SendMessageEmptyBodyPreservesOtherFields()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Copies = 3, Subject = "label" };
+        Assert.Null(vm.Build());
+        Assert.Equal("A message body is required.", vm.ValidationError);
+        Assert.Equal(SendValidationField.Body, vm.InvalidField);
+        Assert.Equal(3, vm.Copies);
+        Assert.Equal("label", vm.Subject);
+    }
+
+    [Fact]
+    public void OptionalSectionsStartCollapsedAndSeededSectionsOpen()
+    {
+        var empty = new SendMessageViewModel(new SendMessageRequest("orders"));
+        Assert.False(empty.IsMetadataExpanded);
+        Assert.False(empty.IsPropertiesExpanded);
+        Assert.False(empty.IsDeliveryExpanded);
+        var seed = new MessageRecord { Body = BinaryData.FromString("body"), SourceEntityPath = "orders", Subject = "label", ApplicationProperties = new Dictionary<string, object?> { ["key"] = "value" } };
+        var seeded = new SendMessageViewModel(new SendMessageRequest("orders", seed));
+        Assert.True(seeded.IsMetadataExpanded);
+        Assert.True(seeded.IsPropertiesExpanded);
+        Assert.False(seeded.IsDeliveryExpanded);
+    }
+
+    [Fact]
+    public void InvalidDeliveryRevealsSectionAndPreservesBody()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Body = "payload", Copies = 0 };
+        Assert.Null(vm.Build());
+        Assert.True(vm.IsDeliveryExpanded);
+        Assert.Equal("payload", vm.Body);
+    }
+
+    [Fact]
     public void BuildProducesOneMessagePerCopy()
     {
         var viewModel = new SendMessageViewModel(new SendMessageRequest("orders"))
