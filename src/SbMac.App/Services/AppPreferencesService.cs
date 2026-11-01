@@ -9,10 +9,23 @@ namespace SbMac.App.Services;
 /// immediately; persistence follows in the background, one save at a time and in the
 /// order the changes were made, so the last choice is always the one left on disk.
 /// </summary>
-public sealed class AppPreferencesService(JsonSettingsStore store)
+public sealed class AppPreferencesService
 {
     const string ThemeKey = "theme";
     const string SchemaVersionKey = "schemaVersion";
+
+    readonly JsonSettingsStore store;
+    readonly Func<TimeSpan, CancellationToken, Task> delay;
+    CancellationTokenSource? workspaceDelay;
+    WorkspacePreferences? delayedWorkspace;
+
+    public AppPreferencesService(JsonSettingsStore store) : this(store, Task.Delay) { }
+
+    internal AppPreferencesService(JsonSettingsStore store, Func<TimeSpan, CancellationToken, Task> delay)
+    {
+        this.store = store;
+        this.delay = delay;
+    }
 
     readonly Lock saveLock = new();
     Task<bool> pendingSave = Task.FromResult(true);
@@ -34,7 +47,7 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
         {
             lock (saveLock)
             {
-                return !pendingSave.IsCompleted;
+                return delayedWorkspace is not null || !pendingSave.IsCompleted;
             }
         }
     }
@@ -55,7 +68,7 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
             root = [];
         }
 
-        Current = new AppPreferences(ParseTheme(root[ThemeKey]));
+        Current = new AppPreferences(ParseTheme(root[ThemeKey])) { Workspace = ParseWorkspace(root["workspace"]) };
         return Current;
     }
 
@@ -72,8 +85,22 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
 
         lock (saveLock)
         {
-            pendingSave = SaveAfterAsync(pendingSave, theme);
+            pendingSave = SaveAfterAsync(pendingSave, root => WriteTheme(root, theme));
             return pendingSave;
+        }
+    }
+
+    public void SetWorkspace(WorkspacePreferences workspace)
+    {
+        workspace = workspace.Normalize();
+        Current = Current with { Workspace = workspace };
+        Changed?.Invoke(this, Current);
+        lock (saveLock)
+        {
+            CancelWorkspaceDelay();
+            delayedWorkspace = workspace;
+            workspaceDelay = new CancellationTokenSource();
+            _ = SaveWorkspaceAfterQuietIntervalAsync(workspaceDelay);
         }
     }
 
@@ -82,17 +109,49 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
     {
         lock (saveLock)
         {
+            PromoteWorkspace();
             return pendingSave;
         }
     }
 
-    async Task<bool> SaveAfterAsync(Task<bool> previous, AppTheme theme)
+    async Task SaveWorkspaceAfterQuietIntervalAsync(CancellationTokenSource generation)
+    {
+        try
+        {
+            await delay(TimeSpan.FromMilliseconds(250), generation.Token).ConfigureAwait(false);
+            lock (saveLock)
+            {
+                if (ReferenceEquals(workspaceDelay, generation)) PromoteWorkspace();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer snapshot or a shutdown flush superseded only this delay.
+        }
+    }
+
+    void PromoteWorkspace()
+    {
+        if (delayedWorkspace is not { } snapshot) return;
+        CancelWorkspaceDelay();
+        delayedWorkspace = null;
+        pendingSave = SaveAfterAsync(pendingSave, root => WriteWorkspace(root, snapshot));
+    }
+
+    void CancelWorkspaceDelay()
+    {
+        workspaceDelay?.Cancel();
+        workspaceDelay?.Dispose();
+        workspaceDelay = null;
+    }
+
+    async Task<bool> SaveAfterAsync(Task<bool> previous, Action<JsonObject> update)
     {
         await previous.ConfigureAwait(false);
         bool saved;
         try
         {
-            await store.UpdateAsync(root => WriteTheme(root, theme)).ConfigureAwait(false);
+            await store.UpdateAsync(update).ConfigureAwait(false);
             LastSaveError = null;
             saved = true;
         }
@@ -109,14 +168,7 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
 
     static void WriteTheme(JsonObject root, AppTheme theme)
     {
-        // A newer schema written by a later version is kept, so a downgrade does not
-        // misdescribe fields it does not understand.
-        if (root[SchemaVersionKey] is not JsonValue version ||
-            !version.TryGetValue<int>(out var existing) ||
-            existing < AppPreferences.SchemaVersion)
-        {
-            root[SchemaVersionKey] = AppPreferences.SchemaVersion;
-        }
+        WriteSchema(root);
 
         root[ThemeKey] = theme switch
         {
@@ -124,6 +176,57 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
             AppTheme.Dark => "dark",
             _ => "system"
         };
+    }
+
+    static void WriteSchema(JsonObject root)
+    {
+        // A newer schema written by a later version is kept, so a downgrade does not
+        // misdescribe fields it does not understand.
+        if (root[SchemaVersionKey] is not JsonValue version ||
+            !version.TryGetValue<double>(out var existing) ||
+            existing < AppPreferences.SchemaVersion)
+        {
+            root[SchemaVersionKey] = AppPreferences.SchemaVersion;
+        }
+    }
+
+    static WorkspacePreferences ParseWorkspace(JsonNode? node)
+    {
+        if (node is not JsonObject workspace || workspace["windowBounds"] is not JsonObject bounds)
+            return new(null, WorkspaceWindowState.Normal);
+        try
+        {
+            return new WorkspacePreferences(new(bounds["x"]!.GetValue<double>(), bounds["y"]!.GetValue<double>(),
+                bounds["width"]!.GetValue<double>(), bounds["height"]!.GetValue<double>()),
+                workspace["windowState"]?.ToString() == "maximized" ? WorkspaceWindowState.Maximized : WorkspaceWindowState.Normal).Normalize();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or FormatException or NullReferenceException or OverflowException)
+        {
+            return new(null, WorkspaceWindowState.Normal);
+        }
+    }
+
+    static void WriteWorkspace(JsonObject root, WorkspacePreferences value)
+    {
+        WriteSchema(root);
+        var workspace = root["workspace"] as JsonObject;
+        if (workspace is null) root["workspace"] = workspace = [];
+        workspace["windowState"] = value.WindowState == WorkspaceWindowState.Maximized ? "maximized" : "normal";
+        if (value.WindowBounds is not { } rectangle)
+        {
+            if (workspace["windowBounds"] is JsonObject previous)
+            {
+                foreach (var key in new[] { "x", "y", "width", "height" }) previous.Remove(key);
+            }
+            else workspace["windowBounds"] = null;
+            return;
+        }
+        var bounds = workspace["windowBounds"] as JsonObject;
+        if (bounds is null) workspace["windowBounds"] = bounds = [];
+        bounds["x"] = rectangle.X;
+        bounds["y"] = rectangle.Y;
+        bounds["width"] = rectangle.Width;
+        bounds["height"] = rectangle.Height;
     }
 
     static AppTheme ParseTheme(JsonNode? node)

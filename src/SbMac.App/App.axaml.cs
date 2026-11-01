@@ -59,12 +59,7 @@ public partial class App : Application
                 AddSettingsMenuItem(viewModel.OpenSettingsCommand);
             }
 
-            // Close cleanly so in-flight sessions get disposed rather than torn down.
-            desktop.ShutdownRequested += (_, _) =>
-            {
-                CompletePendingSaves(startup.Preferences);
-                (window.DataContext as MainWindowViewModel)?.Shutdown();
-            };
+            AttachShutdown(desktop, window, startup.Preferences);
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -85,7 +80,9 @@ public partial class App : Application
         preferences.Changed += OnPreferencesChanged;
         attachedPreferences = preferences;
 
-        return startup.CreateMainWindow(preferences);
+        var window = startup.CreateMainWindow(preferences);
+        window.AttachWorkspacePreferences(preferences);
+        return window;
     }
 
     /// <summary>Stops following the preferences attached by <see cref="CreateMainWindow"/>.</summary>
@@ -195,6 +192,37 @@ public partial class App : Application
         if (theme == AppTheme.System && PlatformSettings is { } platform)
         {
             SetValue(ActualThemeVariantProperty, (ThemeVariant)platform.GetColorValues().ThemeVariant);
+        }
+    }
+
+    static void AttachShutdown(IClassicDesktopStyleApplicationLifetime desktop, MainWindow window,
+        AppPreferencesService preferences)
+    {
+        var cleanedUp = false;
+        void Finish()
+        {
+            CompleteShutdown(window, preferences, () =>
+            {
+                if (cleanedUp) return;
+                cleanedUp = true;
+                (window.DataContext as MainWindowViewModel)?.Shutdown();
+            });
+        }
+
+        desktop.ShutdownRequested += (_, _) => Finish();
+        desktop.Exit += (_, _) => Finish();
+    }
+
+    internal static void CompleteShutdown(MainWindow window, AppPreferencesService preferences, Action cleanup)
+    {
+        try
+        {
+            window.CaptureWorkspace();
+            CompletePendingSaves(preferences);
+        }
+        finally
+        {
+            cleanup();
         }
     }
 
