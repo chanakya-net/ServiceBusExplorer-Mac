@@ -162,7 +162,7 @@
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="280" MinWidth="200" />
         <ColumnDefinition Width="Auto" />
-        <ColumnDefinition Width="*" MinWidth="420" />
+        <ColumnDefinition Width="*" MinWidth="560" />
       </Grid.ColumnDefinitions>
 
       <!-- ─────────────── sidebar ─────────────── -->

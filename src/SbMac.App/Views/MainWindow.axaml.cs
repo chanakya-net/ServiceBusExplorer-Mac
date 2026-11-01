@@ -114,6 +114,7 @@ public partial class MainWindow : Window, IUiServices
     void UpdateInspectorVisibility(bool visible, bool moveFocus)
     {
         var rows = MessageDetailLayout.RowDefinitions;
+        rows[3].MinHeight = visible ? 90 : 0;
         if (visible)
         {
             rows[1].Height = tableHeight;

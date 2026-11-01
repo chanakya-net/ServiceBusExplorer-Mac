@@ -972,7 +972,7 @@ public partial class UiSmokeTests
     public void InspectorTogglePreservesDetailsSelectionAndHeight()
     {
         var viewModel = NewIsolatedViewModel();
-        var window = new MainWindow { DataContext = viewModel };
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = viewModel };
         window.Show();
         var first = BuildMessageRow(1);
         var second = BuildMessageRow(2);
@@ -985,8 +985,14 @@ public partial class UiSmokeTests
         var body = viewModel.BodyText;
         var properties = viewModel.PropertiesText;
         var layout = window.GetControl<Grid>("MessageDetailLayout");
-        layout.RowDefinitions[3].Height = new GridLength(250);
+        layout.RowDefinitions[3].Height = new GridLength(180);
+        window.UpdateLayout();
+        var visibleTableHeight = layout.RowDefinitions[1].ActualHeight;
         viewModel.ToggleInspectorCommand.Execute(null);
+        window.UpdateLayout();
+        Assert.Equal(0, layout.RowDefinitions[3].ActualHeight);
+        Assert.Equal(0, layout.RowDefinitions[3].MinHeight);
+        Assert.True(layout.RowDefinitions[1].ActualHeight > visibleTableHeight);
         Assert.False(viewModel.IsInspectorVisible);
         Assert.False(window.GetControl<Border>("MessageInspector").IsVisible);
         Assert.Same(inspected, viewModel.SelectedMessage);
@@ -995,7 +1001,10 @@ public partial class UiSmokeTests
         Assert.Equal(2, viewModel.SelectedMessages.Count);
         viewModel.ToggleInspectorCommand.Execute(null);
         Assert.True(window.GetControl<Border>("MessageInspector").IsVisible);
-        Assert.Equal(new GridLength(250), layout.RowDefinitions[3].Height);
+        Assert.Equal(new GridLength(180), layout.RowDefinitions[3].Height);
+        window.UpdateLayout();
+        Assert.Equal(90, layout.RowDefinitions[3].MinHeight);
+        Assert.True(layout.RowDefinitions[3].ActualHeight >= 90);
         Assert.Same(inspected, viewModel.SelectedMessage);
         Assert.Equal(2, viewModel.SelectedMessages.Count);
     }
@@ -1016,6 +1025,42 @@ public partial class UiSmokeTests
         var tabs = window.GetControl<TabControl>("InspectorTabs");
         Assert.True(tabs.IsEffectivelyVisible);
         Assert.True(tabs.IsKeyboardFocusWithin);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("queue")]
+    [InlineData("subscription")]
+    [InlineData("eventhubs")]
+    public void MaximumSidebarKeepsHeaderActionsUsable(string context)
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = vm };
+        window.Show();
+        var ns = new NamespaceNodeViewModel(new NamespaceConnection { Name = "isolated" });
+        vm.SelectedNode = context switch
+        {
+            "queue" => new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("orders"), null))
+                { Parent = new QueueFolderNodeViewModel { Parent = ns } },
+            "subscription" => new SubscriptionNodeViewModel(new SubscriptionEntity(Model<SubscriptionProperties>("orders", "audit"), null))
+                { Parent = ns },
+            _ => new EventHubNodeViewModel(new EventHubEntity("telemetry", DateTimeOffset.UtcNow, ["0"], ["$Default"]))
+                { Parent = new EventHubFolderNodeViewModel { Parent = ns } }
+        };
+        var split = window.GetControl<Grid>("MainSplitLayout");
+        split.ColumnDefinitions[0].Width = new GridLength(540);
+        vm.Messages.Add(BuildMessageRow(1));
+        foreach (var selected in new[] { false, true })
+        {
+            if (selected) window.GetControl<DataGrid>("MessageGrid").SelectAll();
+            window.UpdateLayout();
+            var header = window.GetControl<DockPanel>("MessageHeader");
+            var buttons = new[] { "SelectAllMessagesButton", "ClearMessageSelectionButton", "MessageActionsButton", "ColumnsButton" }
+                .Select(window.GetControl<Button>).ToArray();
+            var bounds = buttons.Select(b => (Left: b.TranslatePoint(new Avalonia.Point(), header)!.Value.X, b.Bounds.Width)).OrderBy(b => b.Left).ToArray();
+            Assert.All(bounds, b => Assert.True(b.Width >= 45 && b.Left >= 0 && b.Left + b.Width <= header.Bounds.Width + 0.5));
+            for (var i = 1; i < bounds.Length; i++) Assert.True(bounds[i - 1].Left + bounds[i - 1].Width <= bounds[i].Left + 0.5);
+        }
+        window.Close();
     }
 
     [AvaloniaFact]
