@@ -22,6 +22,9 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
     /// <summary>Raised on the caller's thread as soon as a preference changes.</summary>
     public event EventHandler<AppPreferences>? Changed;
 
+    /// <summary>Raised when a queued save completes, on its completion thread.</summary>
+    public event EventHandler? SaveCompleted;
+
     /// <summary>The failure from the most recent save, or null when it succeeded.</summary>
     public string? LastSaveError { get; private set; }
 
@@ -62,6 +65,7 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
     /// </summary>
     public Task<bool> SetThemeAsync(AppTheme theme)
     {
+        theme = Enum.IsDefined(theme) ? theme : AppTheme.System;
         var updated = Current with { Theme = theme };
         Current = updated;
         Changed?.Invoke(this, updated);
@@ -85,18 +89,22 @@ public sealed class AppPreferencesService(JsonSettingsStore store)
     async Task<bool> SaveAfterAsync(Task<bool> previous, AppTheme theme)
     {
         await previous.ConfigureAwait(false);
+        bool saved;
         try
         {
             await store.UpdateAsync(root => WriteTheme(root, theme)).ConfigureAwait(false);
             LastSaveError = null;
-            return true;
+            saved = true;
         }
         catch (Exception exception)
         {
-            // Saving is best-effort: the choice already applies for this session.
+            // The choice already applies for this session.
             LastSaveError = exception.Message;
-            return false;
+            saved = false;
         }
+
+        SaveCompleted?.Invoke(this, EventArgs.Empty);
+        return saved;
     }
 
     static void WriteTheme(JsonObject root, AppTheme theme)

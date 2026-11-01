@@ -12,6 +12,7 @@ using Avalonia.VisualTree;
 using Azure.Messaging.ServiceBus.Administration;
 
 using SbMac.App.Services;
+using SbMac.App.Models;
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
 using SbMac.App.ViewModels.Tree;
@@ -24,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "states" };
+var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "preference-failure", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null;
@@ -105,9 +106,10 @@ try
         var tag = variant == ThemeVariant.Light ? "light" : "dark";
         if (theme != "both" && theme != tag) continue;
         Application.Current!.RequestedThemeVariant = variant;
-        Render("main", BuildMainWindow, 1360, 860);
+        Render("main", () => BuildMainWindow(), 1360, 860);
+        Render("preference-failure", () => BuildMainWindow(true), 1360, 860);
         Render("activity", BuildActivityWindow, 1360, 860);
-        Render("props", BuildMainWindow, 1360, 860, 1);
+        Render("props", () => BuildMainWindow(), 1360, 860, 1);
         Render("eventhubs", BuildEventHubsWindow, 1360, 860);
         Render("eventhubs-props", BuildEventHubsWindow, 1360, 860, 1);
         Render("connection", () => new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
@@ -127,12 +129,20 @@ try
 finally { stateRoot.Delete(recursive: true); }
 return;
 
-MainWindowViewModel IsolatedViewModel(NamespaceConnection connection)
+MainWindowViewModel IsolatedViewModel(NamespaceConnection connection, bool preferenceFailure = false)
 {
     var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
     var store = new ConnectionStore(Path.Combine(dir.FullName, "connections.json"), new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")));
     Pump(store.SaveAsync([connection]));
-    var vm = MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Preview cannot connect to Azure."));
+    AppPreferencesService? preferences = null;
+    if (preferenceFailure)
+    {
+        var blocked = Path.Combine(dir.FullName, "blocked");
+        File.WriteAllText(blocked, "not a directory");
+        preferences = new AppPreferencesService(new JsonSettingsStore(Path.Combine(blocked, "settings.json")));
+    }
+    var vm = MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Preview cannot connect to Azure."), preferences);
+    if (preferences is not null) Pump(preferences.SetThemeAsync(AppTheme.Dark));
     Pump(vm.InitializeAsync());
     vm.StatusText = "Ready";
     vm.Log.Clear();
@@ -256,7 +266,7 @@ SettingsDialog BuildSettingsDialog(string tag)
     return new SettingsDialog { DataContext = new SettingsDialogViewModel(preferences) };
 }
 
-MainWindow BuildMainWindow()
+MainWindow BuildMainWindow(bool preferenceFailure = false)
 {
     var connection = new NamespaceConnection
     {
@@ -265,7 +275,7 @@ MainWindow BuildMainWindow()
         FullyQualifiedNamespace = "contoso-prod.servicebus.windows.net"
     };
 
-    var viewModel = IsolatedViewModel(connection);
+    var viewModel = IsolatedViewModel(connection, preferenceFailure);
     var ns = viewModel.Namespaces.Single();
     ns.IsExpanded = true;
 

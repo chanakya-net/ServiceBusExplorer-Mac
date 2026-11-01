@@ -56,6 +56,18 @@ public sealed class AppPreferencesTests : IDisposable
     }
 
     [Fact]
+    public async Task InvalidThemeDoesNotDiscardOtherSettings()
+    {
+        File.WriteAllText(SettingsFile, """{"theme":{},"lastUpdateCheckUtc":"2026-08-14T04:30:00Z","future":{"enabled":true}}""");
+        var preferences = new AppPreferencesService(new JsonSettingsStore(SettingsFile));
+        Assert.Equal(AppTheme.System, preferences.Load().Theme);
+        Assert.True(await preferences.SetThemeAsync((AppTheme)999));
+        Assert.Equal(AppTheme.System, preferences.Current.Theme);
+        Assert.True(ReadRoot()["future"]!["enabled"]!.GetValue<bool>());
+        Assert.Equal(Timestamp, await new JsonUpdateCheckStateStore(SettingsFile).GetLastCheckUtcAsync(Token));
+    }
+
+    [Fact]
     public async Task ThemeAndUpdateCheckWritesPreserveEachOther()
     {
         File.WriteAllText(SettingsFile, """{"futureFlag":{"nested":[1,{"deep":true}]}}""");
