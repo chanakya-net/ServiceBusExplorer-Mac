@@ -24,7 +24,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings" };
+var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null;
@@ -37,6 +37,7 @@ try
         var arg = args[i];
         if (arg == "--help") { Usage(); return; }
         if (arg == "--native") { native = true; continue; }
+        if (arg == "--font-check") { Environment.ExitCode = FontCheck(); return; }
         if (arg is "--theme" or "--screen" or "--size" or "--state-dir")
         {
             if (++i == args.Length) throw new ArgumentException($"Missing value for {arg}.");
@@ -67,8 +68,27 @@ catch (ArgumentException e) { Console.Error.WriteLine(e.Message); Usage(); Envir
 // The native fixture must start before anything initialises the headless platform below.
 if (native) { NativePreview.Run(stateDir!, width, height); return; }
 
+// Native diagnostic: asks the real macOS font manager which face the shared UiFont resolves to.
+// Headless tests cannot answer this; it must run with the native backend on a Mac.
+static int FontCheck()
+{
+    AppBuilder.Configure<SbMac.App.App>().UseAvaloniaNative().UseSkia().UseHarfBuzz().WithInterFont().SetupWithoutStarting();
+    Application.Current!.TryGetResource("UiFont", null, out var font);
+    var ui = (Avalonia.Media.FontFamily)font!;
+    string Resolve(Avalonia.Media.FontFamily f) =>
+        Avalonia.Media.FontManager.Current.TryGetGlyphTypeface(new Avalonia.Media.Typeface(f), out var g) ? g.FamilyName : "<unresolved>";
+    var primary = Resolve(ui);
+    var fallback = Resolve(Avalonia.Media.FontFamily.Parse("NoSuchSystemFace, avares://Avalonia.Fonts.Inter/Assets#Inter"));
+    Console.WriteLine($"UiFont '{ui}' => {primary}");
+    Console.WriteLine($"unavailable primary + bundled Inter => {fallback}");
+    var ok = primary == "System Font" && fallback == "Inter";
+    Console.WriteLine(ok ? "font check OK" : "font check FAILED");
+    return ok ? 0 : 1;
+}
+
 void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
-    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT]");
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT]\n" +
+    "       SbMac.Preview --font-check   (macOS only: native system-font resolution)");
 Directory.CreateDirectory(outDir);
 var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
 var fixtureNow = new DateTimeOffset(2025, 3, 14, 9, 41, 20, TimeSpan.Zero);
@@ -96,6 +116,7 @@ try
         Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
+        Render("states", BuildStatesWindow, 760, 560);
         void Render(string name, Func<Window> build, int? defaultWidth, int? defaultHeight, int tab = -1)
         {
             if (screen == "all" || screen == name) Shoot($"{name}-{tag}", build(), width ?? defaultWidth, height ?? defaultHeight, tab);
@@ -172,6 +193,56 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
     }
 
     window.Close();
+}
+
+// Representative control states on one canvas: normal, disabled, selected, destructive,
+// status and keyboard focus. Pure static content, so nothing touches Azure or preferences.
+static Window BuildStatesWindow()
+{
+    TextBlock Label(string text, string? cls = null)
+    {
+        var t = new TextBlock { Text = text };
+        if (cls is not null) t.Classes.Add(cls);
+        return t;
+    }
+    Button Btn(string text, string cls, bool enabled = true)
+    {
+        var b = new Button { Content = text, IsEnabled = enabled };
+        foreach (var c in cls.Split(' ')) b.Classes.Add(c);
+        return b;
+    }
+    static Avalonia.Media.IBrush Themed(string key) =>
+        Application.Current!.TryGetResource(key, Application.Current.ActualThemeVariant, out var r)
+            ? (Avalonia.Media.IBrush)r! : throw new InvalidOperationException(key + " missing");
+    Border Status(string text, string brush, string soft) => new()
+    {
+        Padding = new Thickness(8, 3), CornerRadius = new CornerRadius(99), Margin = new Thickness(0, 0, 8, 0),
+        Background = Themed(soft),
+        Child = new TextBlock { Text = text, FontSize = 12, Foreground = Themed(brush) },
+    };
+
+    var focused = Btn("Focused (keyboard)", "secondary");
+    var panel = new StackPanel { Margin = new Thickness(24), Spacing = 12 };
+    panel.Children.Add(Label("Control states", "display"));
+    panel.Children.Add(Label("TYPOGRAPHY", "caption"));
+    panel.Children.Add(Label("Title 15 semibold / body 13 primary text"));
+    panel.Children.Add(Label("Secondary and tertiary text"));
+    panel.Children.Add(new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8, Children =
+        { Btn("Primary", "primary"), Btn("Primary disabled", "primary", false), Btn("Secondary", "secondary"),
+          Btn("Disabled", "secondary", false), Btn("Delete", "toolbar destructive"), focused } });
+    panel.Children.Add(new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Children =
+        { Status("Danger", "DangerBrush", "DangerSoftBrush"), Status("Warning", "WarningBrush", "WarningSoftBrush"),
+          Status("Success", "SuccessBrush", "SuccessSoftBrush"), Status("Accent", "AccentBrush", "AccentSoftBrush") } });
+    panel.Children.Add(new TextBox { Text = "Text input", Width = 260, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left });
+    panel.Children.Add(new TextBox { Text = "Disabled input", Width = 260, IsEnabled = false, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left });
+    panel.Children.Add(new CheckBox { Content = "Checked option", IsChecked = true });
+    panel.Children.Add(new CheckBox { Content = "Disabled option", IsEnabled = false });
+    var list = new ListBox { Width = 260, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+        ItemsSource = new[] { "Unselected row", "Selected row", "Another row" }, SelectedIndex = 1 };
+    panel.Children.Add(list);
+    var window = new Window { Content = panel, SizeToContent = SizeToContent.Manual };
+    window.Opened += (_, _) => focused.Focus(Avalonia.Input.NavigationMethod.Tab);
+    return window;
 }
 
 // Each Settings fixture saves into its own temporary file, seeded with the shown theme.
