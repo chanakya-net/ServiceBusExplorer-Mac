@@ -167,6 +167,72 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void ConnectionDialogSaveFocusesMissingCredentialWithoutLosingInput()
+    {
+        var vm = new ConnectionDialogViewModel(null)
+        {
+            Name = "fixture", UseEntraId = true,
+            FullyQualifiedNamespace = "fixture.servicebus.windows.net",
+            SelectedCredentialKind = EntraCredentialKind.ClientSecret
+        };
+        var window = new ConnectionDialog { DataContext = vm };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(window.FindControl<TextBox>("TenantIdField")!.IsFocused);
+        Assert.Equal("fixture", vm.Name);
+        Assert.NotNull(vm.ValidationError);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void ConnectionDialogKeepsExpandedFooterInsideWorkArea()
+    {
+        var vm = new ConnectionDialogViewModel(null)
+        {
+            Name = "fixture", UseEventHubs = true, UseEntraId = true,
+            SelectedCredentialKind = EntraCredentialKind.ClientSecret
+        };
+        var window = new ConnectionDialog { DataContext = vm, MaxHeight = 400 };
+        window.Show();
+        var screen = window.Screens.ScreenFromWindow(window) ?? window.Screens.Primary!;
+        window.Position = new PixelPoint(screen.WorkingArea.X, screen.WorkingArea.Bottom - 200);
+        vm.IsAdvancedExpanded = true;
+        window.UpdateLayout();
+        var frame = window.FrameSize ?? window.ClientSize;
+        foreach (var name in new[] { "SaveButton", "CancelButton" })
+        {
+            var button = window.FindControl<Button>(name)!;
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.True(origin.Y >= 0 && origin.Y + button.Bounds.Height <= window.ClientSize.Height);
+            Assert.True(origin.X >= 0 && origin.X + button.Bounds.Width <= window.ClientSize.Width);
+        }
+        Assert.True(window.Position.X >= screen.WorkingArea.X);
+        Assert.True(window.Position.Y >= screen.WorkingArea.Y);
+        Assert.True(window.Position.X + frame.Width * screen.Scaling <= screen.WorkingArea.Right);
+        Assert.True(window.Position.Y + frame.Height * screen.Scaling <= screen.WorkingArea.Bottom);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void ConnectionDialogSupportsKeyboardAndConstrainedHeight()
+    {
+        var vm = new ConnectionDialogViewModel(new NamespaceConnection
+        {
+            Name = "fixture", Kind = NamespaceKind.EventHubs,
+            EventHubNames = ["telemetry"], Transport = ServiceBusTransport.AmqpWebSockets
+        });
+        var window = new ConnectionDialog { DataContext = vm, MaxHeight = 600 };
+        window.Show();
+        var name = window.FindControl<TextBox>("NameField")!;
+        Assert.True(name.Focus());
+        window.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        Assert.False(name.IsFocused);
+        Assert.True(window.Bounds.Height <= 600);
+        Assert.True(window.FindControl<Button>("SaveButton")!.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void ConnectionDialogLoadsForAnExistingNamespace()
     {
         var connection = new NamespaceConnection

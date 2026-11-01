@@ -119,7 +119,7 @@ try
         Render("eventhubs", BuildEventHubsWindow, 1360, 860);
         Render("eventhubs-props", BuildEventHubsWindow, 1360, 860, 1);
         Render("connection", () => new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
-        Render("connection-eventhubs", () => new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel() }, 620, 800);
+        Render("connection-eventhubs", () => new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel(), MaxHeight = 600 }, 620, 600);
         Render("send", () => new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
         Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
@@ -485,7 +485,8 @@ ConnectionDialogViewModel BuildEventHubsConnectionViewModel() =>
         Kind = NamespaceKind.EventHubs,
         AuthenticationMode = AuthenticationMode.EntraId,
         FullyQualifiedNamespace = "contoso-telemetry.servicebus.windows.net",
-        EntraCredentialKind = EntraCredentialKind.AzureCli,
+        EntraCredentialKind = EntraCredentialKind.ClientSecret,
+        TenantId = "fixture-tenant", ClientId = "fixture-client", ClientSecret = "fixture-secret",
         EventHubNames = ["device-telemetry", "audit-trail"],
         ConsumerGroup = "analytics"
     });
