@@ -585,6 +585,36 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void SidebarControlsHaveAccessibleNames()
+    {
+        var window = new MainWindow { DataContext = NewIsolatedViewModel() };
+        window.Show();
+
+        Assert.Equal("Search entities", Avalonia.Automation.AutomationProperties.GetName(window.GetControl<TextBox>("EntitySearchBox")));
+        Assert.Equal("Namespaces and entities", Avalonia.Automation.AutomationProperties.GetName(window.GetControl<TreeView>("EntityTree")));
+    }
+
+    [AvaloniaFact]
+    public void TreeKeyboardNavigationSelectsTheNextNamespace()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var first = new NamespaceNodeViewModel(new NamespaceConnection { Name = "first-long-namespace-name" });
+        var second = new NamespaceNodeViewModel(new NamespaceConnection { Name = "second" });
+        viewModel.Namespaces.Add(first);
+        viewModel.Namespaces.Add(second);
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        var tree = window.GetControl<TreeView>("EntityTree");
+        var item = Assert.IsType<TreeViewItem>(tree.ContainerFromIndex(0));
+        Assert.Equal(first.Title, Avalonia.Automation.AutomationProperties.GetName(item));
+        tree.SelectedItem = first;
+        Assert.True(item.Focus());
+        window.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, null);
+        Assert.Same(second, tree.SelectedItem);
+        Assert.Same(second, viewModel.SelectedNode);
+    }
+
+    [AvaloniaFact]
     public void EntitySearchBoxUpdatesTheTreeSearchTextAsTheUserTypes()
     {
         var viewModel = NewIsolatedViewModel();

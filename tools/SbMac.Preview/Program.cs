@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "preference-failure", "states" };
+var screens = new[] { "main", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "preference-failure", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null;
@@ -107,6 +107,7 @@ try
         if (theme != "both" && theme != tag) continue;
         Application.Current!.RequestedThemeVariant = variant;
         Render("main", () => BuildMainWindow(), 1360, 860);
+        Render("sidebar-search", BuildSidebarSearchWindow, 1360, 860);
         Render("deadletter", BuildDeadLetterWindow, 1360, 860);
         Render("main-actions", () => BuildMainWindow(), 1360, 860);
         Render("deadletter-actions", BuildDeadLetterWindow, 1360, 860);
@@ -325,6 +326,17 @@ MainWindow BuildMainWindow(bool preferenceFailure = false)
     viewModel.Log.Insert(0, "09:41:20  Connected to contoso-prod.servicebus.windows.net.");
 
     return new MainWindow { DataContext = viewModel };
+}
+
+MainWindow BuildSidebarSearchWindow()
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    var topics = vm.Namespaces.Single().Children.OfType<TopicFolderNodeViewModel>().Single();
+    var topic = (TopicNodeViewModel)topics.Children[0];
+    AddSubscription(topic, "order-events", "audit-international-reconciliation-subscription", 123456, 78);
+    vm.EntitySearchText = "international-reconciliation";
+    return window;
 }
 
 MainWindow BuildDeadLetterWindow()
