@@ -146,6 +146,48 @@ public sealed partial class WorkspaceLayoutTests : IDisposable
         Assert.Equal(noScreens, noScreens.Constrain([]));
     }
 
+    [Fact]
+    public void RestoreUsesEachScreensOwnScalingAndPrefersPrimaryWhenDisconnected()
+    {
+        // 2x primary laptop panel (2880x1800 px -> 1440x900 logical) and a 1x external to its right.
+        var primary = new ScreenWorkArea(new(0, 50, 2880, 1700), 2, true);
+        var external = new ScreenWorkArea(new(2880, 0, 1920, 1080), 1, false);
+        var onExternal = WorkspaceLayoutService.Restore(new(3000, 100, 1120, 720), [primary, external]);
+        Assert.Equal(new WindowBounds(3000, 100, 1120, 720), onExternal.Logical);
+        Assert.Equal(new PixelPoint(3000, 100), onExternal.Position);
+        // External unplugged: old coordinates are off-screen -> primary, converted at 2x.
+        var recovered = WorkspaceLayoutService.Restore(new(3000, 100, 1120, 720), [primary]);
+        Assert.Equal(new WindowBounds(320, 100, 1120, 720), recovered.Logical);
+        Assert.Equal(new PixelPoint(640, 200), recovered.Position);
+        // Valid visible layout on the 2x panel is preserved exactly.
+        var valid = WorkspaceLayoutService.Restore(new(100, 80, 1120, 720), [primary, external]);
+        Assert.Equal(new WindowBounds(100, 80, 1120, 720), valid.Logical);
+        Assert.Equal(new PixelPoint(200, 160), valid.Position);
+    }
+
+    [Fact]
+    public void RestoreKeepsValidPlacementOnHigherScaleExternalWhenLogicalAreasOverlap()
+    {
+        // 1x primary (0..1920 logical) and 2x external at pixels 1920..5760 (logical 960..2880) overlap logically.
+        var primary = new ScreenWorkArea(new(0, 0, 1920, 1080), 1, true);
+        var external = new ScreenWorkArea(new(1920, 0, 3840, 2160), 2, false);
+        var saved = new WindowBounds(1000, 100, 1120, 720);
+        var placement = WorkspaceLayoutService.Restore(saved, [primary, external]);
+        Assert.Equal(saved, placement.Logical);
+        Assert.Equal(new PixelPoint(2000, 200), placement.Position);
+    }
+
+    [Fact]
+    public void RestoreIgnoresInvalidScreensAndFallsBackWithoutScreens()
+    {
+        var saved = new WindowBounds(-1200, 60, 1120, 720);
+        Assert.Equal(saved, WorkspaceLayoutService.Restore(saved, []).Logical);
+        var bad = new ScreenWorkArea(new(0, 0, 1440, 900), 0, true);
+        Assert.Equal(saved, WorkspaceLayoutService.Restore(saved, [bad]).Logical);
+        var small = new ScreenWorkArea(new(0, 0, 1600, 1000), 2, true); // 800x500 logical
+        Assert.Equal(new WindowBounds(0, 0, 960, 600), WorkspaceLayoutService.Restore(saved, [small]).Logical);
+    }
+
     [AvaloniaTheory]
     [InlineData(WindowState.Normal, false)]
     [InlineData(WindowState.Normal, true)]
