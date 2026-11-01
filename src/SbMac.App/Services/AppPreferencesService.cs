@@ -277,13 +277,29 @@ public sealed class AppPreferencesService
 
     static WorkspacePreferences ParseWorkspace(JsonNode? node)
     {
-        if (node is not JsonObject workspace || workspace["windowBounds"] is not JsonObject bounds ||
-            !TryReadNumber(bounds, "x", out var x) || !TryReadNumber(bounds, "y", out var y) ||
-            !TryReadNumber(bounds, "width", out var width) || !TryReadNumber(bounds, "height", out var height))
-            return new(null, WorkspaceWindowState.Normal);
-        return new WorkspacePreferences(new(x, y, width, height),
-            workspace["windowState"]?.ToString() == "maximized" ? WorkspaceWindowState.Maximized : WorkspaceWindowState.Normal).Normalize();
+        if (node is not JsonObject workspace) return WorkspacePreferences.Default;
+        var state = workspace["windowState"]?.ToString() == "maximized" ? WorkspaceWindowState.Maximized : WorkspaceWindowState.Normal;
+        return new WorkspacePreferences(ParseBounds(workspace["windowBounds"]), state,
+            ReadNumber(workspace, "sidebarWidth") ?? WorkspacePreferences.DefaultSidebarWidth,
+            ReadNumber(workspace, "detailsHeight"),
+            ReadFlag(workspace, "detailsCollapsed", fallback: false),
+            ReadFlag(workspace, "activityCollapsed", fallback: true)).Normalize();
     }
+
+    static WindowBounds? ParseBounds(JsonNode? node)
+    {
+        if (node is not JsonObject bounds || !TryReadNumber(bounds, "x", out var x) ||
+            !TryReadNumber(bounds, "y", out var y) || !TryReadNumber(bounds, "width", out var width) ||
+            !TryReadNumber(bounds, "height", out var height))
+            return null;
+        return new WindowBounds(x, y, width, height);
+    }
+
+    static double? ReadNumber(JsonObject source, string key) =>
+        TryReadNumber(source, key, out var number) ? number : null;
+
+    static bool ReadFlag(JsonObject source, string key, bool fallback) =>
+        source[key] is JsonValue value && value.TryGetValue<bool>(out var flag) ? flag : fallback;
 
     static bool TryReadNumber(JsonObject source, string key, out double number)
     {
@@ -297,6 +313,7 @@ public sealed class AppPreferencesService
         var workspace = root["workspace"] as JsonObject;
         if (workspace is null) root["workspace"] = workspace = [];
         workspace["windowState"] = value.WindowState == WorkspaceWindowState.Maximized ? "maximized" : "normal";
+        WritePanels(workspace, value);
         if (value.WindowBounds is not { } rectangle)
         {
             if (workspace["windowBounds"] is JsonObject previous)
@@ -312,6 +329,15 @@ public sealed class AppPreferencesService
         bounds["y"] = rectangle.Y;
         bounds["width"] = rectangle.Width;
         bounds["height"] = rectangle.Height;
+    }
+
+    static void WritePanels(JsonObject workspace, WorkspacePreferences value)
+    {
+        workspace["sidebarWidth"] = value.SidebarWidth;
+        if (value.DetailsHeight is { } height) workspace["detailsHeight"] = height;
+        else workspace.Remove("detailsHeight");
+        workspace["detailsCollapsed"] = value.DetailsCollapsed;
+        workspace["activityCollapsed"] = value.ActivityCollapsed;
     }
 
     static AppTheme ParseTheme(JsonNode? node)

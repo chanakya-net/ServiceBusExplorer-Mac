@@ -35,6 +35,11 @@ public partial class MainWindow : Window, IUiServices
         // The grid's SelectedItems isn't a bindable property in Avalonia's DataGrid, so
         // the multi-selection is mirrored into the view model by hand.
         MessageGrid.SelectionChanged += OnMessageSelectionChanged;
+
+        SidebarSplitter.DragCompleted += (_, _) => CapturePanelLayout();
+        DetailsSplitter.DragCompleted += (_, _) => CapturePanelLayout();
+        MainSplitLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
+        MessageDetailLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
     }
 
     MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
@@ -59,7 +64,9 @@ public partial class MainWindow : Window, IUiServices
     {
         if (e.PropertyName is nameof(MainWindowViewModel.MessageTableContext) or nameof(MainWindowViewModel.MessageColumns)) ApplyMessageLayout();
         if (e.PropertyName == nameof(MainWindowViewModel.IsInspectorVisible) && ViewModel is { } vm)
-            UpdateInspectorVisibility(vm.IsInspectorVisible, moveFocus: true);
+            UpdateInspectorVisibility(vm.IsInspectorVisible, moveFocus: !applyingSavedPanels);
+        if (e.PropertyName is nameof(MainWindowViewModel.IsInspectorVisible) or nameof(MainWindowViewModel.IsActivityExpanded))
+            CapturePanelVisibility();
     }
 
     void UpdateInspectorVisibility(bool visible, bool moveFocus)
@@ -69,6 +76,7 @@ public partial class MainWindow : Window, IUiServices
         {
             rows[1].Height = tableHeight;
             rows[3].Height = inspectorHeight;
+            ClampPanelsToLayout();
             if (moveFocus) Avalonia.Threading.Dispatcher.UIThread.Post(() => InspectorTabs.ContainerFromIndex(Math.Max(0, InspectorTabs.SelectedIndex))?.Focus());
         }
         else
