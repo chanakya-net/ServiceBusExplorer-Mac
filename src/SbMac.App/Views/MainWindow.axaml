@@ -387,6 +387,10 @@
                                       Binding="{Binding DeadLetterReason}" x:DataType="vm:MessageRowViewModel" />
                   <DataGridTextColumn Header="PREVIEW" Width="*" MinWidth="160"
                                       Binding="{Binding Preview}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="PARTITION" Width="116" IsVisible="False"
+                                      Binding="{Binding PartitionId}" x:DataType="vm:MessageRowViewModel" />
+                  <DataGridTextColumn Header="OFFSET" Width="120" IsVisible="False"
+                                      Binding="{Binding Offset}" x:DataType="vm:MessageRowViewModel" />
                 </DataGrid.Columns>
               </DataGrid>
 

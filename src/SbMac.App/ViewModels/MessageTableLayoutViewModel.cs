@@ -6,13 +6,23 @@ public sealed record MessageColumnMetadata(string Id, bool IsVisible);
 
 public sealed class MessageTableLayoutViewModel
 {
-    static readonly string[] Original = ["selection", "sequence", "enqueued", "messageId", "label", "size", "deliveryCount", "reason", "preview"];
-    static readonly string[] DeadLetter = ["selection", "sequence", "reason", "deliveryCount", "enqueued", "messageId", "label", "size", "preview"];
+    static readonly string[] Original = ["selection", "sequence", "enqueued", "messageId", "label", "size", "deliveryCount", "reason", "preview", "partition", "offset"];
+    static readonly string[] EventHub = ["selection", "partition", "sequence", "offset", "enqueued", "size", "preview", "messageId", "label", "deliveryCount", "reason"];
+    static readonly string[] DeadLetter = ["selection", "sequence", "reason", "deliveryCount", "enqueued", "messageId", "label", "size", "preview", "partition", "offset"];
 
     public static IReadOnlyList<MessageColumnMetadata> ForContext(MessageTableContext context) =>
-        (context == MessageTableContext.DeadLetter ? DeadLetter : Original)
-        .Select(id => new MessageColumnMetadata(id, context != MessageTableContext.ServiceBus || id is not ("deliveryCount" or "reason")))
+        (context switch { MessageTableContext.DeadLetter => DeadLetter, MessageTableContext.EventHub => EventHub, _ => Original })
+        .Select(id => new MessageColumnMetadata(id, IsVisible(context, id)))
         .ToArray();
+
+    // Event Hubs has no delivery, dead-letter or message-id/label facts, so those stay hidden
+    // rather than showing broker defaults; partition/offset exist only for events.
+    static bool IsVisible(MessageTableContext context, string id) => context switch
+    {
+        MessageTableContext.EventHub => id is not ("messageId" or "label" or "deliveryCount" or "reason"),
+        MessageTableContext.DeadLetter => id is not ("partition" or "offset"),
+        _ => id is not ("deliveryCount" or "reason" or "partition" or "offset")
+    };
 
     public static IReadOnlyList<string> ColumnIds => Original;
 }
