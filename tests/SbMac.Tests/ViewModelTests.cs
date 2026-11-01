@@ -423,3 +423,55 @@ public class DurationTextTests
     [InlineData("99:99")]
     public void InvalidInputIsRejected(string value) => Assert.False(DurationText.IsValid(value));
 }
+
+public class QueueEditorValidationTests
+{
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NondefaultDefinitionRoundTripsAndCreateOnlySettingsStayLockedOnEdit(bool isNew)
+    {
+        var definition = new SbMac.Core.ImportExport.QueueDefinition
+        {
+            Name = "orders", MaxSizeInMegabytes = 5120, MaxDeliveryCount = 25,
+            LockDuration = "PT1M", DefaultMessageTimeToLive = "P2D", AutoDeleteOnIdle = "P5D",
+            DuplicateDetectionHistoryTimeWindow = "PT10M", RequiresSession = true,
+            RequiresDuplicateDetection = true, EnablePartitioning = true,
+            DeadLetteringOnMessageExpiration = true, EnableBatchedOperations = false,
+            Status = "Disabled", ForwardTo = "target", ForwardDeadLetteredMessagesTo = "dead", UserMetadata = "metadata"
+        };
+        var vm = new QueueEditorViewModel(definition, isNew);
+        Assert.True(vm.CanSave);
+        Assert.Equal(isNew, vm.CanEditCreateOnlySettings);
+        var result = vm.ToDefinition();
+        Assert.Equal(definition.LockDuration, result.LockDuration);
+        Assert.Equal(definition.DefaultMessageTimeToLive, result.DefaultMessageTimeToLive);
+        Assert.Equal(definition.AutoDeleteOnIdle, result.AutoDeleteOnIdle);
+        Assert.Equal(definition.DuplicateDetectionHistoryTimeWindow, result.DuplicateDetectionHistoryTimeWindow);
+        Assert.Equal(definition.MaxSizeInMegabytes, result.MaxSizeInMegabytes);
+        Assert.Equal(definition.MaxDeliveryCount, result.MaxDeliveryCount);
+        Assert.True(result.RequiresSession && result.RequiresDuplicateDetection && result.EnablePartitioning);
+        Assert.True(result.DeadLetteringOnMessageExpiration);
+        Assert.False(result.EnableBatchedOperations);
+        Assert.Equal("Disabled", result.Status);
+        Assert.Equal("target", result.ForwardTo);
+        Assert.Equal("dead", result.ForwardDeadLetteredMessagesTo);
+        Assert.Equal("metadata", result.UserMetadata);
+    }
+
+    [Fact]
+    public void InvalidOptionalDurationRevealsSectionAndPreservesInput()
+    {
+        var vm = new QueueEditorViewModel(new SbMac.Core.ImportExport.QueueDefinition { Name = "orders" }, true)
+        { AutoDeleteOnIdle = "invalid" };
+        Assert.Equal("AutoDeleteOnIdle", vm.RevealInvalidField());
+        Assert.True(vm.IsOptionalExpanded);
+        Assert.Equal("invalid", vm.AutoDeleteOnIdle);
+        Assert.False(vm.CanSave);
+        vm.AutoDeleteOnIdle = "00:05:00";
+        Assert.Null(vm.ValidationError);
+        Assert.Null(vm.RevealInvalidField());
+        Assert.True(vm.CanSave);
+        Assert.Null(vm.ValidationError);
+    }
+}

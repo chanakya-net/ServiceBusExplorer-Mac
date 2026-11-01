@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "queue", "settings", "preference-failure", "states" };
+var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "settings", "preference-failure", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -126,6 +126,16 @@ try
         Render("send-empty", () => new SendMessageDialog { DataContext = new SendMessageViewModel(new SendMessageRequest("orders")) }, 760, 700);
         Render("send-delivery", () => new SendMessageDialog { DataContext = BuildDeliveryViewModel() }, 760, 700);
         Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
+        Render("queue-edit", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition
+        {
+            Name = "orders", MaxSizeInMegabytes = 5120, MaxDeliveryCount = 25,
+            LockDuration = "PT1M", RequiresSession = true, EnablePartitioning = true,
+            RequiresDuplicateDetection = true, DuplicateDetectionHistoryTimeWindow = "PT10M"
+        }, false) { IsCreationExpanded = true } }, 620, 520);
+        Render("queue-optional-invalid", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(
+            new QueueDefinition { Name = "orders" }, true) { AutoDeleteOnIdle = "invalid" } }, 620, 520);
+        Render("queue-creation-invalid", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(
+            new QueueDefinition { Name = "orders" }, true) { DuplicateDetectionHistoryTimeWindow = "invalid" } }, 620, 520);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
         Render("states", BuildStatesWindow, 760, 560);
@@ -199,6 +209,24 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
         }
     }
 
+    if (name.StartsWith("queue-edit-"))
+    {
+        window.FindControl<Control>("CreationSection")!.BringIntoView();
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
+    if (name.StartsWith("queue-") && name.Contains("-invalid-"))
+    {
+        window.FindControl<Button>("SaveButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
     if (name.Contains("-actions-"))
     {
         var button = window.FindControl<Button>("ActionsButton")!;
