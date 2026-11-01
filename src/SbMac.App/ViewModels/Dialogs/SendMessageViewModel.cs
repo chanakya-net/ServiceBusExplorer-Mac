@@ -60,6 +60,9 @@ public sealed partial class SendMessageViewModel : ViewModelBase
             replyTo = seed.ReplyTo ?? string.Empty;
             to = seed.To ?? string.Empty;
 
+            isMetadataExpanded = new[] { subject, correlationId, sessionId, partitionKey, replyTo, to }.Any(value => !string.IsNullOrWhiteSpace(value));
+            isPropertiesExpanded = seed.ApplicationProperties.Count > 0;
+
             foreach (var pair in seed.ApplicationProperties)
             {
                 Properties.Add(new PropertyRowViewModel { Key = pair.Key, Value = pair.Value?.ToString() ?? string.Empty });
@@ -85,6 +88,18 @@ public sealed partial class SendMessageViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSend))]
     string body = string.Empty;
+
+    [ObservableProperty]
+    bool isMetadataExpanded;
+
+    [ObservableProperty]
+    bool isPropertiesExpanded;
+
+    [ObservableProperty]
+    bool isDeliveryExpanded;
+
+    [ObservableProperty]
+    string? invalidField;
 
     [ObservableProperty]
     string contentType = string.Empty;
@@ -151,9 +166,19 @@ public sealed partial class SendMessageViewModel : ViewModelBase
     public SendMessageResult? Build()
     {
         ValidationError = null;
+        InvalidField = null;
+
+        if (string.IsNullOrEmpty(Body))
+        {
+            ValidationError = "A message body is required.";
+            InvalidField = "Body";
+            return null;
+        }
 
         if (Copies < 1)
         {
+            IsDeliveryExpanded = true;
+            InvalidField = "Copies";
             ValidationError = "Number of copies must be at least 1.";
             return null;
         }
@@ -164,6 +189,8 @@ public sealed partial class SendMessageViewModel : ViewModelBase
             var when = new DateTimeOffset(ScheduledDate.Date + ScheduledTime, ScheduledDate.Offset);
             if (when <= DateTimeOffset.Now)
             {
+                IsDeliveryExpanded = true;
+                InvalidField = "Schedule";
                 ValidationError = "The scheduled time must be in the future.";
                 return null;
             }

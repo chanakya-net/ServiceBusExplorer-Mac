@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings", "preference-failure", "states" };
+var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "queue", "settings", "preference-failure", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null;
@@ -121,6 +121,8 @@ try
         Render("connection", () => new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
         Render("connection-eventhubs", () => new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel(), MaxHeight = 600 }, 620, 600);
         Render("send", () => new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
+        Render("send-empty", () => new SendMessageDialog { DataContext = new SendMessageViewModel(new SendMessageRequest("orders")) }, 760, 700);
+        Render("send-delivery", () => new SendMessageDialog { DataContext = BuildDeliveryViewModel() }, 760, 700);
         Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
@@ -545,17 +547,20 @@ void AddSubscription(TreeNodeViewModel parent, string topic, string name, long a
 
 SendMessageViewModel BuildSendViewModel()
 {
-    var viewModel = new SendMessageViewModel(new SendMessageRequest("orders"))
+    var seed = new MessageRecord
     {
-        Body = "{\n  \"orderId\": 40921,\n  \"region\": \"emea\",\n  \"total\": 128.40\n}",
-        ContentType = "application/json",
-        Subject = "order-created"
+        Body = BinaryData.FromString("{\n  \"orderId\": 40921\n}"), SourceEntityPath = "orders",
+        Subject = "order-created", ContentType = "application/json",
+        ApplicationProperties = new Dictionary<string, object?> { ["region"] = "emea" }
     };
-
-    viewModel.Properties.Add(new PropertyRowViewModel { Key = "region", Value = "emea" });
-    viewModel.Properties.Add(new PropertyRowViewModel { Key = "priority", Value = "high" });
-    return viewModel;
+    return new SendMessageViewModel(new SendMessageRequest("orders", seed, "Editing a received message"));
 }
+
+SendMessageViewModel BuildDeliveryViewModel() => new(new SendMessageRequest("orders"))
+{
+    Body = "Order {n}", IsDeliveryExpanded = true, Copies = 3, Schedule = true,
+    ScheduledDate = fixtureNow.AddDays(1), ScheduledTime = TimeSpan.FromHours(12)
+};
 
 IEnumerable<MessageRecord> SampleMessages()
 {

@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 
 using SbMac.App.ViewModels.Dialogs;
 
@@ -8,6 +9,16 @@ namespace SbMac.App.Views.Dialogs;
 public partial class SendMessageDialog : Window
 {
     public SendMessageDialog() => InitializeComponent();
+
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+        if (Screens.ScreenFromWindow(this) is { } screen)
+        {
+            MaxHeight = screen.WorkingArea.Height / screen.Scaling;
+            Height = Math.Min(Height, MaxHeight);
+        }
+    }
 
     void OnCancel(object? sender, RoutedEventArgs e) => Close(null);
 
@@ -23,6 +34,19 @@ public partial class SendMessageDialog : Window
         if (viewModel.Build() is { } result)
         {
             Close(result);
+            return;
         }
+
+        var target = viewModel.InvalidField switch
+        {
+            "Copies" => (Control)CopiesInput,
+            "Schedule" => ScheduleToggle,
+            _ => BodyInput
+        };
+        Dispatcher.UIThread.Post(() =>
+        {
+            target.BringIntoView();
+            target.Focus();
+        }, DispatcherPriority.Loaded);
     }
 }

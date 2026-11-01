@@ -280,6 +280,38 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void SendMessageEnterInBodyDoesNotSendAndEscapeCancels()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Body = "first" };
+        var window = new SendMessageDialog { DataContext = vm };
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+        window.Show();
+        var body = window.FindControl<TextBox>("BodyInput")!;
+        body.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.False(closed);
+        Assert.Contains("\n", body.Text);
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.True(closed);
+    }
+
+    [AvaloniaFact]
+    public void SendMessageValidationRevealsAndFocusesSchedule()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Body = "body", Schedule = true, ScheduledDate = DateTimeOffset.Now.AddDays(-1) };
+        var window = new SendMessageDialog { DataContext = vm };
+        window.Show();
+        var send = window.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Send"));
+        send.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(vm.IsDeliveryExpanded);
+        Assert.Equal("body", vm.Body);
+        Assert.True(window.FindControl<CheckBox>("ScheduleToggle")!.IsKeyboardFocusWithin);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void SendMessageDialogLoadsForAnEventHub()
     {
         var window = new SendMessageDialog
