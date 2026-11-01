@@ -71,6 +71,14 @@ public class OperationViewModelTests
 
     /// <summary>The outcome matters more than the action, so a failure takes over the colour.</summary>
     [Fact]
+    public void FailedTooltipIncludesOutcomeAndDetail()
+    {
+        var operation = new OperationViewModel(OperationKind.Read, "Reading");
+        operation.Finish(OperationState.Failed, "Connection lost");
+        Assert.Equal("Reading — Failed: Connection lost", operation.StatusLine);
+    }
+
+    [Fact]
     public void AFailureOverridesTheKindColour()
     {
         var operation = new OperationViewModel(OperationKind.Read, "Peeking…");

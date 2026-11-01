@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 
+using SbMac.App.Models;
 using SbMac.App.Services;
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
@@ -659,6 +660,68 @@ public partial class UiSmokeTests
     /// The activity rows resolve their bar colour through a converter, which only runs when
     /// the template is actually instantiated — so the panel is shown with entries in it.
     /// </summary>
+    [AvaloniaFact]
+    public async Task PreferenceSaveFailureIsVisibleDuringActivity()
+    {
+        var dir = Directory.CreateTempSubdirectory("sbmac-save-status-");
+        try
+        {
+            var blocked = Path.Combine(dir.FullName, "blocked");
+            File.WriteAllText(blocked, "file");
+            var preferences = new AppPreferencesService(new JsonSettingsStore(Path.Combine(blocked, "settings.json")));
+            var vm = NewIsolatedViewModel(preferences);
+            var window = new MainWindow { DataContext = vm };
+            window.Show();
+            vm.Operations.Add(new OperationViewModel(OperationKind.Read, "Reading"));
+            Assert.False(await preferences.SetThemeAsync(AppTheme.Dark));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var status = window.GetControl<TextBlock>("PreferenceSaveStatus");
+            Assert.True(status.IsVisible);
+            Assert.Contains("not saved", status.Text);
+            Assert.True(vm.IsBusy);
+            window.Close();
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [AvaloniaFact]
+    public void EmptyMessageStateTracksOnlyTheSelectedRead()
+    {
+        var vm = NewIsolatedViewModel();
+        var first = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("first"), null));
+        var second = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("second"), null));
+        vm.SelectedNode = first;
+        var reading = new OperationViewModel(OperationKind.Read, "Reading first", first);
+        vm.Operations.Add(reading);
+        Assert.Contains("Loading", vm.EmptyMessagesHint);
+        vm.SelectedNode = second;
+        Assert.DoesNotContain("Loading", vm.EmptyMessagesHint);
+        var show = typeof(MainWindowViewModel).GetMethod("ShowMessagesFor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        show.Invoke(vm, [first, Array.Empty<MessageRecord>(), "first"]);
+        Assert.DoesNotContain("No messages found", vm.EmptyMessagesHint);
+        show.Invoke(vm, [second, Array.Empty<MessageRecord>(), "second"]);
+        Assert.Contains("No messages found", vm.EmptyMessagesHint);
+    }
+
+    [AvaloniaFact]
+    public void EmptyWorkspaceAndConcurrentFailuresRemainVisible()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+        Assert.True(window.GetControl<Control>("FirstRunState").IsVisible);
+        Assert.Contains("Select", window.GetControl<TextBlock>("EmptyMessagesHint").Text);
+        var running = new OperationViewModel(OperationKind.Read, "Reading");
+        var failed = new OperationViewModel(OperationKind.Connect, "Connecting");
+        failed.Finish(OperationState.Failed, "Connection lost");
+        vm.Operations.Add(running);
+        vm.Operations.Add(failed);
+        Assert.True(window.GetControl<Control>("ActivityFailureIndicator").IsVisible);
+        Assert.True(window.GetControl<Control>("FirstRunState").IsVisible);
+        Assert.True(running.IsRunning);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void MainWindowRendersTheActivityPanel()
     {

@@ -26,7 +26,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "columns", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -110,6 +110,9 @@ try
         if (theme != "both" && theme != tag) continue;
         Application.Current!.RequestedThemeVariant = variant;
         Render("main", () => BuildMainWindow(), 1360, 860);
+        Render("workspace-first-run", BuildFirstRunWindow, 1360, 860);
+        Render("workspace-loading", BuildLoadingWindow, 1360, 860);
+        Render("workspace-empty", BuildEmptyWindow, 1360, 860);
         Render("columns", () => BuildMainWindow(), 1360, 860);
         Render("selection-none", () => BuildMainWindow(), 1360, 860);
         Render("selection-selected", () => BuildMainWindow(), 1360, 860);
@@ -395,6 +398,37 @@ SettingsDialog BuildSettingsDialog(string tag)
     var preferences = new AppPreferencesService(new JsonSettingsStore(file));
     preferences.Load();
     return new SettingsDialog { DataContext = new SettingsDialogViewModel(preferences) };
+}
+
+MainWindow BuildFirstRunWindow()
+{
+    var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
+    var store = new ConnectionStore(Path.Combine(dir.FullName, "connections.json"), new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")));
+    var vm = MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Preview cannot connect to Azure."));
+    Pump(vm.InitializeAsync());
+    return new MainWindow { DataContext = vm };
+}
+
+MainWindow BuildLoadingWindow()
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.Messages.Clear();
+    vm.SelectedMessage = null;
+    vm.Operations.Add(new OperationViewModel(OperationKind.Read, "Peeking orders…", vm.SelectedNode));
+    var failed = new OperationViewModel(OperationKind.Connect, "Connecting to staging…");
+    failed.Finish(OperationState.Failed, "Connection failed");
+    vm.Operations.Add(failed);
+    return window;
+}
+
+MainWindow BuildEmptyWindow()
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    var show = typeof(MainWindowViewModel).GetMethod("ShowMessagesFor", BindingFlags.NonPublic | BindingFlags.Instance)!;
+    show.Invoke(vm, [vm.SelectedNode, Array.Empty<MessageRecord>(), "orders"]);
+    return window;
 }
 
 MainWindow BuildMainWindow(bool preferenceFailure = false)

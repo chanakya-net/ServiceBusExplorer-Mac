@@ -266,7 +266,7 @@
             </TreeView>
 
             <!-- First-run placeholder, shown in place of an empty tree. -->
-            <StackPanel IsVisible="{Binding HasNoNamespaces}"
+            <StackPanel x:Name="FirstRunState" IsVisible="{Binding HasNoNamespaces}"
                         VerticalAlignment="Center" HorizontalAlignment="Center"
                         Margin="28" Spacing="10" IsHitTestVisible="False">
               <Path Classes="treeIcon" Data="{StaticResource IconNamespace}"
@@ -405,7 +405,7 @@
                           MaxWidth="380" Spacing="10" IsHitTestVisible="False">
                 <Path Classes="treeIcon" Data="{StaticResource IconEmptyState}"
                       Width="30" Height="30" Opacity="0.3" HorizontalAlignment="Center" />
-                <TextBlock Text="{Binding EmptyMessagesHint}" Classes="tertiary"
+                <TextBlock x:Name="EmptyMessagesHint" Text="{Binding EmptyMessagesHint}" Classes="tertiary"
                            TextWrapping="Wrap" TextAlignment="Center" />
               </StackPanel>
             </Panel>
@@ -504,7 +504,7 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:OperationViewModel">
-                  <ProgressBar Width="30" Height="3"
+                  <ProgressBar Width="30" MinWidth="0" Height="3"
                                Minimum="0" Maximum="100"
                                Value="{Binding Progress}"
                                IsIndeterminate="{Binding IsIndeterminate}"
@@ -522,6 +522,8 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <TextBlock x:Name="ActivityFailureIndicator" Text="Failed · Open activity for details"
+                       IsVisible="{Binding HasFailedOperations}" VerticalAlignment="Center" />
             <TextBlock Classes="secondary" VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis" MaxWidth="360"
                        Text="{Binding ActivitySummary}" />
@@ -534,7 +536,7 @@
                 IsVisible="{Binding IsBusy}"
                 Command="{Binding CancelAllOperationsCommand}" />
 
-        <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+        <TextBlock x:Name="PreferenceSaveStatus" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
                    Text="{Binding PreferenceSaveStatus}" IsVisible="{Binding HasPreferenceSaveStatus}"
                    AutomationProperties.Name="Preference save status" />
 

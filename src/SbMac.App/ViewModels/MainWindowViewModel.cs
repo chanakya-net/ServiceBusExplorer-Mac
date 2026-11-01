@@ -322,6 +322,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public bool HasOperations => Operations.Count > 0;
 
+    public bool HasFailedOperations => Operations.Any(operation => operation.State == OperationState.Failed);
+
     public bool HasFinishedOperations => Operations.Any(operation => operation.IsFinished);
 
     public int RunningOperationCount => Operations.Count(operation => operation.IsRunning);
@@ -356,8 +358,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>Drives the placeholder shown in place of an empty message grid.</summary>
     public bool HasNoMessages => Messages.Count == 0;
 
+    TreeNodeViewModel? lastEmptyResultNode;
+    bool lastEmptyResultDeadLetter;
+
     /// <summary>Short hint shown where the message list would be, when it's empty.</summary>
-    public string EmptyMessagesHint => (HasMessageEntity, CurrentEventHubName is not null) switch
+    public string EmptyMessagesHint => Operations.Any(operation => operation.IsRunning &&
+        operation.Target is not null && ReferenceEquals(operation.Target, SelectedNode))
+        ? "Loading messages… You can continue browsing while this runs."
+        : ReferenceEquals(lastEmptyResultNode, SelectedNode) && SelectedNode is not null && lastEmptyResultDeadLetter == ShowDeadLetter
+        ? $"No {(CurrentEventHubName is null ? "messages" : "events")} found. Try Peek again or select another entity."
+        : (HasMessageEntity, CurrentEventHubName is not null) switch
     {
         (true, true) =>
             "No events loaded. Choose Peek to read the most recent events — Event Hubs reads never remove anything.",
@@ -746,7 +756,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             AppendLog($"Peeked {records.Count} message(s) from {label}.");
 
             ShowMessagesFor(origin, records, label);
-        }).ConfigureAwait(true);
+        }, origin).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -776,7 +786,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             AppendLog($"Read {records.Count} event(s) from {source}.");
 
             ShowMessagesFor(origin, records, source);
-        }).ConfigureAwait(true);
+        }, origin).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -816,7 +826,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             ShowMessagesFor(origin, records, path.ToString());
             await RefreshNodeAsync(origin, cancellationToken).ConfigureAwait(true);
-        }).ConfigureAwait(true);
+        }, origin).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -1647,8 +1657,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// Runs an operation as its own tracked activity, funnelling any failure into the log
     /// and an error dialog rather than letting it reach the dispatcher.
     /// </summary>
-    Task RunAsync(OperationKind kind, string description, Func<CancellationToken, Task> operation) =>
-        RunAsync(kind, description, (_, cancellationToken) => operation(cancellationToken));
+    Task RunAsync(OperationKind kind, string description, Func<CancellationToken, Task> operation, TreeNodeViewModel? target = null) =>
+        RunAsync(kind, description, (_, cancellationToken) => operation(cancellationToken), target);
 
     /// <summary>
     /// As above, but hands the operation its own tray entry so it can report progress
@@ -1663,7 +1673,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     async Task RunAsync(
         OperationKind kind,
         string description,
-        Func<OperationViewModel, CancellationToken, Task> operation)
+        Func<OperationViewModel, CancellationToken, Task> operation,
+        TreeNodeViewModel? target = null)
     {
         if (!activeOperations.Add(description))
         {
@@ -1672,7 +1683,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var tracked = new OperationViewModel(kind, description);
+        var tracked = new OperationViewModel(kind, description, target);
 
         TrimFinishedOperations();
         Operations.Add(tracked);
@@ -1739,7 +1750,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     void RaiseActivityChanged()
     {
         OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(EmptyMessagesHint));
         OnPropertyChanged(nameof(HasOperations));
+        OnPropertyChanged(nameof(HasFailedOperations));
         OnPropertyChanged(nameof(HasFinishedOperations));
         OnPropertyChanged(nameof(RunningOperationCount));
         OnPropertyChanged(nameof(ActivitySummary));
@@ -1767,6 +1780,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        lastEmptyResultNode = records.Count == 0 ? origin : null;
+        lastEmptyResultDeadLetter = ShowDeadLetter;
+        OnPropertyChanged(nameof(EmptyMessagesHint));
         Messages.Clear();
         SelectedMessages.Clear();
 
