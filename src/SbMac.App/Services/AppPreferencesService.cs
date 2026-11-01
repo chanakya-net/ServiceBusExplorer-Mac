@@ -20,6 +20,7 @@ public sealed class AppPreferencesService
     WorkspacePreferences? delayedWorkspace;
     bool themeDirty;
     bool workspaceDirty;
+    bool tablesDirty;
 
     public AppPreferencesService(JsonSettingsStore store) : this(store, Task.Delay) { }
 
@@ -76,7 +77,7 @@ public sealed class AppPreferencesService
             root = [];
         }
 
-        Current = new AppPreferences(ParseTheme(root[ThemeKey])) { Workspace = ParseWorkspace(root["workspace"]) };
+        Current = new AppPreferences(ParseTheme(root[ThemeKey])) { Workspace = ParseWorkspace(root["workspace"]), MessageTables = ParseMessageTables(root["messageTables"]) };
         return Current;
     }
 
@@ -100,6 +101,20 @@ public sealed class AppPreferencesService
             pendingSave = SaveAfterAsync(pendingSave);
             return pendingSave;
         }
+    }
+
+    public Task<bool> SetMessageColumnsAsync(string context, IReadOnlyList<MessageColumnState> columns)
+    {
+        AppPreferences updated;
+        lock (saveLock)
+        {
+            var tables = new Dictionary<string, IReadOnlyList<MessageColumnState>>(Current.MessageTables)
+                { [context] = columns.ToArray() };
+            Current = updated = Current with { MessageTables = tables };
+            tablesDirty = true;
+        }
+        Changed?.Invoke(this, updated);
+        lock (saveLock) return pendingSave = SaveAfterAsync(pendingSave);
     }
 
     public void SetWorkspace(WorkspacePreferences workspace)
@@ -126,7 +141,7 @@ public sealed class AppPreferencesService
         lock (saveLock)
         {
             if (delayedWorkspace is not null) PromoteWorkspace();
-            else if (pendingSave.IsCompleted && (themeDirty || workspaceDirty))
+            else if (pendingSave.IsCompleted && (themeDirty || workspaceDirty || tablesDirty))
                 pendingSave = SaveAfterAsync(pendingSave);
             return pendingSave;
         }
@@ -169,18 +184,19 @@ public sealed class AppPreferencesService
         lock (saveLock)
         {
             // An earlier queued save may already have persisted these changes.
-            if (!themeDirty && !workspaceDirty) return true;
+            if (!themeDirty && !workspaceDirty && !tablesDirty) return true;
         }
         bool saved;
         try
         {
-            var snapshot = (Preferences: Current, Theme: false, Workspace: false);
+            var snapshot = (Preferences: Current, Theme: false, Workspace: false, Tables: false);
             await store.UpdateAsync(root => snapshot = WritePendingPreferences(root)).ConfigureAwait(false);
             lock (saveLock)
             {
                 if (snapshot.Theme && Current.Theme == snapshot.Preferences.Theme) themeDirty = false;
                 if (snapshot.Workspace && Current.Workspace == snapshot.Preferences.Workspace) workspaceDirty = false;
-                if (!themeDirty && !workspaceDirty) LastSaveError = null;
+                if (snapshot.Tables && ReferenceEquals(Current.MessageTables, snapshot.Preferences.MessageTables)) tablesDirty = false;
+                if (!themeDirty && !workspaceDirty && !tablesDirty) LastSaveError = null;
             }
             saved = true;
         }
@@ -195,13 +211,43 @@ public sealed class AppPreferencesService
         return saved;
     }
 
-    (AppPreferences Preferences, bool Theme, bool Workspace) WritePendingPreferences(JsonObject root)
+    (AppPreferences Preferences, bool Theme, bool Workspace, bool Tables) WritePendingPreferences(JsonObject root)
     {
         lock (saveLock)
         {
             if (themeDirty) WriteTheme(root, Current.Theme);
             if (workspaceDirty) WriteWorkspace(root, Current.Workspace);
-            return (Current, themeDirty, workspaceDirty);
+            if (tablesDirty) WriteMessageTables(root, Current.MessageTables);
+            return (Current, themeDirty, workspaceDirty, tablesDirty);
+        }
+    }
+
+    static Dictionary<string, IReadOnlyList<MessageColumnState>> ParseMessageTables(JsonNode? node)
+    {
+        var result = new Dictionary<string, IReadOnlyList<MessageColumnState>>();
+        if (node is not JsonObject tables) return AppPreferences.Default.MessageTables;
+        foreach (var key in new[] { "serviceBus", "deadLetter", "eventHubs" })
+        {
+            if (tables[key] is not JsonObject table || table["columns"] is not JsonArray columns) continue;
+            var states = new List<MessageColumnState>();
+            foreach (var item in columns.OfType<JsonObject>())
+                if (item["id"] is JsonValue id && id.TryGetValue<string>(out var name) &&
+                    item["visible"] is JsonValue visible && visible.TryGetValue<bool>(out var value))
+                    states.Add(new(name, value));
+            result[key] = states;
+        }
+        return result.Count == 0 ? AppPreferences.Default.MessageTables : result;
+    }
+
+    static void WriteMessageTables(JsonObject root, Dictionary<string, IReadOnlyList<MessageColumnState>> values)
+    {
+        WriteSchema(root);
+        if (root["messageTables"] is not JsonObject tables) root["messageTables"] = tables = [];
+        foreach (var (key, columns) in values)
+        {
+            if (tables[key] is not JsonObject table) tables[key] = table = [];
+            table["columns"] = new JsonArray(columns.Select(c => (JsonNode)new JsonObject
+                { ["id"] = c.Id, ["visible"] = c.Visible }).ToArray());
         }
     }
 

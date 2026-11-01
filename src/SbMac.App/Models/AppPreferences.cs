@@ -20,6 +20,10 @@ public sealed record AppPreferences(AppTheme Theme)
 
     public WorkspacePreferences Workspace { get; init; } = new(null, WorkspaceWindowState.Normal);
 
+    public Dictionary<string, IReadOnlyList<MessageColumnState>> MessageTables { get; init; } = EmptyMessageTables;
+
+    static readonly Dictionary<string, IReadOnlyList<MessageColumnState>> EmptyMessageTables = new();
+
     public static AppPreferences Default { get; } = new(AppTheme.System);
 }
 
@@ -59,3 +63,5 @@ public sealed record WorkspacePreferences(WindowBounds? WindowBounds, WorkspaceW
         ? this with { WindowState = Enum.IsDefined(WindowState) ? WindowState : WorkspaceWindowState.Normal }
         : new(null, WorkspaceWindowState.Normal);
 }
+
+public sealed record MessageColumnState(string Id, bool Visible);
