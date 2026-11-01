@@ -32,6 +32,9 @@ public interface IUiServices
 
     Task ShowUpdateAvailableAsync(UpdateInfo update);
 
+    /// <summary>Show the Settings dialog for these preferences. Changes apply as they are made.</summary>
+    Task ShowSettingsAsync(AppPreferencesService preferences);
+
     /// <summary>Add or edit a saved namespace. Returns null when the user cancels.</summary>
     Task<NamespaceConnection?> EditConnectionAsync(NamespaceConnection? existing);
 

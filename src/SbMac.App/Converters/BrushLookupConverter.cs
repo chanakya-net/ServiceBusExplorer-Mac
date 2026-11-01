@@ -3,6 +3,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
+using Avalonia.Styling;
 
 namespace SbMac.App.Converters;
 
@@ -11,25 +12,30 @@ namespace SbMac.App.Converters;
 /// so view models can pick a colour by token without referencing drawing types. Mirrors
 /// <see cref="IconLookupConverter"/>, which does the same for geometry.
 /// </summary>
-public sealed class BrushLookupConverter : IValueConverter
+/// <remarks>
+/// Bound as a multi-binding of the brush key and the target's <c>ActualThemeVariant</c>.
+/// Unlike geometry, these brushes live in the theme dictionaries, and a plain lookup is
+/// not re-run when the appearance changes — taking the variant as an input is what makes
+/// an already-visible bar recolour when the user switches between Light and Dark.
+/// </remarks>
+public sealed class BrushLookupConverter : IMultiValueConverter
 {
     public static BrushLookupConverter Instance { get; } = new();
 
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is not string key || string.IsNullOrEmpty(key) || Application.Current is null)
+        if (values.Count == 0 || values[0] is not string key || string.IsNullOrEmpty(key) ||
+            Application.Current is not { } application)
         {
             return null;
         }
 
-        // Unlike geometry, these live in the theme dictionaries, so the lookup has to be
-        // told which variant is on screen.
-        return Application.Current.Resources
-            .TryGetResource(key, Application.Current.ActualThemeVariant, out var resource)
+        var variant = values.Count > 1 && values[1] is ThemeVariant actual
+            ? actual
+            : application.ActualThemeVariant;
+
+        return application.Resources.TryGetResource(key, variant, out var resource)
             ? resource as IBrush
             : null;
     }
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }

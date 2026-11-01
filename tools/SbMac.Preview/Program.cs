@@ -11,6 +11,7 @@ using Avalonia.VisualTree;
 
 using Azure.Messaging.ServiceBus.Administration;
 
+using SbMac.App.Services;
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
 using SbMac.App.ViewModels.Tree;
@@ -21,24 +22,28 @@ using SbMac.Core.Entities;
 using SbMac.Core.EventHubs;
 using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
+using SbMac.Preview;
 
-var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue" };
+var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue", "settings" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
+string? stateDir = null;
 int? width = null, height = null;
-bool outputSet = false;
+bool outputSet = false, native = false, themeSet = false, screenSet = false;
 try
 {
     for (var i = 0; i < args.Length; i++)
     {
         var arg = args[i];
         if (arg == "--help") { Usage(); return; }
-        if (arg is "--theme" or "--screen" or "--size")
+        if (arg == "--native") { native = true; continue; }
+        if (arg is "--theme" or "--screen" or "--size" or "--state-dir")
         {
             if (++i == args.Length) throw new ArgumentException($"Missing value for {arg}.");
             var value = args[i];
-            if (arg == "--theme") theme = value;
-            else if (arg == "--screen") screen = value;
+            if (arg == "--theme") { theme = value; themeSet = true; }
+            else if (arg == "--screen") { screen = value; screenSet = true; }
+            else if (arg == "--state-dir") stateDir = value;
             else
             {
                 var parts = value.Split('x');
@@ -52,10 +57,18 @@ try
     }
     if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
     if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
+    if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
+    if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
+    if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
+    if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
 }
 catch (ArgumentException e) { Console.Error.WriteLine(e.Message); Usage(); Environment.ExitCode = 2; return; }
 
-void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]");
+// The native fixture must start before anything initialises the headless platform below.
+if (native) { NativePreview.Run(stateDir!, width, height); return; }
+
+void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT]");
 Directory.CreateDirectory(outDir);
 var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
 var fixtureNow = new DateTimeOffset(2025, 3, 14, 9, 41, 20, TimeSpan.Zero);
@@ -81,7 +94,9 @@ try
         Render("connection-eventhubs", () => new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel() }, 620, 800);
         Render("send", () => new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
         Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
-        void Render(string name, Func<Window> build, int defaultWidth, int defaultHeight, int tab = -1)
+        // Natural size unless --size is given, so a large canvas cannot hide clipping.
+        Render("settings", () => BuildSettingsDialog(tag), null, null);
+        void Render(string name, Func<Window> build, int? defaultWidth, int? defaultHeight, int tab = -1)
         {
             if (screen == "all" || screen == name) Shoot($"{name}-{tag}", build(), width ?? defaultWidth, height ?? defaultHeight, tab);
         }
@@ -115,10 +130,10 @@ static void Pump(Task task)
     task.GetAwaiter().GetResult();
 }
 
-void Shoot(string name, Window window, int width, int height, int selectTab = -1)
+void Shoot(string name, Window window, int? width, int? height, int selectTab = -1)
 {
-    window.Width = width;
-    window.Height = height;
+    if (width is { } w) window.Width = w;
+    if (height is { } h) window.Height = h;
     window.Show();
 
     // Let bindings settle and the compositor produce a frame before capturing.
@@ -157,6 +172,17 @@ void Shoot(string name, Window window, int width, int height, int selectTab = -1
     }
 
     window.Close();
+}
+
+// Each Settings fixture saves into its own temporary file, seeded with the shown theme.
+SettingsDialog BuildSettingsDialog(string tag)
+{
+    var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
+    var file = Path.Combine(dir.FullName, "settings.json");
+    File.WriteAllText(file, $"{{\"schemaVersion\":1,\"theme\":\"{tag}\"}}");
+    var preferences = new AppPreferencesService(new JsonSettingsStore(file));
+    preferences.Load();
+    return new SettingsDialog { DataContext = new SettingsDialogViewModel(preferences) };
 }
 
 MainWindow BuildMainWindow()

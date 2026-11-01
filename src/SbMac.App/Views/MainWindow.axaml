@@ -545,8 +545,14 @@
                              Height="3" Margin="0,6,0,0"
                              Minimum="0" Maximum="100"
                              Value="{Binding Progress}"
-                             IsIndeterminate="{Binding IsIndeterminate}"
-                             Foreground="{Binding AccentKey, Converter={StaticResource BrushLookup}}" />
+                             IsIndeterminate="{Binding IsIndeterminate}">
+                  <ProgressBar.Foreground>
+                    <MultiBinding Converter="{StaticResource BrushLookup}">
+                      <Binding Path="AccentKey" />
+                      <Binding Path="$self.ActualThemeVariant" />
+                    </MultiBinding>
+                  </ProgressBar.Foreground>
+                </ProgressBar>
               </Grid>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
@@ -581,8 +587,14 @@
                                IsIndeterminate="{Binding IsIndeterminate}"
                                Opacity="{Binding TrayOpacity}"
                                VerticalAlignment="Center"
-                               ToolTip.Tip="{Binding StatusLine}"
-                               Foreground="{Binding AccentKey, Converter={StaticResource BrushLookup}}" />
+                               ToolTip.Tip="{Binding StatusLine}">
+                    <ProgressBar.Foreground>
+                      <MultiBinding Converter="{StaticResource BrushLookup}">
+                        <Binding Path="AccentKey" />
+                        <Binding Path="$self.ActualThemeVariant" />
+                      </MultiBinding>
+                    </ProgressBar.Foreground>
+                  </ProgressBar>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>

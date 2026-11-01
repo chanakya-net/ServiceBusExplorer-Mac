@@ -10,19 +10,25 @@ public interface IUpdateCheckStateStore
     Task SetLastCheckUtcAsync(DateTimeOffset value, CancellationToken cancellationToken = default);
 }
 
-public sealed class JsonUpdateCheckStateStore(string filePath) : IUpdateCheckStateStore
+/// <summary>
+/// The update checker's timestamp, kept in the shared settings document so it and the
+/// user's preferences never overwrite each other.
+/// </summary>
+public sealed class JsonUpdateCheckStateStore(JsonSettingsStore settings) : IUpdateCheckStateStore
 {
+    const string LastCheckKey = "lastUpdateCheckUtc";
+
+    public JsonUpdateCheckStateStore(string filePath)
+        : this(new JsonSettingsStore(filePath))
+    {
+    }
+
     public async Task<DateTimeOffset?> GetLastCheckUtcAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            if (!File.Exists(filePath))
-            {
-                return null;
-            }
-
-            var root = JsonNode.Parse(await File.ReadAllTextAsync(filePath, cancellationToken)) as JsonObject;
-            var text = root?["lastUpdateCheckUtc"]?.GetValue<string>();
+            var root = await settings.ReadAsync(cancellationToken).ConfigureAwait(false);
+            var text = root[LastCheckKey]?.GetValue<string>();
 
             return DateTimeOffset.TryParse(
                 text,
@@ -45,31 +51,9 @@ public sealed class JsonUpdateCheckStateStore(string filePath) : IUpdateCheckSta
     {
         try
         {
-            JsonObject root = new();
-            if (File.Exists(filePath))
-            {
-                try
-                {
-                    root = JsonNode.Parse(await File.ReadAllTextAsync(filePath, cancellationToken)) as JsonObject
-                        ?? new JsonObject();
-                }
-                catch (JsonException)
-                {
-                    // Invalid settings contain no preservable properties; replace them.
-                }
-            }
-
-            root["lastUpdateCheckUtc"] = value.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
-            var directory = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            await File.WriteAllTextAsync(
-                filePath,
-                root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }),
-                cancellationToken);
+            await settings.UpdateAsync(
+                root => root[LastCheckKey] = value.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)

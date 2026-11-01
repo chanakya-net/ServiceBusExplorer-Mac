@@ -29,13 +29,14 @@ namespace SbMac.Tests;
 /// bad template only shows up when the XAML is actually instantiated, so these tests
 /// build each window rather than asserting on the view models alone.
 /// </summary>
-public class UiSmokeTests
+public partial class UiSmokeTests
 {
-    static MainWindowViewModel NewIsolatedViewModel()
+    static MainWindowViewModel NewIsolatedViewModel(SbMac.App.Services.AppPreferencesService? preferences = null)
     {
         var path = Path.Combine(Path.GetTempPath(), "sbmac-test-" + Guid.NewGuid());
         var store = new ConnectionStore(Path.Combine(path, "connections.json"), new FileSecretStore(Path.Combine(path, "secrets.json")));
-        return MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Unexpected network call"));
+        return MainWindowViewModel.CreateIsolated(
+            store, (_, _) => throw new InvalidOperationException("Unexpected network call"), preferences);
     }
 
     sealed class FailingSecrets : ISecretStore

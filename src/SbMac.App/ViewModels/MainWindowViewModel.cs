@@ -25,6 +25,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 {
     readonly ConnectionStore connectionStore;
     readonly IUpdateChecker? updateChecker;
+    readonly AppPreferencesService? preferences;
     Func<NamespaceNodeViewModel, CancellationToken, Task> connectNamespace = (node, token) => node.ConnectAsync(token);
     Task? initialization;
 
@@ -43,10 +44,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
     }
 
-    internal MainWindowViewModel(IUpdateChecker? updateChecker, ConnectionStore connectionStore)
+    /// <summary>The shipping view model, with the preferences the Settings dialog edits.</summary>
+    public MainWindowViewModel(IUpdateChecker? updateChecker, AppPreferencesService preferences)
+        : this(updateChecker, ConnectionStore.CreateDefault(), preferences)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+    }
+
+    internal MainWindowViewModel(
+        IUpdateChecker? updateChecker,
+        ConnectionStore connectionStore,
+        AppPreferencesService? preferences = null)
     {
         this.updateChecker = updateChecker;
         this.connectionStore = connectionStore;
+        this.preferences = preferences;
         Namespaces = [];
         Messages = [];
         Log = [];
@@ -71,13 +83,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Operations.CollectionChanged += (_, _) => RaiseActivityChanged();
     }
 
-    /// <summary>Creates a fixture with caller-owned storage and an isolated connection provider.</summary>
+    /// <summary>
+    /// Creates a fixture with caller-owned storage and an isolated connection provider.
+    /// Settings is only available when the caller supplies its own preferences.
+    /// </summary>
     public static MainWindowViewModel CreateIsolated(ConnectionStore store,
-        Func<NamespaceNodeViewModel, CancellationToken, Task> connectionProvider)
+        Func<NamespaceNodeViewModel, CancellationToken, Task> connectionProvider,
+        AppPreferencesService? preferences = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(connectionProvider);
-        return new MainWindowViewModel(null, store) { connectNamespace = connectionProvider };
+        return new MainWindowViewModel(null, store, preferences) { connectNamespace = connectionProvider };
     }
 
     /// <summary>Set by the window once it's constructed; every dialog goes through this.</summary>
@@ -449,6 +465,26 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // exiting anyway; this just gives them the chance to close politely.
             _ = node.DisposeAsync().AsTask();
         }
+    }
+
+    // ------------------------------------------------------------- settings
+
+    /// <summary>Settings needs preferences to edit; isolated fixtures may have none.</summary>
+    public bool CanOpenSettings => preferences is not null;
+
+    /// <summary>
+    /// Opens Settings. The command stays disabled while the dialog is up, so the menu
+    /// item and Cmd+, cannot stack a second one.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpenSettings))]
+    async Task OpenSettingsAsync()
+    {
+        if (Ui is null || preferences is null)
+        {
+            return;
+        }
+
+        await Ui.ShowSettingsAsync(preferences).ConfigureAwait(true);
     }
 
     // ---------------------------------------------------- connection commands

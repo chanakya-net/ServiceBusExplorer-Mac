@@ -1,8 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
-using SbMac.Core;
-
 namespace SbMac.App.Services;
 
 public sealed class UpdateChecker(
@@ -22,14 +20,15 @@ public sealed class UpdateChecker(
     readonly SemaphoreSlim checkGate = new(1, 1);
     DateTimeOffset? lastAttemptUtc;
 
-    public static IUpdateChecker? CreateDefault()
+    /// <summary>Builds the shipping checker over the app's shared settings document.</summary>
+    public static IUpdateChecker? CreateDefault(JsonSettingsStore settings)
     {
         try
         {
             return new UpdateChecker(
                 new HttpClient(),
                 new BundleVersionProvider(),
-                new JsonUpdateCheckStateStore(AppPaths.SettingsFile),
+                new JsonUpdateCheckStateStore(settings),
                 TimeProvider.System,
                 DefaultRequestTimeout);
         }
