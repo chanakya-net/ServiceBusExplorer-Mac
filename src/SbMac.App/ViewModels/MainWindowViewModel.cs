@@ -264,6 +264,34 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(MessageTableContext))]
     bool showDeadLetter;
 
+    readonly Dictionary<string, IReadOnlyList<SbMac.App.Models.MessageColumnState>> sessionColumns = new();
+    string MessageTableKey => MessageTableContext switch
+    {
+        MessageTableContext.DeadLetter => "deadLetter",
+        MessageTableContext.EventHub => "eventHubs",
+        _ => "serviceBus"
+    };
+
+    public IReadOnlyList<MessageColumnMetadata> MessageColumns
+    {
+        get
+        {
+            var tables = preferences?.Current.MessageTables ?? sessionColumns;
+            tables.TryGetValue(MessageTableKey, out var saved);
+            return MessageTableLayoutViewModel.Resolve(MessageTableContext, saved);
+        }
+    }
+
+    public void SetMessageColumns(IReadOnlyList<MessageColumnMetadata> columns)
+    {
+        var states = columns.Select(c => new SbMac.App.Models.MessageColumnState(c.Id, c.IsVisible)).ToArray();
+        if (preferences is null) sessionColumns[MessageTableKey] = states;
+        else _ = preferences.SetMessageColumnsAsync(MessageTableKey, states);
+        OnPropertyChanged(nameof(MessageColumns));
+    }
+
+    public void RestoreMessageColumns() => SetMessageColumns(MessageTableLayoutViewModel.ForContext(MessageTableContext));
+
     public MessageTableContext MessageTableContext => IsEventHubSelection ? MessageTableContext.EventHub
         : ShowDeadLetter ? MessageTableContext.DeadLetter : MessageTableContext.ServiceBus;
 

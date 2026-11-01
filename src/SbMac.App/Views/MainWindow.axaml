@@ -319,6 +319,9 @@
                           Click="OnClearMessageSelection" />
                 </StackPanel>
 
+                <Button x:Name="ColumnsButton" DockPanel.Dock="Right" Classes="toolbar" Content="Columns ▾">
+                  <Button.Flyout><MenuFlyout /></Button.Flyout>
+                </Button>
                 <Button DockPanel.Dock="Right" Classes="toolbar" Content="Inspector"
                         Command="{Binding ToggleInspectorCommand}"
                         ToolTip.Tip="Show or hide message inspector (⌘⇧I)" />

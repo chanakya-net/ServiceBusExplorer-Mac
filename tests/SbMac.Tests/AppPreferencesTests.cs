@@ -56,6 +56,23 @@ public sealed class AppPreferencesTests : IDisposable
     }
 
     [Fact]
+    public async Task MessageLayoutsSurviveRestartAndPreserveOtherSettings()
+    {
+        File.WriteAllText(SettingsFile, """{"lastUpdateCheckUtc":"2026-08-14T04:30:00Z","messageTables":{"future":{"x":1},"serviceBus":{"other":2}}}""");
+        var preferences = new AppPreferencesService(new JsonSettingsStore(SettingsFile));
+        preferences.Load();
+        Assert.True(await preferences.SetMessageColumnsAsync("serviceBus", [new("sequence", false)]));
+        Assert.True(await preferences.SetMessageColumnsAsync("deadLetter", [new("reason", false)]));
+        var restarted = new AppPreferencesService(new JsonSettingsStore(SettingsFile));
+        var tables = restarted.Load().MessageTables;
+        Assert.False(tables["serviceBus"].Single().Visible);
+        Assert.Equal("reason", tables["deadLetter"].Single().Id);
+        Assert.Equal(2, ReadRoot()["messageTables"]!["serviceBus"]!["other"]!.GetValue<int>());
+        Assert.Equal(1, ReadRoot()["messageTables"]!["future"]!["x"]!.GetValue<int>());
+        Assert.Equal(Timestamp, await new JsonUpdateCheckStateStore(SettingsFile).GetLastCheckUtcAsync(Token));
+    }
+
+    [Fact]
     public async Task InvalidThemeDoesNotDiscardOtherSettings()
     {
         File.WriteAllText(SettingsFile, """{"theme":{},"lastUpdateCheckUtc":"2026-08-14T04:30:00Z","future":{"enabled":true}}""");
