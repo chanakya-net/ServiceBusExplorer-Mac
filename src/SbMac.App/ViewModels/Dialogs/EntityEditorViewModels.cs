@@ -459,6 +459,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         replyTo = definition.ReplyTo ?? string.Empty;
         sessionId = definition.SessionId ?? string.Empty;
         contentType = definition.ContentType ?? string.Empty;
+        isSqlActionExpanded = !string.IsNullOrWhiteSpace(sqlAction);
+        isCorrelationAdvancedExpanded = new[] { messageId, subject, to, replyTo, sessionId, contentType }.Any(value => !string.IsNullOrWhiteSpace(value));
 
         selectedFilterIndex = definition.FilterType.ToLowerInvariant() switch
         {
@@ -513,6 +515,33 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
     [ObservableProperty]
     string contentType;
+
+    [ObservableProperty]
+    bool isSqlActionExpanded;
+
+    [ObservableProperty]
+    bool isCorrelationAdvancedExpanded;
+
+    [ObservableProperty]
+    string? validationError;
+
+    partial void OnNameChanged(string value) => RefreshValidation();
+    partial void OnSqlExpressionChanged(string value) => RefreshValidation();
+    partial void OnSelectedFilterIndexChanged(int value) => RefreshValidation();
+
+    void RefreshValidation()
+    {
+        if (ValidationError is not null) RevealInvalidField();
+    }
+
+    public string? RevealInvalidField()
+    {
+        var field = string.IsNullOrWhiteSpace(Name) ? nameof(Name)
+            : ShowSqlFields && string.IsNullOrWhiteSpace(SqlExpression) ? nameof(SqlExpression) : null;
+        ValidationError = field == nameof(Name) ? "Enter a rule name."
+            : field == nameof(SqlExpression) ? "Enter a SQL expression." : null;
+        return field;
+    }
 
     public bool ShowSqlFields => SelectedFilterIndex == 0;
 

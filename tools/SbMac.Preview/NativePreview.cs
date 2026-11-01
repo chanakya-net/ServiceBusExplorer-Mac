@@ -49,7 +49,7 @@ static class NativePreview
         {
             var viewModel = MainWindowViewModel.CreateIsolated(connections, RejectAzure, loaded);
             var window = new MainWindow { DataContext = viewModel };
-            if (screen is not null) window.Opened += (_, _) => (screen == "topic" ? (Window)BuildTopicFixture() : screen == "subscription" ? BuildSubscriptionFixture() : BuildSendFixture(screen)).Show();
+            if (screen is not null) window.Opened += (_, _) => (screen == "rule" ? (Window)BuildRuleFixture() : screen == "topic" ? BuildTopicFixture() : screen == "subscription" ? BuildSubscriptionFixture() : BuildSendFixture(screen)).Show();
             if (width is { } w) window.Width = w;
             if (height is { } h) window.Height = h;
             return window;
@@ -85,6 +85,11 @@ static class NativePreview
 
         return new SendMessageDialog { DataContext = viewModel };
     }
+
+    static RuleEditorDialog BuildRuleFixture() => new()
+    {
+        DataContext = new RuleEditorViewModel(new RuleDefinition { Name = "orders", FilterType = "Correlation", MessageId = "order-1", ContentType = "application/json" }, true), Height = 400
+    };
 
     static SubscriptionEditorDialog BuildSubscriptionFixture() => new()
     {
