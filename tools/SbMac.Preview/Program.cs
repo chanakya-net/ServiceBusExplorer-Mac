@@ -11,6 +11,7 @@ using Avalonia.VisualTree;
 
 using Azure.Messaging.ServiceBus.Administration;
 
+using SbMac.App;
 using SbMac.App.Services;
 using SbMac.App.Models;
 using SbMac.App.ViewModels;
@@ -25,7 +26,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "columns", "selection-none", "selection-selected", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "main", "columns", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -113,6 +114,7 @@ try
         Render("selection-none", () => BuildMainWindow(), 1360, 860);
         Render("selection-selected", () => BuildMainWindow(), 1360, 860);
         Render("inspector-collapsed", () => { var window = BuildMainWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
+        Render("restored-layout", BuildRestoredLayoutWindow, 1360, 860);
         Render("sidebar-search", BuildSidebarSearchWindow, 1360, 860);
         Render("deadletter", BuildDeadLetterWindow, 1360, 860);
         Render("main-actions", () => BuildMainWindow(), 1360, 860);
@@ -440,6 +442,18 @@ MainWindow BuildMainWindow(bool preferenceFailure = false)
     viewModel.Log.Insert(0, "09:41:20  Connected to contoso-prod.servicebus.windows.net.");
 
     return new MainWindow { DataContext = viewModel };
+}
+
+// Restores a saved panel layout through the real preference path, from a temporary settings file.
+MainWindow BuildRestoredLayoutWindow()
+{
+    var theme = Application.Current!.RequestedThemeVariant == ThemeVariant.Dark ? "dark" : "light";
+    var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
+    var settings = Path.Combine(dir.FullName, "settings.json");
+    File.WriteAllText(settings, """{"theme":"THEME","workspace":{"sidebarWidth":340,"detailsHeight":300,"detailsCollapsed":false,"activityCollapsed":true}}""".Replace("THEME", theme));
+    var window = BuildMainWindow();
+    var preferences = new AppPreferencesService(new JsonSettingsStore(settings));
+    return ((SbMac.App.App)Application.Current!).CreateMainWindow(new AppComposition(preferences, _ => window));
 }
 
 MainWindow BuildSidebarSearchWindow()

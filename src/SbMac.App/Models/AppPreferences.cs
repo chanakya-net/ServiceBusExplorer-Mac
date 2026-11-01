@@ -57,11 +57,43 @@ public sealed record WindowBounds(double X, double Y, double Width, double Heigh
 
 public enum WorkspaceWindowState { Normal, Maximized }
 
-public sealed record WorkspacePreferences(WindowBounds? WindowBounds, WorkspaceWindowState WindowState)
+/// <summary>
+/// Window placement plus the panel layout. Panel fields are independent of window
+/// placement: an unusable window rectangle drops only the rectangle and its state.
+/// </summary>
+public sealed record WorkspacePreferences(
+    WindowBounds? WindowBounds,
+    WorkspaceWindowState WindowState,
+    double SidebarWidth = WorkspacePreferences.DefaultSidebarWidth,
+    double? DetailsHeight = null,
+    bool DetailsCollapsed = false,
+    bool ActivityCollapsed = true)
 {
-    internal WorkspacePreferences Normalize() => WindowBounds is { IsValid: true }
-        ? this with { WindowState = Enum.IsDefined(WindowState) ? WindowState : WorkspaceWindowState.Normal }
-        : new(null, WorkspaceWindowState.Normal);
+    public const double DefaultSidebarWidth = 280;
+    public const double MinSidebarWidth = 200;
+    public const double MaxSidebarWidth = 560;
+    public const double MinDetailsHeight = 120;
+    public const double MaxDetailsHeight = 4000;
+
+    /// <summary>Reset target: no saved placement, default panels (details open, activity collapsed).</summary>
+    public static WorkspacePreferences Default { get; } = new(null, WorkspaceWindowState.Normal);
+
+    /// <summary>Drops unusable values and clamps oversized panel dimensions into their ranges.</summary>
+    internal WorkspacePreferences Normalize()
+    {
+        var validBounds = WindowBounds is { IsValid: true };
+        return this with
+        {
+            WindowBounds = validBounds ? WindowBounds : null,
+            WindowState = validBounds && Enum.IsDefined(WindowState) ? WindowState : WorkspaceWindowState.Normal,
+            SidebarWidth = double.IsFinite(SidebarWidth)
+                ? Math.Clamp(SidebarWidth, MinSidebarWidth, MaxSidebarWidth)
+                : DefaultSidebarWidth,
+            DetailsHeight = DetailsHeight is { } height && double.IsFinite(height)
+                ? Math.Clamp(height, MinDetailsHeight, MaxDetailsHeight)
+                : null
+        };
+    }
 }
 
 public sealed record MessageColumnState(string Id, bool Visible);
