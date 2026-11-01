@@ -11,7 +11,7 @@ using Xunit;
 
 namespace SbMac.Tests;
 
-public sealed class WorkspaceLayoutTests : IDisposable
+public sealed partial class WorkspaceLayoutTests : IDisposable
 {
     readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("sbmac-workspace-");
     string SettingsFile => Path.Combine(directory.FullName, "settings.json");
@@ -77,6 +77,9 @@ public sealed class WorkspaceLayoutTests : IDisposable
     [InlineData("42")]
     [InlineData("{}")]
     [InlineData("{\"windowBounds\":[]}")]
+    [InlineData("{\"windowBounds\":{\"x\":null,\"y\":0,\"width\":1120,\"height\":720}}")]
+    [InlineData("{\"windowBounds\":{\"x\":{},\"y\":0,\"width\":1120,\"height\":720}}")]
+    [InlineData("{\"windowBounds\":{\"x\":true,\"y\":0,\"width\":1120,\"height\":720}}")]
     [InlineData("{\"windowBounds\":{\"x\":0,\"y\":0,\"width\":1120}}")]
     [InlineData("{\"windowBounds\":{\"x\":\"0\",\"y\":0,\"width\":1120,\"height\":720}}")]
     [InlineData("{\"windowBounds\":{\"x\":0,\"y\":0,\"width\":0,\"height\":720}}")]
@@ -261,7 +264,7 @@ public sealed class WorkspaceLayoutTests : IDisposable
         Assert.True(await firstFlush);
         Assert.True(await secondFlush);
         Assert.True(await themeSave);
-        Assert.Equal(3, writes);
+        Assert.Equal(2, writes); // The theme save also persists the latest dirty workspace.
         var loaded = NewPreferences().Load();
         Assert.Equal(preferences.Current, loaded);
     }

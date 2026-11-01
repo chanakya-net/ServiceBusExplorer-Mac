@@ -18,6 +18,8 @@ public sealed class AppPreferencesService
     readonly Func<TimeSpan, CancellationToken, Task> delay;
     CancellationTokenSource? workspaceDelay;
     WorkspacePreferences? delayedWorkspace;
+    bool themeDirty;
+    bool workspaceDirty;
 
     public AppPreferencesService(JsonSettingsStore store) : this(store, Task.Delay) { }
 
@@ -38,8 +40,14 @@ public sealed class AppPreferencesService
     /// <summary>Raised when a queued save completes, on its completion thread.</summary>
     public event EventHandler? SaveCompleted;
 
-    /// <summary>The failure from the most recent save, or null when it succeeded.</summary>
+    /// <summary>The last failure, retained until all changed preferences reach disk.</summary>
     public string? LastSaveError { get; private set; }
+
+    /// <summary>An appearance failure only while the chosen theme remains unsaved.</summary>
+    public string? ThemeSaveError
+    {
+        get { lock (saveLock) return themeDirty ? LastSaveError : null; }
+    }
 
     public bool HasPendingSaves
     {
@@ -79,13 +87,17 @@ public sealed class AppPreferencesService
     public Task<bool> SetThemeAsync(AppTheme theme)
     {
         theme = Enum.IsDefined(theme) ? theme : AppTheme.System;
-        var updated = Current with { Theme = theme };
-        Current = updated;
+        AppPreferences updated;
+        lock (saveLock)
+        {
+            Current = updated = Current with { Theme = theme };
+            themeDirty = true;
+        }
         Changed?.Invoke(this, updated);
 
         lock (saveLock)
         {
-            pendingSave = SaveAfterAsync(pendingSave, root => WriteTheme(root, theme));
+            pendingSave = SaveAfterAsync(pendingSave);
             return pendingSave;
         }
     }
@@ -93,7 +105,11 @@ public sealed class AppPreferencesService
     public void SetWorkspace(WorkspacePreferences workspace)
     {
         workspace = workspace.Normalize();
-        Current = Current with { Workspace = workspace };
+        lock (saveLock)
+        {
+            Current = Current with { Workspace = workspace };
+            workspaceDirty = true;
+        }
         Changed?.Invoke(this, Current);
         lock (saveLock)
         {
@@ -104,12 +120,14 @@ public sealed class AppPreferencesService
         }
     }
 
-    /// <summary>Waits for every queued save. Returns whether the last one succeeded.</summary>
+    /// <summary>Promotes delayed work, retries unsaved changes, and waits for the save queue.</summary>
     public Task<bool> FlushAsync()
     {
         lock (saveLock)
         {
-            PromoteWorkspace();
+            if (delayedWorkspace is not null) PromoteWorkspace();
+            else if (pendingSave.IsCompleted && (themeDirty || workspaceDirty))
+                pendingSave = SaveAfterAsync(pendingSave);
             return pendingSave;
         }
     }
@@ -132,10 +150,10 @@ public sealed class AppPreferencesService
 
     void PromoteWorkspace()
     {
-        if (delayedWorkspace is not { } snapshot) return;
+        if (delayedWorkspace is null) return;
         CancelWorkspaceDelay();
         delayedWorkspace = null;
-        pendingSave = SaveAfterAsync(pendingSave, root => WriteWorkspace(root, snapshot));
+        pendingSave = SaveAfterAsync(pendingSave);
     }
 
     void CancelWorkspaceDelay()
@@ -145,25 +163,46 @@ public sealed class AppPreferencesService
         workspaceDelay = null;
     }
 
-    async Task<bool> SaveAfterAsync(Task<bool> previous, Action<JsonObject> update)
+    async Task<bool> SaveAfterAsync(Task<bool> previous)
     {
         await previous.ConfigureAwait(false);
+        lock (saveLock)
+        {
+            // An earlier queued save may already have persisted these changes.
+            if (!themeDirty && !workspaceDirty) return true;
+        }
         bool saved;
         try
         {
-            await store.UpdateAsync(update).ConfigureAwait(false);
-            LastSaveError = null;
+            var snapshot = (Preferences: Current, Theme: false, Workspace: false);
+            await store.UpdateAsync(root => snapshot = WritePendingPreferences(root)).ConfigureAwait(false);
+            lock (saveLock)
+            {
+                if (snapshot.Theme && Current.Theme == snapshot.Preferences.Theme) themeDirty = false;
+                if (snapshot.Workspace && Current.Workspace == snapshot.Preferences.Workspace) workspaceDirty = false;
+                if (!themeDirty && !workspaceDirty) LastSaveError = null;
+            }
             saved = true;
         }
         catch (Exception exception)
         {
             // The choice already applies for this session.
-            LastSaveError = exception.Message;
+            lock (saveLock) LastSaveError = exception.Message;
             saved = false;
         }
 
         SaveCompleted?.Invoke(this, EventArgs.Empty);
         return saved;
+    }
+
+    (AppPreferences Preferences, bool Theme, bool Workspace) WritePendingPreferences(JsonObject root)
+    {
+        lock (saveLock)
+        {
+            if (themeDirty) WriteTheme(root, Current.Theme);
+            if (workspaceDirty) WriteWorkspace(root, Current.Workspace);
+            return (Current, themeDirty, workspaceDirty);
+        }
     }
 
     static void WriteTheme(JsonObject root, AppTheme theme)
@@ -192,18 +231,18 @@ public sealed class AppPreferencesService
 
     static WorkspacePreferences ParseWorkspace(JsonNode? node)
     {
-        if (node is not JsonObject workspace || workspace["windowBounds"] is not JsonObject bounds)
+        if (node is not JsonObject workspace || workspace["windowBounds"] is not JsonObject bounds ||
+            !TryReadNumber(bounds, "x", out var x) || !TryReadNumber(bounds, "y", out var y) ||
+            !TryReadNumber(bounds, "width", out var width) || !TryReadNumber(bounds, "height", out var height))
             return new(null, WorkspaceWindowState.Normal);
-        try
-        {
-            return new WorkspacePreferences(new(bounds["x"]!.GetValue<double>(), bounds["y"]!.GetValue<double>(),
-                bounds["width"]!.GetValue<double>(), bounds["height"]!.GetValue<double>()),
-                workspace["windowState"]?.ToString() == "maximized" ? WorkspaceWindowState.Maximized : WorkspaceWindowState.Normal).Normalize();
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or FormatException or NullReferenceException or OverflowException)
-        {
-            return new(null, WorkspaceWindowState.Normal);
-        }
+        return new WorkspacePreferences(new(x, y, width, height),
+            workspace["windowState"]?.ToString() == "maximized" ? WorkspaceWindowState.Maximized : WorkspaceWindowState.Normal).Normalize();
+    }
+
+    static bool TryReadNumber(JsonObject source, string key, out double number)
+    {
+        number = 0;
+        return source[key] is JsonValue value && value.TryGetValue(out number);
     }
 
     static void WriteWorkspace(JsonObject root, WorkspacePreferences value)
