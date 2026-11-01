@@ -1282,4 +1282,125 @@ public partial class UiSmokeTests
         window.Show();
         Assert.Equal(family, window.FontFamily);
     }
+
+    // ── S30 import policy dialog: policy/cancel outcomes and long-summary layout ──
+
+    const string ImportSummary = "The file contains 1 queue(s), 0 topic(s) and 0 subscription(s).";
+
+    static Task<ImportConflictPolicy?> OpenImportPolicy(Window owner, out ImportPolicyDialog dialog, string summary = ImportSummary)
+    {
+        var result = ImportPolicyDialog.ShowAsync(owner, summary);
+        dialog = Assert.IsType<ImportPolicyDialog>(Assert.Single(owner.OwnedWindows));
+        dialog.UpdateLayout();
+        return result;
+    }
+
+    static RadioButton PolicyChoice(ImportPolicyDialog dialog, string prefix) =>
+        dialog.GetVisualDescendants().OfType<RadioButton>().Single(r => ((string?)r.Content)?.StartsWith(prefix) == true);
+
+    static Button ImportPolicyButton(ImportPolicyDialog dialog, string label) =>
+        dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, label));
+
+    [AvaloniaFact]
+    public async Task ImportPolicyDefaultsToSkipAndImportReturnsSkip()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        Assert.True(PolicyChoice(dialog, "Skip").IsChecked == true);
+        Assert.True(PolicyChoice(dialog, "Update").IsChecked != true);
+        Assert.True(PolicyChoice(dialog, "Report").IsChecked != true);
+        var import = ImportPolicyButton(dialog, "Import");
+        Assert.True(import.IsDefault);
+        import.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ImportConflictPolicy.Skip, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyUpdateChoiceReturnsUpdate()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        PolicyChoice(dialog, "Update").IsChecked = true;
+        ImportPolicyButton(dialog, "Import").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ImportConflictPolicy.Update, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyReportChoiceReturnsFail()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        PolicyChoice(dialog, "Report").IsChecked = true;
+        ImportPolicyButton(dialog, "Import").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ImportConflictPolicy.Fail, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyCancelButtonReturnsNullWithoutImporting()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        var cancel = ImportPolicyButton(dialog, "Cancel");
+        Assert.True(cancel.IsCancel);
+        PolicyChoice(dialog, "Update").IsChecked = true;
+        cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyEscapeCancelsWithoutImporting()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyWindowCloseCancelsWithoutImporting()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        dialog.Close();
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void ImportPolicyLongSummaryKeepsScrollingAndActionsReachable()
+    {
+        var owner = new Window();
+        owner.Show();
+        var summary = string.Join("\n", Enumerable.Range(1, 80).Select(i => $"Exported from very-long-namespace-{i}.servicebus.windows.net"));
+        _ = OpenImportPolicy(owner, out var dialog, summary);
+        dialog.UpdateLayout();
+        var scroller = Assert.Single(dialog.GetVisualDescendants().OfType<ScrollViewer>());
+        Assert.True(double.IsFinite(scroller.MaxHeight));
+        Assert.True(scroller.MaxHeight <= 340);
+        foreach (var label in new[] { "Cancel", "Import" })
+        {
+            var button = ImportPolicyButton(dialog, label);
+            var origin = button.TranslatePoint(new Point(), dialog)!.Value;
+            Assert.True(origin.Y >= 0 && origin.Y + button.Bounds.Height <= dialog.ClientSize.Height);
+        }
+        foreach (var label in new[] { "Skip", "Update", "Report" })
+        {
+            var choice = PolicyChoice(dialog, label);
+            var origin = choice.TranslatePoint(new Point(), dialog)!.Value;
+            Assert.True(choice.Bounds.Height > 0 && origin.Y >= 0 && origin.Y + choice.Bounds.Height <= dialog.ClientSize.Height);
+        }
+        dialog.Close();
+        owner.Close();
+    }
 }
