@@ -556,3 +556,48 @@ public class SubscriptionEditorValidationTests
         Assert.Empty(edit.ToDefinition().Rules);
     }
 }
+
+public class RuleEditorViewModelTests
+{
+    [Theory]
+    [InlineData("Sql", 0)]
+    [InlineData("Correlation", 1)]
+    [InlineData("True", 2)]
+    [InlineData("False", 3)]
+    public void FilterTypesAndOptionalValuesRoundTrip(string type, int index)
+    {
+        var seed = new SbMac.Core.ImportExport.RuleDefinition { Name = "rule", FilterType = type, SqlExpression = "a = 1", SqlAction = "SET a = 2", CorrelationId = "c", MessageId = "m", Subject = "s", To = "t", ReplyTo = "r", SessionId = "i", ContentType = "json" };
+        var vm = new RuleEditorViewModel(seed, false);
+        Assert.Equal(index, vm.SelectedFilterIndex);
+        Assert.Equal(index == 0, vm.ShowSqlFields);
+        Assert.Equal(index == 1, vm.ShowCorrelationFields);
+        Assert.True(vm.IsSqlActionExpanded);
+        Assert.True(vm.IsCorrelationAdvancedExpanded);
+        var result = vm.ToDefinition();
+        Assert.Equal(type, result.FilterType);
+        Assert.Equal(seed.SqlExpression, result.SqlExpression);
+        Assert.Equal(seed.SqlAction, result.SqlAction);
+        Assert.Equal(seed.CorrelationId, result.CorrelationId);
+        Assert.Equal(seed.MessageId, result.MessageId);
+        Assert.Equal(seed.Subject, result.Subject);
+        Assert.Equal(seed.To, result.To);
+        Assert.Equal(seed.ReplyTo, result.ReplyTo);
+        Assert.Equal(seed.SessionId, result.SessionId);
+        Assert.Equal(seed.ContentType, result.ContentType);
+    }
+
+    [Fact]
+    public void ValidationRevealsFirstInvalidField()
+    {
+        var vm = new RuleEditorViewModel(new SbMac.Core.ImportExport.RuleDefinition { Name = "" }, true) { SqlExpression = "" };
+        Assert.False(vm.IsSqlActionExpanded);
+        Assert.False(vm.IsCorrelationAdvancedExpanded);
+        Assert.Equal(nameof(vm.Name), vm.RevealInvalidField());
+        Assert.NotNull(vm.ValidationError);
+        vm.Name = "rule";
+        Assert.Equal(nameof(vm.SqlExpression), vm.RevealInvalidField());
+        vm.SqlExpression = "1=1";
+        Assert.Null(vm.RevealInvalidField());
+        Assert.Null(vm.ValidationError);
+    }
+}

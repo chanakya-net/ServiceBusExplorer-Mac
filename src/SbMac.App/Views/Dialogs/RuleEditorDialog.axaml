@@ -7,20 +7,21 @@
         x:Class="SbMac.App.Views.Dialogs.RuleEditorDialog"
         x:DataType="vm:RuleEditorViewModel"
         Title="{Binding DialogTitle}"
-        Width="600" SizeToContent="Height"
-        MinHeight="360"
-        CanResize="False"
+        Width="620" Height="600" MinWidth="480" MinHeight="360" MaxHeight="700"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner" Opened="OnOpened">
 
-  <StackPanel Margin="22" Spacing="12">
+  <Grid Margin="22" RowDefinitions="Auto,*,Auto">
 
-    <TextBlock Text="{Binding DialogTitle}" Classes="title"
+    <TextBlock Grid.Row="0" Text="{Binding DialogTitle}" Classes="title"
                Margin="0,0,0,4" TextTrimming="CharacterEllipsis" />
 
+    <ScrollViewer Grid.Row="1">
+    <StackPanel Spacing="12">
+    <TextBlock Classes="caption" Text="ESSENTIAL" />
     <Grid ColumnDefinitions="150,*">
       <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
-      <TextBox Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}" />
+      <TextBox x:Name="NameField" Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}" />
     </Grid>
 
     <Grid ColumnDefinitions="150,*">
@@ -35,16 +36,18 @@
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="SQL expression"
                    VerticalAlignment="Top" Margin="0,6,10,0" />
-        <TextBox Grid.Column="1" Classes="mono" Text="{Binding SqlExpression}"
+        <TextBox x:Name="SqlExpression" Grid.Column="1" Classes="mono" Text="{Binding SqlExpression}"
                  AcceptsReturn="True" TextWrapping="Wrap" Height="70"
                  PlaceholderText="region = 'emea' AND priority &gt; 3" />
       </Grid>
 
+      <Expander HorizontalAlignment="Stretch" Header="Optional SQL action" IsExpanded="{Binding IsSqlActionExpanded}" HorizontalContentAlignment="Stretch">
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="SQL action" />
         <TextBox Grid.Column="1" Classes="mono" Text="{Binding SqlAction}"
                  PlaceholderText="optional, e.g. SET routed = 'yes'" />
       </Grid>
+      </Expander>
     </StackPanel>
 
     <!-- ───────────── correlation filter ───────────── -->
@@ -57,6 +60,8 @@
         <TextBox Grid.Column="1" Text="{Binding CorrelationId}" />
       </Grid>
 
+      <Expander HorizontalAlignment="Stretch" Header="Advanced correlation fields" IsExpanded="{Binding IsCorrelationAdvancedExpanded}" HorizontalContentAlignment="Stretch">
+      <StackPanel Spacing="10" Margin="0,10,0,0">
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Message ID" />
         <TextBox Grid.Column="1" Text="{Binding MessageId}" />
@@ -86,13 +91,20 @@
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Content type" />
         <TextBox Grid.Column="1" Text="{Binding ContentType}" />
       </Grid>
+      </StackPanel>
+      </Expander>
     </StackPanel>
 
+    </StackPanel>
+    </ScrollViewer>
+    <StackPanel Grid.Row="2" Spacing="8">
+    <TextBlock Classes="error" Text="{Binding ValidationError}" IsVisible="{Binding !!ValidationError}" TextWrapping="Wrap" />
     <StackPanel Classes="dialogButtons" Orientation="Horizontal"
                 HorizontalAlignment="Right" Margin="0,6,0,0">
-      <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
-      <Button Classes="primary" Content="Save" IsDefault="True" Click="OnSave" IsEnabled="{Binding CanSave}" />
+      <Button x:Name="CancelButton" Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button x:Name="SaveButton" Classes="primary" Content="Save" IsDefault="True" Click="OnSave" />
+    </StackPanel>
     </StackPanel>
 
-  </StackPanel>
+  </Grid>
 </Window>
