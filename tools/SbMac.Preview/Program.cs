@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "main", "selection-none", "selection-selected", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -109,6 +109,8 @@ try
         if (theme != "both" && theme != tag) continue;
         Application.Current!.RequestedThemeVariant = variant;
         Render("main", () => BuildMainWindow(), 1360, 860);
+        Render("selection-none", () => BuildMainWindow(), 1360, 860);
+        Render("selection-selected", () => BuildMainWindow(), 1360, 860);
         Render("inspector-collapsed", () => { var window = BuildMainWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
         Render("sidebar-search", BuildSidebarSearchWindow, 1360, 860);
         Render("deadletter", BuildDeadLetterWindow, 1360, 860);
@@ -258,6 +260,15 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         }
+    }
+    if (name.StartsWith("selection-selected-"))
+    {
+        var grid = window.FindControl<DataGrid>("MessageGrid")!;
+        var vm = (MainWindowViewModel)window.DataContext!;
+        grid.SelectedItems.Add(vm.Messages[0]);
+        grid.SelectedItems.Add(vm.Messages[1]);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
     }
     if (name.Contains("-actions-"))
     {
