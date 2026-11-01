@@ -452,6 +452,56 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void InspectorTogglePreservesDetailsSelectionAndHeight()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        var first = BuildMessageRow(1);
+        var second = BuildMessageRow(2);
+        viewModel.Messages.Add(first);
+        viewModel.Messages.Add(second);
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        grid.SelectedItems.Add(first);
+        grid.SelectedItems.Add(second);
+        var inspected = viewModel.SelectedMessage;
+        var body = viewModel.BodyText;
+        var properties = viewModel.PropertiesText;
+        var layout = window.GetControl<Grid>("MessageDetailLayout");
+        layout.RowDefinitions[3].Height = new GridLength(250);
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Assert.False(viewModel.IsInspectorVisible);
+        Assert.False(window.GetControl<Border>("MessageInspector").IsVisible);
+        Assert.Same(inspected, viewModel.SelectedMessage);
+        Assert.Equal(body, viewModel.BodyText);
+        Assert.Equal(properties, viewModel.PropertiesText);
+        Assert.Equal(2, viewModel.SelectedMessages.Count);
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Assert.True(window.GetControl<Border>("MessageInspector").IsVisible);
+        Assert.Equal(new GridLength(250), layout.RowDefinitions[3].Height);
+        Assert.Same(inspected, viewModel.SelectedMessage);
+        Assert.Equal(2, viewModel.SelectedMessages.Count);
+    }
+
+    [AvaloniaFact]
+    public void InspectorToggleMovesFocusToUsableControl()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        Assert.True(grid.IsFocused || grid.IsKeyboardFocusWithin);
+        Assert.False(window.GetControl<TabControl>("InspectorTabs").IsEffectivelyVisible);
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var tabs = window.GetControl<TabControl>("InspectorTabs");
+        Assert.True(tabs.IsEffectivelyVisible);
+        Assert.True(tabs.IsKeyboardFocusWithin);
+    }
+
+    [AvaloniaFact]
     public void BulkSelectionControlsSelectAndClearEveryLoadedMessage()
     {
         var viewModel = NewIsolatedViewModel();

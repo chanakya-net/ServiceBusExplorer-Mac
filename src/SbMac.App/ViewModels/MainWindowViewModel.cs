@@ -119,6 +119,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    [ObservableProperty]
+    bool isInspectorVisible = true;
+
+    [RelayCommand]
+    void ToggleInspector() => IsInspectorVisible = !IsInspectorVisible;
+
     public ObservableCollection<MessageRowViewModel> Messages { get; }
 
     public ObservableCollection<string> Log { get; }
