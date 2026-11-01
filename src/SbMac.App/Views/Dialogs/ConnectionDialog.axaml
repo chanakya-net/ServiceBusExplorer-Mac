@@ -149,7 +149,7 @@
   </StackPanel>
   </ScrollViewer>
     <StackPanel Grid.Row="1" Classes="dialogButtons" Orientation="Horizontal" HorizontalAlignment="Right">
-      <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button x:Name="CancelButton" Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
       <Button x:Name="SaveButton" Classes="primary" Content="Save" IsDefault="True" Click="OnSave" />
     </StackPanel>
 
