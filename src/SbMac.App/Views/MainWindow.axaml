@@ -62,6 +62,7 @@
       <NativeMenuItem Header="View">
         <NativeMenu>
           <NativeMenuItem Header="Refresh" Command="{Binding RefreshCommand}" Gesture="Cmd+Shift+R" />
+          <NativeMenuItem Header="Toggle Message Inspector" Command="{Binding ToggleInspectorCommand}" Gesture="Cmd+Shift+I" />
           <NativeMenuItem Header="Clear Log" Command="{Binding ClearLogCommand}" />
         </NativeMenu>
       </NativeMenuItem>
@@ -281,7 +282,7 @@
 
       <!-- ─────────────── entity detail + messages ─────────────── -->
       <!-- The list carries the scanning work, so it gets the larger share by default. -->
-      <Grid Grid.Column="2" RowDefinitions="Auto,1.7*,Auto,*" Margin="18,0,18,0">
+      <Grid x:Name="MessageDetailLayout" Grid.Column="2" RowDefinitions="Auto,1.5*,Auto,*" Margin="18,0,18,0">
 
         <!-- entity header -->
         <StackPanel Grid.Row="0" Margin="2,16,2,12" Spacing="4">
@@ -314,6 +315,10 @@
                           IsEnabled="{Binding HasSelectedMessages}"
                           Click="OnClearMessageSelection" />
                 </StackPanel>
+
+                <Button DockPanel.Dock="Right" Classes="toolbar" Content="Inspector"
+                        Command="{Binding ToggleInspectorCommand}"
+                        ToolTip.Tip="Show or hide message inspector (⌘⇧I)" />
 
                 <Button x:Name="DeleteSelectedMessagesButton"
                         DockPanel.Dock="Right" Classes="toolbar destructive"
@@ -394,12 +399,12 @@
           </Grid>
         </Border>
 
-        <GridSplitter Grid.Row="2" Height="7"
+        <GridSplitter Grid.Row="2" Height="7" IsVisible="{Binding IsInspectorVisible}"
                       HorizontalAlignment="Stretch" ResizeDirection="Rows" />
 
         <!-- message detail -->
-        <Border Grid.Row="3" Classes="card" Margin="0,0,0,14">
-          <TabControl>
+        <Border x:Name="MessageInspector" Grid.Row="3" Classes="card" Margin="0,0,0,14" IsVisible="{Binding IsInspectorVisible}">
+          <TabControl x:Name="InspectorTabs">
 
             <TabItem Header="Body">
               <Grid RowDefinitions="Auto,*">

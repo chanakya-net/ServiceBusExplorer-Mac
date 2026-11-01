@@ -18,6 +18,9 @@ namespace SbMac.App.Views;
 public partial class MainWindow : Window, IUiServices
 {
     readonly IUriLauncher uriLauncher;
+    GridLength tableHeight = new(1.5, GridUnitType.Star);
+    GridLength inspectorHeight = new(1, GridUnitType.Star);
+    MainWindowViewModel? subscribedViewModel;
 
     public MainWindow() : this(new SystemUriLauncher())
     {
@@ -39,9 +42,39 @@ public partial class MainWindow : Window, IUiServices
     {
         base.OnDataContextChanged(e);
 
-        if (ViewModel is { } viewModel)
+        if (subscribedViewModel is not null)
+            subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        subscribedViewModel = ViewModel;
+        if (subscribedViewModel is { } viewModel)
         {
             viewModel.Ui = this;
+            viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            UpdateInspectorVisibility(viewModel.IsInspectorVisible, moveFocus: false);
+        }
+    }
+
+    void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.IsInspectorVisible) && ViewModel is { } vm)
+            UpdateInspectorVisibility(vm.IsInspectorVisible, moveFocus: true);
+    }
+
+    void UpdateInspectorVisibility(bool visible, bool moveFocus)
+    {
+        var rows = MessageDetailLayout.RowDefinitions;
+        if (visible)
+        {
+            rows[1].Height = tableHeight;
+            rows[3].Height = inspectorHeight;
+            if (moveFocus) Avalonia.Threading.Dispatcher.UIThread.Post(() => InspectorTabs.ContainerFromIndex(Math.Max(0, InspectorTabs.SelectedIndex))?.Focus());
+        }
+        else
+        {
+            tableHeight = rows[1].Height;
+            inspectorHeight = rows[3].Height;
+            rows[1].Height = new GridLength(1, GridUnitType.Star);
+            rows[3].Height = new GridLength(0);
+            if (moveFocus) MessageGrid.Focus();
         }
     }
 
