@@ -49,8 +49,7 @@ public sealed class MessageDialog : Window
         var body = new TextBlock
         {
             Text = message,
-            TextWrapping = TextWrapping.Wrap,
-            MaxHeight = 340
+            TextWrapping = TextWrapping.Wrap
         };
 
         var buttons = new StackPanel
@@ -64,6 +63,7 @@ public sealed class MessageDialog : Window
         if (confirmText is not null)
         {
             var cancel = new Button { Content = dismissText, MinWidth = 88, IsCancel = true };
+            cancel.Classes.Add("secondary");
             cancel.Click += (_, _) => Close(false);
             buttons.Children.Add(cancel);
 
@@ -73,15 +73,33 @@ public sealed class MessageDialog : Window
                 confirm.Classes.Add("destructive");
             }
 
+            if (!destructive) confirm.Classes.Add("primary");
             confirm.Click += (_, _) => Close(true);
             buttons.Children.Add(confirm);
         }
         else
         {
             var ok = new Button { Content = "OK", MinWidth = 88, IsDefault = true, IsCancel = true };
+            ok.Classes.Add("primary");
             ok.Click += (_, _) => Close(true);
             buttons.Children.Add(ok);
         }
+
+        var scroller = new ScrollViewer
+        {
+            Content = body,
+            MaxHeight = 340,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+        };
+        Opened += (_, _) =>
+        {
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is null) return;
+            var frame = FrameSize ?? ClientSize;
+            var available = screen.WorkingArea.Height / screen.Scaling - (frame.Height - ClientSize.Height);
+            scroller.MaxHeight = Math.Max(0, Math.Min(340, available - heading.Bounds.Height - buttons.Bounds.Height - 68));
+            MaxHeight = Math.Max(0, available);
+        };
 
         Content = new StackPanel
         {
@@ -90,12 +108,7 @@ public sealed class MessageDialog : Window
             Children =
             {
                 heading,
-                new ScrollViewer
-                {
-                    Content = body,
-                    MaxHeight = 340,
-                    HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
-                },
+                scroller,
                 buttons
             }
         };

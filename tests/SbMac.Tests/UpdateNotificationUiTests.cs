@@ -60,6 +60,8 @@ public sealed class UpdateNotificationUiTests
 
         Assert.Equal("Later", buttons[0].Content);
         Assert.Equal("View Release", buttons[1].Content);
+        Assert.True(buttons[0].IsCancel);
+        Assert.True(buttons[1].IsDefault);
         Assert.Contains("Version 1.4.0 is available", GetMessage(dialog));
         Assert.Contains("using 1.3.2", GetMessage(dialog));
         buttons[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
