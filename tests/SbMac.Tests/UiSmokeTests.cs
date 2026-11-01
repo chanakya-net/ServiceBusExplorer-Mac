@@ -507,6 +507,58 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void QueueSaveRevealsAndFocusesInvalidOptionalDuration()
+    {
+        var vm = new QueueEditorViewModel(new QueueDefinition { Name = "orders" }, true)
+        { AutoDeleteOnIdle = "invalid" };
+        var window = new QueueEditorDialog { DataContext = vm, Height = 520 };
+        window.Show();
+        var save = window.FindControl<Button>("SaveButton")!;
+        Assert.True(save.Focus());
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(vm.IsOptionalExpanded);
+        var input = window.FindControl<TextBox>("AutoDeleteOnIdle")!;
+        Assert.True(input.IsFocused);
+        Assert.Equal("invalid", input.Text);
+        window.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, null);
+        window.KeyTextInput("00:05:00");
+        Assert.True(vm.CanSave);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void QueueCreationValidationFocusesAndScrollsToFieldWithActionsReachable()
+    {
+        var vm = new QueueEditorViewModel(new QueueDefinition { Name = "orders" }, true)
+        { DuplicateDetectionHistoryTimeWindow = "bad" };
+        var window = new QueueEditorDialog { DataContext = vm, Height = 400 };
+        window.Show();
+        var save = window.FindControl<Button>("SaveButton")!;
+        save.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(vm.IsCreationExpanded);
+        var input = window.FindControl<TextBox>("DuplicateDetectionHistoryTimeWindow")!;
+        Assert.True(input.IsFocused);
+        Assert.Equal("bad", input.Text);
+        var point = input.TranslatePoint(new Point(), window)!.Value;
+        Assert.InRange(point.Y, 0, window.ClientSize.Height - input.Bounds.Height);
+        foreach (var name in new[] { "SaveButton", "CancelButton" })
+        {
+            var button = window.FindControl<Button>(name)!;
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.InRange(origin.Y + button.Bounds.Height, 0, window.ClientSize.Height);
+        }
+        window.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, null);
+        window.KeyTextInput("00:10:00");
+        Assert.True(vm.CanSave);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void TopicEditorLoads()
     {
         var window = new TopicEditorDialog
