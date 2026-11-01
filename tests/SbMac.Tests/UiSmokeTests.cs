@@ -1019,6 +1019,79 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void NarrowMessageHeaderKeepsSelectionControlsAndMovesActionsToMenu()
+    {
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        Assert.True(window.GetControl<Button>("SelectAllMessagesButton").IsEffectivelyVisible);
+        Assert.True(window.GetControl<Button>("MessageActionsButton").IsEffectivelyVisible);
+        Assert.False(window.GetControl<Button>("EditAndResendButton").IsEffectivelyVisible);
+        var menu = Assert.IsType<MenuFlyout>(window.GetControl<Button>("MessageActionsButton").Flyout);
+        Assert.Contains(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, "Edit and resend…"));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void OverflowMenuItemsShareCommandsAndGuardsWithInlineControls()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = vm };
+        window.Show();
+        window.UpdateLayout();
+        var button = window.GetControl<Button>("MessageActionsButton");
+        var menu = Assert.IsType<MenuFlyout>(button.Flyout);
+        menu.ShowAt(button);
+        window.UpdateLayout();
+        var items = menu.Items.OfType<MenuItem>().ToDictionary(i => (string)i.Header!);
+        Assert.Same(vm.ResubmitSelectedCommand, items["Resubmit selected…"].Command);
+        Assert.Same(vm.DeleteSelectedMessagesCommand, items["Delete selected…"].Command);
+        Assert.Same(vm.ResubmitCommand, items["Edit and resend…"].Command);
+        Assert.Same(vm.ToggleInspectorCommand, items["Inspector"].Command);
+        // No selection -> bulk commands stay guarded, exactly as the inline buttons are.
+        Assert.False(items["Resubmit selected…"].IsEffectivelyEnabled);
+        Assert.False(items["Delete selected…"].IsEffectivelyEnabled);
+        Assert.False(items["Edit and resend…"].IsEffectivelyEnabled);
+        Assert.Empty(vm.SelectedMessages);
+        menu.Hide();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void WideHeaderKeepsInlineActionsAndHidesOverflow()
+    {
+        var window = new MainWindow { Width = 1700, Height = 900, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        Assert.False(window.HeaderCompact);
+        Assert.True(window.GetControl<Button>("EditAndResendButton").IsEffectivelyVisible);
+        Assert.False(window.GetControl<Button>("MessageActionsButton").IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void MainToolbarFitsWithLabelsAtMinimumWindow()
+    {
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        var toolbar = window.GetControl<DockPanel>("MainToolbar");
+        Assert.False(window.ToolbarCompact);
+        Assert.All(toolbar.Children.OfType<Control>().Where(c => c.IsVisible),
+            c => Assert.True(c.Bounds.Right <= toolbar.Bounds.Width + 0.5));
+        window.Close();
+    }
+
+    [Fact]
+    public void AdaptiveWidthFlagsContentWiderThanAvailableSpace()
+    {
+        var wide = new Border { Width = 300 };
+        var other = new Border { Width = 200 };
+        Assert.True(SbMac.App.Views.AdaptiveWidth.NeedsCompaction([wide, other], 400));
+        Assert.False(SbMac.App.Views.AdaptiveWidth.NeedsCompaction([wide, other], 500));
+    }
+
+    [AvaloniaFact]
     public void BulkSelectionControlsSelectAndClearEveryLoadedMessage()
     {
         var viewModel = NewIsolatedViewModel();
