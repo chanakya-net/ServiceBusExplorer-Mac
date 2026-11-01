@@ -280,6 +280,49 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void SendMessageKeepsExpandedFooterInsideWorkArea()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders"));
+        var window = new SendMessageDialog { DataContext = vm, MaxHeight = 400 };
+        window.Show();
+        var area = (window.Screens.ScreenFromWindow(window) ?? window.Screens.Primary!).WorkingArea;
+        window.Position = new PixelPoint(area.X, area.Bottom - 100);
+        vm.IsMetadataExpanded = vm.IsPropertiesExpanded = vm.IsDeliveryExpanded = true;
+        window.UpdateLayout();
+        var screen = window.Screens.ScreenFromWindow(window) ?? window.Screens.Primary!;
+        var frame = window.FrameSize ?? window.ClientSize;
+        Assert.True(window.Position.X >= area.X && window.Position.Y >= area.Y);
+        Assert.True(window.Position.X + frame.Width * screen.Scaling <= area.Right);
+        Assert.True(window.Position.Y + frame.Height * screen.Scaling <= area.Bottom);
+        foreach (var button in window.GetVisualDescendants().OfType<Button>().Where(b => Equals(b.Content, "Send") || Equals(b.Content, "Cancel")))
+        {
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.True(origin.Y >= 0 && origin.Y + button.Bounds.Height <= window.ClientSize.Height);
+        }
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SendMessageEmptyBodyValidationFocusesBodyAfterScrolling()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { IsMetadataExpanded = true, IsDeliveryExpanded = true, Copies = 3 };
+        var window = new SendMessageDialog { DataContext = vm, MaxHeight = 400 };
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+        window.Show();
+        window.UpdateLayout();
+        var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().First();
+        scroll.Offset = new Vector(0, scroll.Extent.Height);
+        var send = window.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Send"));
+        send.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.False(closed);
+        Assert.True(window.FindControl<TextBox>("BodyInput")!.IsKeyboardFocusWithin);
+        Assert.Equal(3, vm.Copies);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void SendMessageEnterInBodyDoesNotSendAndEscapeCancels()
     {
         var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Body = "first" };

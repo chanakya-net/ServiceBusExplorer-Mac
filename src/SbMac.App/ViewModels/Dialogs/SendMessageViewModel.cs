@@ -38,6 +38,8 @@ public sealed partial class PropertyRowViewModel : ViewModelBase
     string value = string.Empty;
 }
 
+public enum SendValidationField { Body, Copies, Schedule }
+
 /// <summary>Backs the compose/send dialog, also used for resubmitting a dead-lettered message.</summary>
 public sealed partial class SendMessageViewModel : ViewModelBase
 {
@@ -99,7 +101,7 @@ public sealed partial class SendMessageViewModel : ViewModelBase
     bool isDeliveryExpanded;
 
     [ObservableProperty]
-    string? invalidField;
+    SendValidationField? invalidField;
 
     [ObservableProperty]
     string contentType = string.Empty;
@@ -171,14 +173,14 @@ public sealed partial class SendMessageViewModel : ViewModelBase
         if (string.IsNullOrEmpty(Body))
         {
             ValidationError = "A message body is required.";
-            InvalidField = "Body";
+            InvalidField = SendValidationField.Body;
             return null;
         }
 
         if (Copies < 1)
         {
             IsDeliveryExpanded = true;
-            InvalidField = "Copies";
+            InvalidField = SendValidationField.Copies;
             ValidationError = "Number of copies must be at least 1.";
             return null;
         }
@@ -190,7 +192,7 @@ public sealed partial class SendMessageViewModel : ViewModelBase
             if (when <= DateTimeOffset.Now)
             {
                 IsDeliveryExpanded = true;
-                InvalidField = "Schedule";
+                InvalidField = SendValidationField.Schedule;
                 ValidationError = "The scheduled time must be in the future.";
                 return null;
             }

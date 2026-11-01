@@ -36,6 +36,17 @@ public class EntityPathTests
 public class SendMessageViewModelTests
 {
     [Fact]
+    public void SendMessageEmptyBodyPreservesOtherFields()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Copies = 3, Subject = "label" };
+        Assert.Null(vm.Build());
+        Assert.Equal("A message body is required.", vm.ValidationError);
+        Assert.Equal(SendValidationField.Body, vm.InvalidField);
+        Assert.Equal(3, vm.Copies);
+        Assert.Equal("label", vm.Subject);
+    }
+
+    [Fact]
     public void OptionalSectionsStartCollapsedAndSeededSectionsOpen()
     {
         var empty = new SendMessageViewModel(new SendMessageRequest("orders"));

@@ -67,7 +67,13 @@ static class NativePreview
     /// <summary>Standalone deterministic Send dialog, so native keyboard checks reach it without Azure.</summary>
     static SendMessageDialog BuildSendFixture(string screen)
     {
-        var request = new SendMessageRequest("orders");
+        var seed = screen == "send" ? new MessageRecord
+        {
+            Body = BinaryData.FromString("{\n  \"orderId\": 40921\n}"), SourceEntityPath = "orders",
+            Subject = "order-created", ContentType = "application/json",
+            ApplicationProperties = new Dictionary<string, object?> { ["region"] = "emea" }
+        } : null;
+        var request = new SendMessageRequest("orders", seed, seed is null ? null : "Editing a received message");
         var viewModel = new SendMessageViewModel(request);
         if (screen == "send-delivery")
         {

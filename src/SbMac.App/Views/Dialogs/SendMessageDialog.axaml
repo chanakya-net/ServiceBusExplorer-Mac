@@ -48,7 +48,7 @@
             <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Copies" /><NumericUpDown x:Name="CopiesInput" Grid.Column="1" Minimum="1" Maximum="10000" Increment="1" FormatString="0" Value="{Binding Copies}" /></Grid>
             <CheckBox Content="Replace {n} in the body with the copy number" IsChecked="{Binding NumberCopies}" />
             <CheckBox x:Name="ScheduleToggle" Content="Schedule for later" IsChecked="{Binding Schedule}" IsVisible="{Binding ShowServiceBusFields}" />
-            <Grid ColumnDefinitions="110,*,6,Auto" IsVisible="{Binding ShowScheduleFields}"><TextBlock Classes="fieldLabel" Text="Enqueue at" /><DatePicker x:Name="ScheduleInput" Grid.Column="1" SelectedDate="{Binding ScheduledDate}" /><TimePicker Grid.Column="3" SelectedTime="{Binding ScheduledTime}" /></Grid>
+            <Grid ColumnDefinitions="110,*,6,Auto" IsVisible="{Binding ShowScheduleFields}"><TextBlock Classes="fieldLabel" Text="Enqueue at" /><DatePicker Grid.Column="1" SelectedDate="{Binding ScheduledDate}" /><TimePicker Grid.Column="3" SelectedTime="{Binding ScheduledTime}" /></Grid>
           </StackPanel>
         </Expander>
       </StackPanel>
