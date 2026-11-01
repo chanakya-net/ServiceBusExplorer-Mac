@@ -31,6 +31,51 @@ namespace SbMac.Tests;
 /// </summary>
 public partial class UiSmokeTests
 {
+    [AvaloniaFact]
+    public async Task MessageDialogKeepsLongWarningScrollableAndEscapeCancels()
+    {
+        var owner = new Window();
+        owner.Show();
+        var message = "Delete 123 messages from orders?\n" + string.Concat(Enumerable.Repeat("Long warning text. ", 500));
+        var result = MessageDialog.ConfirmAsync(owner, "Delete messages", message, "Delete", true);
+        var dialog = Assert.IsType<MessageDialog>(Assert.Single(owner.OwnedWindows));
+        dialog.UpdateLayout();
+        var root = Assert.IsType<StackPanel>(dialog.Content);
+        var scroller = Assert.IsType<ScrollViewer>(root.Children[1]);
+        var body = Assert.IsType<TextBlock>(scroller.Content);
+        var buttons = Assert.IsType<StackPanel>(root.Children[2]).Children.Cast<Button>().ToArray();
+        Assert.Equal(message, body.Text);
+        Assert.True(double.IsPositiveInfinity(body.MaxHeight));
+        Assert.True(scroller.Extent.Height > scroller.Viewport.Height);
+        Assert.Contains("secondary", buttons[0].Classes);
+        Assert.Contains("destructive", buttons[1].Classes);
+        Assert.True(buttons[1].IsDefault);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.False(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task MessageDialogEnterConfirmsDefaultAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = MessageDialog.ConfirmAsync(owner, "Proceed", "Continue?", "Continue", false);
+        var dialog = Assert.IsType<MessageDialog>(Assert.Single(owner.OwnedWindows));
+        var root = Assert.IsType<StackPanel>(dialog.Content);
+        var buttons = Assert.IsType<StackPanel>(root.Children[2]).Children.Cast<Button>().ToArray();
+        Assert.Equal("Cancel", buttons[0].Content);
+        Assert.Equal("Continue", buttons[1].Content);
+        Assert.Contains("primary", buttons[1].Classes);
+        buttons[0].Focus();
+        Assert.True(buttons[0].IsFocused);
+        dialog.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        Assert.True(buttons[1].IsFocused);
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.True(await result);
+        owner.Close();
+    }
+
     static MainWindowViewModel NewIsolatedViewModel(SbMac.App.Services.AppPreferencesService? preferences = null)
     {
         var path = Path.Combine(Path.GetTempPath(), "sbmac-test-" + Guid.NewGuid());

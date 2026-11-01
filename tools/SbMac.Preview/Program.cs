@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "settings", "preference-failure", "states" };
+var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -150,6 +150,8 @@ try
         Render("subscription-invalid", () => new SubscriptionEditorDialog { DataContext = new SubscriptionEditorViewModel(
             "order-events", new SubscriptionDefinition { Name = "audit", MaxDeliveryCount = 10 }, true)
             { AutoDeleteOnIdle = "invalid" } }, 620, 520);
+        foreach (var name in new[] { "message-info", "message-error", "message-destructive", "message-update", "message-long" })
+            Render(name, () => BuildMessageDialog(name), null, null);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
         Render("states", BuildStatesWindow, 760, 560);
@@ -265,6 +267,21 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
     }
 
     window.Close();
+}
+
+// Uses the actual dialog constructor; all fixture text is synthetic and isolated.
+static Window BuildMessageDialog(string name)
+{
+    var (title, message, kind, confirm, destructive, dismiss) = name switch
+    {
+        "message-error" => ("Unable to connect", "The connection could not be opened.", MessageDialogKind.Error, (string?)null, false, "OK"),
+        "message-destructive" => ("Delete messages", "Delete 123 messages from orders? This cannot be undone.", MessageDialogKind.Info, "Delete", true, "Cancel"),
+        "message-update" => ("Update available", "Version 1.4.0 is available. You are using 1.3.2.", MessageDialogKind.Info, "View Release", false, "Later"),
+        "message-long" => ("Long message", string.Concat(Enumerable.Repeat("A long warning with details for review. ", 100)), MessageDialogKind.Info, "Continue", false, "Cancel"),
+        _ => ("Information", "The operation completed successfully.", MessageDialogKind.Info, (string?)null, false, "OK")
+    };
+    return (Window)Activator.CreateInstance(typeof(MessageDialog), BindingFlags.Instance | BindingFlags.NonPublic,
+        null, [title, message, kind, confirm, destructive, dismiss], null)!;
 }
 
 // Representative control states on one canvas: normal, disabled, selected, destructive,
