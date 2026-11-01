@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using SbMac.App.ViewModels.Dialogs;
 using SbMac.App.Views.Dialogs;
 using SbMac.Core.Messaging;
+using SbMac.Core.ImportExport;
 
 using SbMac.App;
 using SbMac.App.Services;
@@ -48,7 +49,7 @@ static class NativePreview
         {
             var viewModel = MainWindowViewModel.CreateIsolated(connections, RejectAzure, loaded);
             var window = new MainWindow { DataContext = viewModel };
-            if (screen is not null) window.Opened += (_, _) => BuildSendFixture(screen).Show();
+            if (screen is not null) window.Opened += (_, _) => (screen == "topic" ? (Window)BuildTopicFixture() : BuildSendFixture(screen)).Show();
             if (width is { } w) window.Width = w;
             if (height is { } h) window.Height = h;
             return window;
@@ -84,6 +85,12 @@ static class NativePreview
 
         return new SendMessageDialog { DataContext = viewModel };
     }
+
+    static TopicEditorDialog BuildTopicFixture() => new()
+    {
+        DataContext = new TopicEditorViewModel(new TopicDefinition { Name = "order-events" }, true)
+        { AutoDeleteOnIdle = "invalid" }, Height = 400
+    };
 
     static Task RejectAzure(SbMac.App.ViewModels.Tree.NamespaceNodeViewModel node, CancellationToken token) =>
         throw new InvalidOperationException("The native preview cannot connect to Azure.");

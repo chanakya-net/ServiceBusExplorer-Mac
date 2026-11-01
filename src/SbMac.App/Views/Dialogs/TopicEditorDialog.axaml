@@ -7,10 +7,10 @@
         x:Class="SbMac.App.Views.Dialogs.TopicEditorDialog"
         x:DataType="vm:TopicEditorViewModel"
         Title="{Binding DialogTitle}"
-        Width="620" Height="560"
-        MinWidth="560" MinHeight="460"
+        Width="620" Height="640"
+        MinWidth="480" MinHeight="400" MaxHeight="700"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner" Opened="OnOpened">
 
   <Grid Margin="22" RowDefinitions="Auto,*,Auto">
 
@@ -19,10 +19,11 @@
 
     <ScrollViewer Grid.Row="1">
       <StackPanel Spacing="12">
+        <TextBlock Classes="caption" Text="ESSENTIAL" />
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
-          <TextBox Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
+          <TextBox Grid.Column="1" x:Name="NameField" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
                    PlaceholderText="order-events" />
         </Grid>
 
@@ -34,31 +35,30 @@
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default time to live" />
-          <TextBox Grid.Column="1" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
+          <TextBox Grid.Column="1" x:Name="DefaultMessageTimeToLive" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
         </Grid>
 
-        <Grid ColumnDefinitions="190,*">
-          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Auto-delete on idle" />
-          <TextBox Grid.Column="1" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
-        </Grid>
-
-        <TextBlock Classes="tertiary" Margin="190,0,0,0"
+        <TextBlock Classes="tertiary" TextWrapping="Wrap"
                    Text="Durations accept hh:mm:ss, d.hh:mm:ss or ISO 8601 (PT30S)." />
-
         <Rectangle Classes="divider" Margin="0,6" />
-
-        <TextBlock Classes="caption" Text="BEHAVIOUR" />
-
-        <CheckBox Content="Support ordering" IsChecked="{Binding SupportOrdering}" />
-
-        <CheckBox Content="Enable batched operations" IsChecked="{Binding EnableBatchedOperations}" />
-
-        <CheckBox Content="Topic is active (uncheck to disable)" IsChecked="{Binding IsActive}" />
-
-        <Rectangle Classes="divider" Margin="0,6" />
-
+        <Expander HorizontalAlignment="Stretch" Header="Optional behaviour" HorizontalContentAlignment="Stretch" IsExpanded="{Binding IsOptionalExpanded}">
+          <StackPanel Spacing="12" Margin="0,10,0,0">
+            <Grid ColumnDefinitions="190,*">
+              <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Auto-delete on idle" />
+              <TextBox Grid.Column="1" x:Name="AutoDeleteOnIdle" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
+            </Grid>
+            <CheckBox Content="Support ordering" IsChecked="{Binding SupportOrdering}" />
+            <CheckBox Content="Enable batched operations" IsChecked="{Binding EnableBatchedOperations}" />
+            <CheckBox Content="Topic is active (uncheck to disable)" IsChecked="{Binding IsActive}" />
+            <Grid ColumnDefinitions="190,*">
+              <TextBlock Grid.Column="0" Classes="fieldLabel" Text="User metadata" />
+              <TextBox Grid.Column="1" Text="{Binding UserMetadata}" />
+            </Grid>
+          </StackPanel>
+        </Expander>
+        <Expander HorizontalAlignment="Stretch" Header="Fixed at creation" HorizontalContentAlignment="Stretch" IsExpanded="{Binding IsCreationExpanded}">
         <StackPanel Spacing="9">
-          <TextBlock Classes="caption" Text="FIXED AT CREATION" />
+
 
           <CheckBox Content="Enable partitioning"
                     IsChecked="{Binding EnablePartitioning}"
@@ -70,7 +70,7 @@
 
           <Grid ColumnDefinitions="190,*">
             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Duplicate detection window" />
-            <TextBox Grid.Column="1"
+            <TextBox Grid.Column="1" x:Name="DuplicateDetectionHistoryTimeWindow"
                      Text="{Binding DuplicateDetectionHistoryTimeWindow}"
                      IsEnabled="{Binding CanEditCreateOnlySettings}"
                      PlaceholderText="00:10:00" />
@@ -82,18 +82,18 @@
                      Text="Azure Service Bus fixes these settings when the topic is created. To change them, create a new topic." />
         </StackPanel>
 
-        <Grid ColumnDefinitions="190,*">
-          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="User metadata" />
-          <TextBox Grid.Column="1" Text="{Binding UserMetadata}" />
-        </Grid>
+        </Expander>
 
       </StackPanel>
     </ScrollViewer>
 
-    <StackPanel Grid.Row="2" Classes="dialogButtons" Orientation="Horizontal"
+    <StackPanel Grid.Row="2" Spacing="8">
+      <TextBlock Text="{Binding ValidationError}" IsVisible="{Binding !!ValidationError}" TextWrapping="Wrap" />
+    <StackPanel Classes="dialogButtons" Orientation="Horizontal"
                 HorizontalAlignment="Right" Margin="0,16,0,0">
-      <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
-      <Button Classes="primary" Content="Save" IsDefault="True" Click="OnSave" IsEnabled="{Binding CanSave}" />
+      <Button Classes="secondary" x:Name="CancelButton" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button Classes="primary" x:Name="SaveButton" Content="Save" IsDefault="True" Click="OnSave" />
+    </StackPanel>
     </StackPanel>
 
   </Grid>
