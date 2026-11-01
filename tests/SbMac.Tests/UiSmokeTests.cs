@@ -167,6 +167,43 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void ConnectionDialogSaveFocusesMissingCredentialWithoutLosingInput()
+    {
+        var vm = new ConnectionDialogViewModel(null)
+        {
+            Name = "fixture", UseEntraId = true,
+            FullyQualifiedNamespace = "fixture.servicebus.windows.net",
+            SelectedCredentialKind = EntraCredentialKind.ClientSecret
+        };
+        var window = new ConnectionDialog { DataContext = vm };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(window.FindControl<TextBox>("TenantIdField")!.IsFocused);
+        Assert.Equal("fixture", vm.Name);
+        Assert.NotNull(vm.ValidationError);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void ConnectionDialogSupportsKeyboardAndConstrainedHeight()
+    {
+        var vm = new ConnectionDialogViewModel(new NamespaceConnection
+        {
+            Name = "fixture", Kind = NamespaceKind.EventHubs,
+            EventHubNames = ["telemetry"], Transport = ServiceBusTransport.AmqpWebSockets
+        });
+        var window = new ConnectionDialog { DataContext = vm, MaxHeight = 600 };
+        window.Show();
+        var name = window.FindControl<TextBox>("NameField")!;
+        Assert.True(name.Focus());
+        window.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        Assert.False(name.IsFocused);
+        Assert.True(window.Bounds.Height <= 600);
+        Assert.True(window.FindControl<Button>("SaveButton")!.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void ConnectionDialogLoadsForAnExistingNamespace()
     {
         var connection = new NamespaceConnection

@@ -31,7 +31,20 @@ public sealed partial class ConnectionDialogViewModel : ViewModelBase
         eventHubNames = string.Join(Environment.NewLine, connection.EventHubNames);
         consumerGroup = connection.ConsumerGroup ?? string.Empty;
         subscriptionId = connection.SubscriptionId ?? string.Empty;
+        isAdvancedExpanded = useWebSockets || !string.IsNullOrWhiteSpace(eventHubNames) ||
+            !string.IsNullOrWhiteSpace(consumerGroup) || !string.IsNullOrWhiteSpace(subscriptionId);
     }
+
+    [ObservableProperty]
+    bool isAdvancedExpanded;
+
+    public string? FirstInvalidField => string.IsNullOrWhiteSpace(Name) ? "Name" :
+        !UseEntraId ? (ConnectionStringParser.LooksValid(ConnectionString) ? null : "ConnectionString") :
+        string.IsNullOrWhiteSpace(FullyQualifiedNamespace) ? "FullyQualifiedNamespace" :
+        SelectedCredentialKind != EntraCredentialKind.ClientSecret ? null :
+        string.IsNullOrWhiteSpace(TenantId) ? "TenantId" :
+        string.IsNullOrWhiteSpace(ClientId) ? "ClientId" :
+        string.IsNullOrWhiteSpace(ClientSecret) ? "ClientSecret" : null;
 
     public bool IsNew { get; }
 

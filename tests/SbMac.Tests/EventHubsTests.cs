@@ -694,6 +694,34 @@ public class EventRowViewModelTests
 public class EventHubConnectionDialogTests
 {
     [Fact]
+    public void AdvancedOptionsOpenForExistingNonDefaults()
+    {
+        var connection = EventHubFixtures.Connection();
+        connection.Transport = ServiceBusTransport.AmqpWebSockets;
+        var viewModel = new ConnectionDialogViewModel(connection);
+        Assert.True(viewModel.IsAdvancedExpanded);
+        Assert.False(new ConnectionDialogViewModel(null).IsAdvancedExpanded);
+    }
+
+    [Fact]
+    public void ClientSecretValidationIdentifiesFirstMissingField()
+    {
+        var viewModel = new ConnectionDialogViewModel(null)
+        {
+            Name = "fixture", UseEntraId = true,
+            FullyQualifiedNamespace = "fixture.servicebus.windows.net",
+            SelectedCredentialKind = EntraCredentialKind.ClientSecret
+        };
+        Assert.Equal("TenantId", viewModel.FirstInvalidField);
+        viewModel.TenantId = "tenant";
+        Assert.Equal("ClientId", viewModel.FirstInvalidField);
+        viewModel.ClientId = "client";
+        Assert.Equal("ClientSecret", viewModel.FirstInvalidField);
+        viewModel.ClientSecret = "secret";
+        Assert.Null(viewModel.FirstInvalidField);
+    }
+
+    [Fact]
     public void EventHubNamesAreSplitOnEveryFormatPeoplePaste()
     {
         Assert.Equal(
