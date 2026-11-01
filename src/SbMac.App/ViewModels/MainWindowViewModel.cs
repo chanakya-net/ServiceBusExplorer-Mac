@@ -25,6 +25,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 {
     readonly ConnectionStore connectionStore;
     readonly IUpdateChecker? updateChecker;
+    Func<NamespaceNodeViewModel, CancellationToken, Task> connectNamespace = (node, token) => node.ConnectAsync(token);
+    Task? initialization;
 
     /// <summary>
     /// Descriptions of the operations currently in flight. Different work runs side by
@@ -67,6 +69,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Messages.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoMessages));
         SelectedMessages.CollectionChanged += (_, _) => RaiseMessageSelectionChanged();
         Operations.CollectionChanged += (_, _) => RaiseActivityChanged();
+    }
+
+    /// <summary>Creates a fixture with caller-owned storage and an isolated connection provider.</summary>
+    public static MainWindowViewModel CreateIsolated(ConnectionStore store,
+        Func<NamespaceNodeViewModel, CancellationToken, Task> connectionProvider)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(connectionProvider);
+        return new MainWindowViewModel(null, store) { connectNamespace = connectionProvider };
     }
 
     /// <summary>Set by the window once it's constructed; every dialog goes through this.</summary>
@@ -364,7 +375,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ------------------------------------------------------------- lifecycle
 
     /// <summary>Loads saved namespaces. Called once when the window opens.</summary>
-    public async Task InitializeAsync()
+    public Task InitializeAsync() => initialization ??= InitializeCoreAsync();
+
+    async Task InitializeCoreAsync()
     {
         try
         {
@@ -548,7 +561,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         await RunAsync(OperationKind.Connect, $"Connecting to {node.Title}…", async cancellationToken =>
         {
-            await node.ConnectAsync(cancellationToken).ConfigureAwait(true);
+            await connectNamespace(node, cancellationToken).ConfigureAwait(true);
             AppendLog($"Connected to {node.Connection.ResolvedNamespace}.");
         }).ConfigureAwait(true);
     }

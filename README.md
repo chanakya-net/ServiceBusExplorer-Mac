@@ -306,7 +306,7 @@ windows — same XAML, same styles, same compiled bindings — straight to PNG t
 Avalonia's headless platform with Skia drawing:
 
 ```bash
-dotnet run --project tools/SbMac.Preview ./artifacts/screenshots
+dotnet run --project tools/SbMac.Preview -- ./artifacts/screenshots
 ```
 
 It writes both themes for the main window, the expanded activity panel, the properties
@@ -318,9 +318,19 @@ representative sample data.
 through the Service Bus SDK's internal constructors, so an SDK upgrade can break it —
 keeping it out of the solution means that breaks the screenshot tool rather than the build.
 
-Note that it opens the real main window, so it loads whatever namespaces you have saved in
-`~/Library/Application Support/SB-Mac/connections.json` and they will appear in the
-rendered sidebar alongside the sample data.
+Each preview uses deterministic sample data and temporary connection stores, removed after
+rendering. It does not load saved namespaces, access Keychain, check for updates, or
+connect to Azure. Normal application startup remains unchanged.
+
+Use `--theme light|dark|both` (default `both`), `--size WIDTHxHEIGHT` (960x600
+through 4096x4096), and `--screen` to select `all` (default), `main`, `activity`,
+`props`, `eventhubs`, `eventhubs-props`, `connection`, `connection-eventhubs`,
+`send`, or `queue`. Size defaults to each fixture's usual dimensions; `--help`
+prints usage. For example:
+
+```bash
+dotnet run --project tools/SbMac.Preview -- --theme dark --screen main --size 1200x760 ./artifacts/shot
+```
 
 ## Building
 

@@ -22,42 +22,98 @@ using SbMac.Core.EventHubs;
 using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 
-// First non-flag argument is the output directory.
-var outDir = Environment.GetCommandLineArgs()
-    .Skip(1)
-    .FirstOrDefault(argument => !argument.StartsWith('-'))
-    ?? Path.Combine(AppContext.BaseDirectory, "screenshots");
-
-Directory.CreateDirectory(outDir);
-
-AppBuilder.Configure<SbMac.App.App>()
-    .UseSkia()
-    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-    .WithInterFont()
-    .SetupWithoutStarting();
-
-foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+var screens = new[] { "main", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "queue" };
+string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
+string theme = "both", screen = "all";
+int? width = null, height = null;
+bool outputSet = false;
+try
 {
-    Application.Current!.RequestedThemeVariant = variant;
-    var tag = variant == ThemeVariant.Light ? "light" : "dark";
-
-    Shoot($"main-{tag}", BuildMainWindow(), 1360, 860);
-    Shoot($"activity-{tag}", BuildActivityWindow(), 1360, 860);
-    Shoot($"props-{tag}", BuildMainWindow(), 1360, 860, selectTab: 1);
-    Shoot($"eventhubs-{tag}", BuildEventHubsWindow(), 1360, 860);
-    Shoot($"eventhubs-props-{tag}", BuildEventHubsWindow(), 1360, 860, selectTab: 1);
-    Shoot($"connection-{tag}", new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
-    Shoot($"connection-eventhubs-{tag}",
-        new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel() }, 620, 800);
-    Shoot($"send-{tag}", new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
-    Shoot($"queue-{tag}", new QueueEditorDialog
+    for (var i = 0; i < args.Length; i++)
     {
-        DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false)
-    }, 620, 640);
+        var arg = args[i];
+        if (arg == "--help") { Usage(); return; }
+        if (arg is "--theme" or "--screen" or "--size")
+        {
+            if (++i == args.Length) throw new ArgumentException($"Missing value for {arg}.");
+            var value = args[i];
+            if (arg == "--theme") theme = value;
+            else if (arg == "--screen") screen = value;
+            else
+            {
+                var parts = value.Split('x');
+                if (parts.Length != 2 || !int.TryParse(parts[0], out var w) || !int.TryParse(parts[1], out var h) || w < 960 || h < 600 || w > 4096 || h > 4096)
+                    throw new ArgumentException("Size must be WIDTHxHEIGHT, from 960x600 to 4096x4096.");
+                width = w; height = h;
+            }
+        }
+        else if (arg.StartsWith('-') || outputSet) throw new ArgumentException($"Unexpected argument: {arg}");
+        else { outDir = arg; outputSet = true; }
+    }
+    if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
+    if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
+}
+catch (ArgumentException e) { Console.Error.WriteLine(e.Message); Usage(); Environment.ExitCode = 2; return; }
+
+void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]");
+Directory.CreateDirectory(outDir);
+var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
+var fixtureNow = new DateTimeOffset(2025, 3, 14, 9, 41, 20, TimeSpan.Zero);
+try
+{
+    AppBuilder.Configure<SbMac.App.App>()
+        .UseSkia()
+        .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+        .WithInterFont()
+        .SetupWithoutStarting();
+
+    foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+    {
+        var tag = variant == ThemeVariant.Light ? "light" : "dark";
+        if (theme != "both" && theme != tag) continue;
+        Application.Current!.RequestedThemeVariant = variant;
+        Render("main", BuildMainWindow, 1360, 860);
+        Render("activity", BuildActivityWindow, 1360, 860);
+        Render("props", BuildMainWindow, 1360, 860, 1);
+        Render("eventhubs", BuildEventHubsWindow, 1360, 860);
+        Render("eventhubs-props", BuildEventHubsWindow, 1360, 860, 1);
+        Render("connection", () => new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
+        Render("connection-eventhubs", () => new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel() }, 620, 800);
+        Render("send", () => new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
+        Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
+        void Render(string name, Func<Window> build, int defaultWidth, int defaultHeight, int tab = -1)
+        {
+            if (screen == "all" || screen == name) Shoot($"{name}-{tag}", build(), width ?? defaultWidth, height ?? defaultHeight, tab);
+        }
+    }
+    Console.WriteLine("done -> " + outDir);
+}
+finally { stateRoot.Delete(recursive: true); }
+return;
+
+MainWindowViewModel IsolatedViewModel(NamespaceConnection connection)
+{
+    var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
+    var store = new ConnectionStore(Path.Combine(dir.FullName, "connections.json"), new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")));
+    Pump(store.SaveAsync([connection]));
+    var vm = MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Preview cannot connect to Azure."));
+    Pump(vm.InitializeAsync());
+    vm.StatusText = "Ready";
+    vm.Log.Clear();
+    return vm;
 }
 
-Console.WriteLine("done -> " + outDir);
-return;
+static void Pump(Task task)
+{
+    var deadline = DateTime.UtcNow.AddSeconds(10);
+    while (!task.IsCompleted)
+    {
+        Dispatcher.UIThread.RunJobs();
+        if (DateTime.UtcNow > deadline) throw new TimeoutException("Fixture initialization timed out.");
+        Thread.Sleep(1);
+    }
+    task.GetAwaiter().GetResult();
+}
 
 void Shoot(string name, Window window, int width, int height, int selectTab = -1)
 {
@@ -92,7 +148,7 @@ void Shoot(string name, Window window, int width, int height, int selectTab = -1
 
     if (frame is null)
     {
-        Console.WriteLine($"!! {name}: no frame");
+        throw new InvalidOperationException($"{name}: no rendered frame");
     }
     else
     {
@@ -105,8 +161,6 @@ void Shoot(string name, Window window, int width, int height, int selectTab = -1
 
 MainWindow BuildMainWindow()
 {
-    var viewModel = new MainWindowViewModel { StatusText = "Ready" };
-
     var connection = new NamespaceConnection
     {
         Name = "contoso-prod",
@@ -114,7 +168,9 @@ MainWindow BuildMainWindow()
         FullyQualifiedNamespace = "contoso-prod.servicebus.windows.net"
     };
 
-    var ns = new NamespaceNodeViewModel(connection) { IsExpanded = true };
+    var viewModel = IsolatedViewModel(connection);
+    var ns = viewModel.Namespaces.Single();
+    ns.IsExpanded = true;
 
     var queues = new QueueFolderNodeViewModel { Parent = ns, IsExpanded = true, Detail = "4" };
     AddQueue(queues, "orders", 1284, 17, 0);
@@ -131,7 +187,6 @@ MainWindow BuildMainWindow()
 
     ns.Children.Add(queues);
     ns.Children.Add(topics);
-    viewModel.Namespaces.Add(ns);
 
     // Select a queue so the header, toolbar state and message list all show real content.
     var selected = (QueueNodeViewModel)queues.Children[0];
@@ -183,16 +238,16 @@ MainWindow BuildActivityWindow()
 
 MainWindow BuildEventHubsWindow()
 {
-    var viewModel = new MainWindowViewModel { StatusText = "Ready" };
-
-    var ns = new NamespaceNodeViewModel(new NamespaceConnection
+    var connection = new NamespaceConnection
     {
         Name = "contoso-telemetry",
         Kind = NamespaceKind.EventHubs,
         AuthenticationMode = AuthenticationMode.EntraId,
         FullyQualifiedNamespace = "contoso-telemetry.servicebus.windows.net"
-    })
-    { IsExpanded = true };
+    };
+    var viewModel = IsolatedViewModel(connection);
+    var ns = viewModel.Namespaces.Single();
+    ns.IsExpanded = true;
 
     var folder = new EventHubFolderNodeViewModel { Parent = ns, IsExpanded = true, Detail = "2" };
 
@@ -205,7 +260,6 @@ MainWindow BuildEventHubsWindow()
     AddEventHub(folder, "audit-trail", ["0", "1"], ["$Default"]);
 
     ns.Children.Add(folder);
-    viewModel.Namespaces.Add(ns);
 
     var selected = (EventHubNodeViewModel)folder.Children[0];
     selected.IsSelected = true;
@@ -231,7 +285,7 @@ EventHubNodeViewModel AddEventHub(
     IReadOnlyList<string> consumerGroups)
 {
     var node = new EventHubNodeViewModel(
-        new EventHubEntity(name, DateTimeOffset.Now.AddMonths(-8), partitions, consumerGroups))
+        new EventHubEntity(name, fixtureNow.AddMonths(-8), partitions, consumerGroups))
     {
         Parent = parent,
         IsExpanded = true
@@ -244,7 +298,7 @@ EventHubNodeViewModel AddEventHub(
 void AddPartition(TreeNodeViewModel parent, string id, long beginning, long last, bool isEmpty = false)
 {
     parent.Children.Add(new PartitionNodeViewModel(
-        new PartitionEntity("device-telemetry", id, beginning, last, DateTimeOffset.Now.AddSeconds(-9), isEmpty))
+        new PartitionEntity("device-telemetry", id, beginning, last, fixtureNow.AddSeconds(-9), isEmpty))
     {
         Parent = parent
     });
@@ -252,7 +306,7 @@ void AddPartition(TreeNodeViewModel parent, string id, long beginning, long last
 
 IEnumerable<MessageRecord> SampleEvents()
 {
-    var now = DateTimeOffset.Now;
+    var now = fixtureNow;
 
     for (var index = 0; index < 6; index++)
     {
@@ -358,7 +412,7 @@ SendMessageViewModel BuildSendViewModel()
 
 IEnumerable<MessageRecord> SampleMessages()
 {
-    var now = DateTimeOffset.Now;
+    var now = fixtureNow;
 
     yield return Record(40921, "{\n  \"orderId\": 40921,\n  \"region\": \"emea\",\n  \"total\": 128.40\n}",
         now.AddMinutes(-3), "order-created", 1, null);
