@@ -584,13 +584,52 @@ public partial class UiSmokeTests
         var failures = new List<string>();
         foreach (var theme in BothThemes)
         {
-            var surface = Flatten("SurfaceBrush", theme, Avalonia.Media.Colors.White);
-            foreach (var (fill, text) in new[] { ("DangerSoftBrush", "DangerBrush"), ("WarningSoftBrush", "WarningBrush"),
-                         ("SuccessSoftBrush", "SuccessBrush"), ("AccentSoftBrush", "AccentBrush"), ("SelectionBrush", "TextPrimaryBrush") })
+            // Real backdrops: chips sit on the canvas, badges on the sidebar (also under a selected row).
+            var canvas = Flatten("CanvasBrush", theme, Avalonia.Media.Colors.White);
+            var sidebar = Flatten("SidebarBrush", theme, Avalonia.Media.Colors.White);
+            var backdrops = new (string Name, Avalonia.Media.Color Color)[]
             {
-                var bg = Flatten(fill, theme, surface);
-                var ratio = Contrast(Flatten(text, theme, bg), bg);
-                if (ratio < 4.5) failures.Add($"{theme} {text} on {fill}: {ratio:0.00}");
+                ("SurfaceBrush", Flatten("SurfaceBrush", theme, Avalonia.Media.Colors.White)),
+                ("CanvasBrush", canvas), ("SidebarBrush", sidebar),
+                ("selected SidebarBrush", Flatten("SelectionBrush", theme, sidebar)),
+            };
+            foreach (var (backdropName, backdrop) in backdrops)
+                foreach (var (fill, text) in new[] { ("DangerSoftBrush", "DangerBrush"), ("WarningSoftBrush", "WarningBrush"),
+                             ("SuccessSoftBrush", "SuccessBrush"), ("AccentSoftBrush", "AccentBrush") })
+                {
+                    var bg = Flatten(fill, theme, backdrop);
+                    var ratio = Contrast(Flatten(text, theme, bg), bg);
+                    if (ratio < 4.5) failures.Add($"{theme} {text} on {fill} over {backdropName}: {ratio:0.00}");
+                }
+            var selection = Flatten("SelectionBrush", theme, sidebar);
+            var selectionRatio = Contrast(Flatten("TextPrimaryBrush", theme, selection), selection);
+            if (selectionRatio < 4.5) failures.Add($"{theme} text on selected row: {selectionRatio:0.00}");
+        }
+        Assert.Empty(failures);
+    }
+
+    [AvaloniaFact]
+    public void CheckedGlyphAndSelectionIndicatorMeetControlContrast()
+    {
+        var failures = new List<string>();
+        foreach (var theme in BothThemes)
+        {
+            foreach (var state in new[] { "", "PointerOver", "Pressed" })
+            {
+                var fill = Flatten($"CheckBoxCheckBackgroundFillChecked{state}", theme, Avalonia.Media.Colors.White);
+                var glyph = Flatten($"CheckBoxCheckGlyphForegroundChecked{state}", theme, fill);
+                var ratio = Contrast(glyph, fill);
+                if (ratio < 3.0) failures.Add($"{theme} checked glyph{state}: {ratio:0.00}");
+            }
+            var accent = Flatten("AccentBrush", theme, Avalonia.Media.Colors.White);
+            foreach (var key in new[] { "CanvasBrush", "SidebarBrush", "SurfaceBrush" })
+            {
+                var bg = Flatten(key, theme, Avalonia.Media.Colors.White);
+                foreach (var (name, adjacent) in new[] { (key, bg), ("selected " + key, Flatten("SelectionBrush", theme, bg)) })
+                {
+                    var ratio = Contrast(accent, adjacent);
+                    if (ratio < 3.0) failures.Add($"{theme} selection bar vs {name}: {ratio:0.00}");
+                }
             }
         }
         Assert.Empty(failures);
@@ -626,8 +665,10 @@ public partial class UiSmokeTests
     {
         Assert.True(Application.Current!.Resources.TryGetResource("UiFont", null, out var font));
         var family = Assert.IsType<Avalonia.Media.FontFamily>(font);
+        // "System Font" is the name macOS's native font manager resolves to SF; ".AppleSystemUIFont"
+        // inside a composite silently resolved to Inter. Real resolution: SbMac.Preview --font-check.
+        Assert.Equal("System Font", family.FamilyNames[0]);
         Assert.Contains(family.FamilyNames, n => n.Contains("Inter"));
-        Assert.True(family.FamilyNames.Count > 1);
         var window = new MainWindow { DataContext = NewIsolatedViewModel() };
         window.Show();
         Assert.Equal(family, window.FontFamily);

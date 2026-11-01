@@ -37,6 +37,7 @@ try
         var arg = args[i];
         if (arg == "--help") { Usage(); return; }
         if (arg == "--native") { native = true; continue; }
+        if (arg == "--font-check") { Environment.ExitCode = FontCheck(); return; }
         if (arg is "--theme" or "--screen" or "--size" or "--state-dir")
         {
             if (++i == args.Length) throw new ArgumentException($"Missing value for {arg}.");
@@ -67,8 +68,27 @@ catch (ArgumentException e) { Console.Error.WriteLine(e.Message); Usage(); Envir
 // The native fixture must start before anything initialises the headless platform below.
 if (native) { NativePreview.Run(stateDir!, width, height); return; }
 
+// Native diagnostic: asks the real macOS font manager which face the shared UiFont resolves to.
+// Headless tests cannot answer this; it must run with the native backend on a Mac.
+static int FontCheck()
+{
+    AppBuilder.Configure<SbMac.App.App>().UseAvaloniaNative().UseSkia().UseHarfBuzz().WithInterFont().SetupWithoutStarting();
+    Application.Current!.TryGetResource("UiFont", null, out var font);
+    var ui = (Avalonia.Media.FontFamily)font!;
+    string Resolve(Avalonia.Media.FontFamily f) =>
+        Avalonia.Media.FontManager.Current.TryGetGlyphTypeface(new Avalonia.Media.Typeface(f), out var g) ? g.FamilyName : "<unresolved>";
+    var primary = Resolve(ui);
+    var fallback = Resolve(Avalonia.Media.FontFamily.Parse("NoSuchSystemFace, avares://Avalonia.Fonts.Inter/Assets#Inter"));
+    Console.WriteLine($"UiFont '{ui}' => {primary}");
+    Console.WriteLine($"unavailable primary + bundled Inter => {fallback}");
+    var ok = primary == "System Font" && fallback == "Inter";
+    Console.WriteLine(ok ? "font check OK" : "font check FAILED");
+    return ok ? 0 : 1;
+}
+
 void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
-    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT]");
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT]\n" +
+    "       SbMac.Preview --font-check   (macOS only: native system-font resolution)");
 Directory.CreateDirectory(outDir);
 var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
 var fixtureNow = new DateTimeOffset(2025, 3, 14, 9, 41, 20, TimeSpan.Zero);

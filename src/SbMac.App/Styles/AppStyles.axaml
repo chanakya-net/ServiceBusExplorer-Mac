@@ -345,10 +345,14 @@
   <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
     <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
     <Setter Property="Margin" Value="2,1" />
+    <Setter Property="BorderThickness" Value="3,0,0,0" />
+    <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
 
+  <!-- Selection is a tint plus a solid accent bar: the tint alone is far below 3:1. -->
   <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
     <Setter Property="Background" Value="{DynamicResource SelectionBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
   </Style>
 
   <Style Selector="TreeViewItem:pointerover /template/ Border#PART_LayoutRoot">
@@ -480,6 +484,13 @@
   <Style Selector="ListBoxItem">
     <Setter Property="Padding" Value="10,3" />
     <Setter Property="MinHeight" Value="0" />
+    <Setter Property="BorderThickness" Value="3,0,0,0" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SelectionBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
   </Style>
 
   <Style Selector="ProgressBar">
