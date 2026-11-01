@@ -1,6 +1,9 @@
 using System.Text.Json.Nodes;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Threading;
 using SbMac.App;
 using SbMac.App.Models;
@@ -120,6 +123,74 @@ public sealed partial class WorkspaceLayoutTests
         Assert.True(details.RowDefinitions[1].ActualHeight >= 220d, "Message table lost usable height.");
         Assert.True(details.RowDefinitions[3].ActualHeight <= details.Bounds.Height - 220d);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public void OversizedCollapsedInspectorIsClampedWhenReopened()
+    {
+        File.WriteAllText(SettingsFile, """{"workspace":{"detailsHeight":9000,"detailsCollapsed":true}}""");
+        var window = StartWithViewModel(NewPreferences());
+        window.Width = 960;
+        window.Height = 600;
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var viewModel = (MainWindowViewModel)window.DataContext!;
+        Assert.False(viewModel.IsInspectorVisible);
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var details = window.GetControl<Grid>("MessageDetailLayout");
+        Assert.True(details.RowDefinitions[1].ActualHeight >= 220d, "Message table lost usable height.");
+        Assert.True(details.RowDefinitions[3].ActualHeight > 0, "Inspector did not open.");
+        Assert.True(details.RowDefinitions[1].ActualHeight + details.RowDefinitions[3].ActualHeight
+            <= details.Bounds.Height + 1d, "Reopened inspector overflowed the detail area.");
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task PointerDraggedSplittersPersistAcrossRestart()
+    {
+        var first = NewPreferences();
+        var window = StartWithViewModel(first);
+        window.Width = 1100;
+        window.Height = 700;
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        var split = window.GetControl<Grid>("MainSplitLayout");
+        var details = window.GetControl<Grid>("MessageDetailLayout");
+        var sidebarStart = split.ColumnDefinitions[0].ActualWidth;
+        var detailsStart = details.RowDefinitions[3].ActualHeight;
+        DragHandle(window, window.GetControl<GridSplitter>("SidebarSplitter"), 60, 0);
+        DragHandle(window, window.GetControl<GridSplitter>("DetailsSplitter"), 0, -80);
+        var sidebarDragged = split.ColumnDefinitions[0].ActualWidth;
+        var detailsDragged = details.RowDefinitions[3].ActualHeight;
+        window.Close();
+        Assert.True(await first.FlushAsync());
+
+        Assert.InRange(sidebarDragged, sidebarStart + 40, sidebarStart + 80);
+        Assert.InRange(detailsDragged, detailsStart + 60, detailsStart + 100);
+        var saved = NewPreferences().Load().Workspace;
+        Assert.Equal(sidebarDragged, saved.SidebarWidth, precision: 0);
+        Assert.Equal(detailsDragged, saved.DetailsHeight!.Value, precision: 0);
+    }
+
+    static void DragHandle(Window window, Control handle, double dx, double dy)
+    {
+        var center = new Point(handle.Bounds.Width / 2, handle.Bounds.Height / 2);
+        var start = handle.TranslatePoint(center, window)!.Value;
+        var end = start + new Vector(dx, dy);
+        window.MouseDown(start, MouseButton.Left);
+        window.MouseMove(end);
+        window.MouseUp(end, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
     }
 
     MainWindow StartWithViewModel(AppPreferencesService preferences)

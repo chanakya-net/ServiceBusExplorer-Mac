@@ -75,6 +75,7 @@ public partial class MainWindow : Window, IUiServices
         {
             rows[1].Height = tableHeight;
             rows[3].Height = inspectorHeight;
+            ClampPanelsToLayout();
             if (moveFocus) Avalonia.Threading.Dispatcher.UIThread.Post(() => InspectorTabs.ContainerFromIndex(Math.Max(0, InspectorTabs.SelectedIndex))?.Focus());
         }
         else

@@ -87,7 +87,8 @@ public partial class MainWindow
         var height = MessageDetailLayout.Bounds.Height;
         if (height > 0 && DetailsRow.Height.IsAbsolute && DetailsRow.Height.Value > 0)
         {
-            var reserved = MessageDetailLayout.RowDefinitions[0].ActualHeight + MessageDetailLayout.RowDefinitions[2].ActualHeight;
+            // The splitter's ActualHeight is 0 while the inspector is hidden, so use its declared height.
+            var reserved = MessageDetailLayout.RowDefinitions[0].ActualHeight + DetailsSplitter.Height;
             var maximum = Math.Max(WorkspacePreferences.MinDetailsHeight, height - reserved - MinimumTableHeight);
             DetailsRow.Height = new GridLength(Math.Clamp(DetailsRow.Height.Value,
                 WorkspacePreferences.MinDetailsHeight, maximum), GridUnitType.Pixel);
