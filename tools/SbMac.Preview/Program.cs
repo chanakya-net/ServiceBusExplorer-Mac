@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "selection-none", "selection-selected", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "main", "selection-none", "selection-selected", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -119,6 +119,8 @@ try
         Render("eventhubs-actions", BuildEventHubsWindow, 1360, 860);
         Render("preference-failure", () => BuildMainWindow(true), 1360, 860);
         Render("activity", BuildActivityWindow, 1360, 860);
+        Render("activity-inspector-hidden", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
+        Render("activity-collapsed", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsActivityExpanded = false; return window; }, 1360, 860);
         Render("props", () => BuildMainWindow(), 1360, 860, 1);
         Render("eventhubs", BuildEventHubsWindow, 1360, 860);
         Render("eventhubs-props", BuildEventHubsWindow, 1360, 860, 1);
@@ -459,6 +461,8 @@ MainWindow BuildActivityWindow()
     var viewModel = (MainWindowViewModel)window.DataContext!;
 
     viewModel.IsActivityExpanded = true;
+    viewModel.Log.Add("09:41:20  Connection failed: no such host.");
+    viewModel.Log.Add("09:41:18  Sent 3 messages to orders.");
 
     var purge = new OperationViewModel(OperationKind.Purge, "Purging orders-retry…");
     purge.Report("18,400 deleted", 18_400, 42_000);
