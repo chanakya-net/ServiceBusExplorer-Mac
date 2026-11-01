@@ -117,6 +117,12 @@ public partial class MainWindow : Window, IUiServices
         }
     }
 
+    public Task ShowSettingsAsync(AppPreferencesService preferences)
+    {
+        var dialog = new SettingsDialog { DataContext = new SettingsDialogViewModel(preferences) };
+        return dialog.ShowDialog(this);
+    }
+
     public async Task<NamespaceConnection?> EditConnectionAsync(NamespaceConnection? existing)
     {
         var dialog = new ConnectionDialog { DataContext = new ConnectionDialogViewModel(existing) };

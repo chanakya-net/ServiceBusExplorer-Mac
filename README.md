@@ -257,8 +257,13 @@ Namespace**, and paste the connection string again. It will stick this time.
 
 ## The interface
 
-Light and dark both follow the system appearance — there is no in-app theme switch and
-no second palette to maintain.
+Appearance is **System**, **Light** or **Dark**, chosen in Settings (application menu →
+Settings…, or ⌘,). System follows the macOS appearance. A choice applies to every open
+window immediately and is saved to `settings.json` in the app's Application Support folder
+(`"theme": "system" | "light" | "dark"`), so the next launch opens in it from the first
+frame. The update checker's timestamp and any keys this version doesn't recognise share
+that file and are preserved: every writer updates it through one serialized, atomic
+read-modify-replace.
 
 Every colour in the app resolves through a token in `src/SbMac.App/Styles/Theme.axaml`,
 which defines a light and a dark set behind the same names (`SurfaceBrush`,
@@ -310,27 +315,43 @@ dotnet run --project tools/SbMac.Preview -- ./artifacts/screenshots
 ```
 
 It writes both themes for the main window, the expanded activity panel, the properties
-pane, the Event Hubs tree and its event properties, and the connection, send and queue
-dialogs — including the Event Hubs variant of the connection dialog — populated with
-representative sample data.
+pane, the Event Hubs tree and its event properties, and the connection, send, queue and
+Settings dialogs — including the Event Hubs variant of the connection dialog — populated
+with representative sample data.
 
 `tools/SbMac.Preview` is **not** in `SB-Mac.sln`, on purpose. It fabricates sample entities
 through the Service Bus SDK's internal constructors, so an SDK upgrade can break it —
 keeping it out of the solution means that breaks the screenshot tool rather than the build.
 
-Each preview uses deterministic sample data and temporary connection stores, removed after
-rendering. It does not load saved namespaces, access Keychain, check for updates, or
-connect to Azure. Normal application startup remains unchanged.
+Each preview uses deterministic sample data and temporary connection and settings stores,
+removed after rendering. It does not load saved namespaces or preferences, access
+Keychain, check for updates, or connect to Azure. Normal application startup remains
+unchanged.
 
 Use `--theme light|dark|both` (default `both`), `--size WIDTHxHEIGHT` (960x600
 through 4096x4096), and `--screen` to select `all` (default), `main`, `activity`,
 `props`, `eventhubs`, `eventhubs-props`, `connection`, `connection-eventhubs`,
-`send`, or `queue`. Size defaults to each fixture's usual dimensions; `--help`
-prints usage. For example:
+`send`, `queue`, or `settings`. Size defaults to each fixture's usual dimensions — the
+Settings dialog renders at its natural size — and `--help` prints usage. For example:
 
 ```bash
 dotnet run --project tools/SbMac.Preview -- --theme dark --screen main --size 1200x760 ./artifacts/shot
+dotnet run --project tools/SbMac.Preview -- --screen settings ./artifacts/settings
 ```
+
+Native behaviour — the application menu, ⌘, and relaunching into a saved appearance —
+can't be shown headlessly. `--native` runs the real app on the macOS backend against a
+directory you own inside the OS temporary folder instead:
+
+```bash
+STATE="$(mktemp -d)/state"
+dotnet run --project tools/SbMac.Preview -- --native --state-dir "$STATE" --size 960x600
+```
+
+It reads and writes only `settings.json`, `connections.json` and `secrets.json` in that
+directory (seeding one Entra ID fixture namespace), has no update checker, and refuses to
+connect to Azure. Quitting and relaunching with the same `--state-dir` shows the saved
+appearance being restored. Delete the directory when you are done.
 
 ## Building
 

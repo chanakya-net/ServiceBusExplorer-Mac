@@ -40,9 +40,10 @@ public sealed class MessageDialog : Window
             TextWrapping = TextWrapping.Wrap
         };
 
+        // Style classes rather than fixed brushes, so an open alert follows a theme change.
         if (kind == MessageDialogKind.Error)
         {
-            heading.Foreground = new SolidColorBrush(Color.Parse("#C0392B"));
+            heading.Classes.Add("error");
         }
 
         var body = new TextBlock
@@ -69,7 +70,7 @@ public sealed class MessageDialog : Window
             var confirm = new Button { Content = confirmText, MinWidth = 88, IsDefault = true };
             if (destructive)
             {
-                confirm.Foreground = new SolidColorBrush(Color.Parse("#C0392B"));
+                confirm.Classes.Add("destructive");
             }
 
             confirm.Click += (_, _) => Close(true);
