@@ -363,6 +363,11 @@
     <Setter Property="Background" Value="{DynamicResource SelectionBrush}" />
   </Style>
 
+  <Style Selector="TreeViewItem:focus-visible /template/ Border#PART_LayoutRoot">
+    <Setter Property="BorderThickness" Value="2" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
   <!-- A disabled entity is dimmed but still legible; it must stay findable. -->
   <Style Selector="TextBlock.entityTitle.disabled">
     <Setter Property="Opacity" Value="0.5" />

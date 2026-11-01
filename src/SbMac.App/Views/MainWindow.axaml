@@ -154,18 +154,30 @@
 
       <!-- ─────────────── sidebar ─────────────── -->
       <Border Grid.Column="0" Classes="sidebar">
-        <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <Grid RowDefinitions="Auto,Auto,*">
 
-          <TextBlock Grid.Row="0" Classes="caption" Text="NAMESPACES" Margin="18,14,16,8" />
+          <DockPanel Grid.Row="0" Margin="16,8,10,6" LastChildFill="False">
+            <TextBlock DockPanel.Dock="Left" Classes="caption" Text="NAMESPACES" VerticalAlignment="Center" />
+            <Button DockPanel.Dock="Right" Classes="toolbar" Command="{Binding AddConnectionCommand}"
+                    AutomationProperties.Name="Add namespace" ToolTip.Tip="Add a Service Bus or Event Hubs namespace  (⌘N)">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Path Classes="icon" Data="{StaticResource IconAdd}" />
+                <TextBlock Text="Add" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+          </DockPanel>
 
           <TextBox x:Name="EntitySearchBox"
                    Grid.Row="1"
                    Margin="12,0,12,10"
                    Text="{Binding EntitySearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                   AutomationProperties.Name="Search entities"
                    PlaceholderText="Search queues, topics, subscriptions" />
 
           <Panel Grid.Row="2">
             <TreeView x:Name="EntityTree"
+                      AutomationProperties.Name="Namespaces and entities"
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       ItemsSource="{Binding Namespaces}"
                       SelectedItem="{Binding SelectedNode, Mode=TwoWay}"
                       Padding="6,0,6,10">
@@ -180,6 +192,7 @@
                 <Style Selector="TreeViewItem" x:DataType="tree:TreeNodeViewModel">
                   <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                   <Setter Property="IsVisible" Value="{Binding IsVisible}" />
+                  <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
                 </Style>
               </TreeView.Styles>
 
@@ -195,8 +208,10 @@
 
                     <TextBlock Grid.Column="1"
                                Classes="entityTitle"
+                               HorizontalAlignment="Left"
                                Classes.disabled="{Binding IsDisabled}"
                                Text="{Binding Title}"
+                               ToolTip.Tip="{Binding Title}"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis" />
 
@@ -259,17 +274,6 @@
             </StackPanel>
           </Panel>
 
-          <Border Grid.Row="3" BorderThickness="0,1,0,0"
-                  BorderBrush="{DynamicResource DividerBrush}" Padding="10,8">
-            <Button Classes="toolbar" HorizontalAlignment="Left"
-                    Command="{Binding AddConnectionCommand}"
-                    ToolTip.Tip="Add a Service Bus or Event Hubs namespace  (⌘N)">
-              <StackPanel Orientation="Horizontal" Spacing="7">
-                <Path Classes="icon" Data="{StaticResource IconAdd}" />
-                <TextBlock Text="Add namespace" VerticalAlignment="Center" />
-              </StackPanel>
-            </Button>
-          </Border>
         </Grid>
       </Border>
 
