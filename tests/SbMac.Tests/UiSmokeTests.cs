@@ -667,6 +667,21 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void RuleValidationFocusesSqlAndKeepsFooterReachable()
+    {
+        var vm = new RuleEditorViewModel(new RuleDefinition { Name = "orders", SqlExpression = "" }, true);
+        var window = new RuleEditorDialog { DataContext = vm, Height = 400 };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(window.FindControl<TextBox>("SqlExpression")!.IsFocused);
+        Assert.NotNull(vm.ValidationError);
+        Assert.True(window.FindControl<Button>("CancelButton")!.IsVisible);
+        Assert.True(window.FindControl<Button>("SaveButton")!.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void MessageGridIsBoundToTheViewModelsMessages()
     {
         var viewModel = NewIsolatedViewModel();
