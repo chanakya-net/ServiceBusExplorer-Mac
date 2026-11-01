@@ -513,6 +513,47 @@ public partial class UiSmokeTests
         owner.Close();
     }
 
+    [AvaloniaFact]
+    public async Task ResubmitInitialFocusIsKeepAndEnterReturnsKeepAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        var keep = ResubmitButton(dialog, "Resubmit only");
+        Assert.True(keep.IsFocused);
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.Equal(ResubmitAction.ResubmitOnly, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitEscapeCancelsFromKeepFocusWithoutAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void ResubmitLongDescriptionScrollsToHiddenText()
+    {
+        var owner = new Window();
+        owner.Show();
+        _ = OpenResubmit(owner, out var dialog, 12, string.Concat(Enumerable.Repeat("very-long-queue-name-", 60)));
+        dialog.UpdateLayout();
+        var scroller = Assert.Single(dialog.GetVisualDescendants().OfType<ScrollViewer>());
+        Assert.True(scroller.Extent.Height > scroller.Viewport.Height);
+        scroller.Offset = new Vector(0, scroller.Extent.Height);
+        dialog.UpdateLayout();
+        Assert.True(scroller.Offset.Y > 0);
+        Assert.Equal(scroller.Extent.Height - scroller.Viewport.Height, scroller.Offset.Y, 1);
+        dialog.Close();
+        owner.Close();
+    }
+
     static readonly string[] SecondaryActionHeaders =
     [
         "Receive and delete…", "Purge…", "Resubmit selected…", "Delete selected…",
