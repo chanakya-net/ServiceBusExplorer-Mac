@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "selection-none", "selection-selected", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "main", "selection-none", "selection-selected", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "body-json", "body-xml", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -122,6 +122,8 @@ try
         Render("activity-inspector-hidden", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
         Render("activity-collapsed", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsActivityExpanded = false; return window; }, 1360, 860);
         Render("props", () => BuildMainWindow(), 1360, 860, 1);
+        Render("body-json", () => BuildMainWindow(), 1360, 860);
+        Render("body-xml", () => BuildMainWindow(), 1360, 860);
         Render("eventhubs", BuildEventHubsWindow, 1360, 860);
         Render("eventhubs-props", BuildEventHubsWindow, 1360, 860, 1);
         Render("connection", () => new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
@@ -257,6 +259,17 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
     if ((name.StartsWith("queue-") || name.StartsWith("subscription-")) && name.Contains("-invalid-"))
     {
         window.FindControl<Button>("SaveButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
+    if (name.StartsWith("body-"))
+    {
+        var grid = window.FindControl<DataGrid>("MessageGrid")!;
+        var vm = (MainWindowViewModel)window.DataContext!;
+        grid.SelectedItem = vm.Messages[name.StartsWith("body-xml") ? 3 : 0];
         for (var i = 0; i < 12; i++)
         {
             Dispatcher.UIThread.RunJobs();

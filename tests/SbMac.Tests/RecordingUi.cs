@@ -15,6 +15,9 @@ public class RecordingUi : DispatchProxy
 {
     public List<string> Calls { get; } = [];
 
+    /// <summary>Text passed to SetClipboardTextAsync, in call order.</summary>
+    public List<string> ClipboardTexts { get; } = [];
+
     /// <summary>Answer for ConfirmAsync; the control case declines so nothing reaches Azure.</summary>
     public bool Approve { get; set; } = true;
 
@@ -35,6 +38,8 @@ public class RecordingUi : DispatchProxy
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
     {
         Calls.Add(targetMethod!.Name);
+        if (targetMethod.Name == "SetClipboardTextAsync")
+            ClipboardTexts.Add((string)args![0]!);
         var type = targetMethod.ReturnType;
         if (type == typeof(Task<bool>))
             return Task.FromResult(Approve);

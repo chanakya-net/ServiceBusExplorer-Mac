@@ -43,11 +43,15 @@ public partial class MainWindow : Window, IUiServices
         base.OnDataContextChanged(e);
 
         if (subscribedViewModel is not null)
+        {
             subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            subscribedViewModel.BodySelectionProvider = null;
+        }
         subscribedViewModel = ViewModel;
         if (subscribedViewModel is { } viewModel)
         {
             viewModel.Ui = this;
+            viewModel.BodySelectionProvider = () => BodyViewer.SelectedText;
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
             UpdateInspectorVisibility(viewModel.IsInspectorVisible, moveFocus: false);
             ApplyMessageLayout();
