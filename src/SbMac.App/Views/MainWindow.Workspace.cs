@@ -29,6 +29,7 @@ public partial class MainWindow
         }
         if (lastWorkspace.WindowState == WorkspaceWindowState.Maximized)
             WindowState = WindowState.Maximized;
+        ApplySavedPanels(lastWorkspace!);
         Opened += OnWorkspaceOpened;
         PositionChanged += OnWorkspacePositionChanged;
         PropertyChanged += OnWorkspacePropertyChanged;
@@ -40,7 +41,7 @@ public partial class MainWindow
     {
         workspaceOpened = true;
         if (WindowState == WindowState.Normal)
-            lastWorkspace = new(DesktopBounds(Position, ClientSize, DesktopScaling), WorkspaceWindowState.Normal);
+            lastWorkspace = Snapshot(DesktopBounds(Position, ClientSize, DesktopScaling), WorkspaceWindowState.Normal);
     }
 
     void OnWorkspacePositionChanged(object? sender, PixelPointEventArgs e) => ScheduleWorkspaceCapture();
@@ -67,15 +68,19 @@ public partial class MainWindow
     internal void CaptureWorkspace()
     {
         if (!workspaceOpened || workspacePreferences is null || WindowState != WindowState.Normal) return;
-        SaveWorkspace(new(DesktopBounds(Position, ClientSize, DesktopScaling), WorkspaceWindowState.Normal));
+        SaveWorkspace(Snapshot(DesktopBounds(Position, ClientSize, DesktopScaling), WorkspaceWindowState.Normal));
     }
 
     internal static WindowBounds DesktopBounds(PixelPoint position, Size clientSize, double desktopScaling) =>
         new(position.X / desktopScaling, position.Y / desktopScaling, clientSize.Width, clientSize.Height);
 
+    /// <summary>The last known preferences with only the window placement replaced, so panel fields carry over.</summary>
+    WorkspacePreferences Snapshot(WindowBounds? bounds, WorkspaceWindowState state) =>
+        (lastWorkspace ?? WorkspacePreferences.Default) with { WindowBounds = bounds, WindowState = state };
+
     void SaveWorkspace(WorkspacePreferences snapshot)
     {
-        if (snapshot.WindowBounds is not { IsValid: true } || snapshot == lastWorkspace) return;
+        if (snapshot.WindowBounds is { IsValid: false } || snapshot == lastWorkspace) return;
         lastWorkspace = snapshot;
         workspacePreferences!.SetWorkspace(snapshot);
     }

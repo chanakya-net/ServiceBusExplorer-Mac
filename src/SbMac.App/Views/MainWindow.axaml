@@ -154,7 +154,7 @@
     </Border>
 
     <!-- ══════════════════════════ main split view ══════════════════════════ -->
-    <Grid Grid.Row="1" ColumnDefinitions="300,Auto,*">
+    <Grid x:Name="MainSplitLayout" Grid.Row="1" ColumnDefinitions="280,Auto,*">
 
       <!-- ─────────────── sidebar ─────────────── -->
       <Border Grid.Column="0" Classes="sidebar">
@@ -281,7 +281,7 @@
         </Grid>
       </Border>
 
-      <GridSplitter Grid.Column="1" Width="5" ResizeDirection="Columns" />
+      <GridSplitter x:Name="SidebarSplitter" Grid.Column="1" Width="5" ResizeDirection="Columns" />
 
       <!-- ─────────────── entity detail + messages ─────────────── -->
       <!-- The list carries the scanning work, so it gets the larger share by default. -->
@@ -409,7 +409,7 @@
           </Grid>
         </Border>
 
-        <GridSplitter Grid.Row="2" Height="7" IsVisible="{Binding IsInspectorVisible}"
+        <GridSplitter x:Name="DetailsSplitter" Grid.Row="2" Height="7" IsVisible="{Binding IsInspectorVisible}"
                       HorizontalAlignment="Stretch" ResizeDirection="Rows" />
 
         <!-- message detail -->
