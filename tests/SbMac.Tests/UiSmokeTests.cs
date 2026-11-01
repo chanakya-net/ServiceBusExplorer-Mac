@@ -559,6 +559,32 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void TopicSaveRevealsAndFocusesInvalidCreationDuration()
+    {
+        var vm = new TopicEditorViewModel(new TopicDefinition { Name = "events" }, true)
+        { DuplicateDetectionHistoryTimeWindow = "bad" };
+        var window = new TopicEditorDialog { DataContext = vm, Height = 400 };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(vm.IsCreationExpanded);
+        var input = window.FindControl<TextBox>("DuplicateDetectionHistoryTimeWindow")!;
+        Assert.True(input.IsFocused);
+        Assert.Equal("bad", input.Text);
+        var point = input.TranslatePoint(new Point(), window)!.Value;
+        Assert.InRange(point.Y, 0, window.ClientSize.Height - input.Bounds.Height);
+        foreach (var name in new[] { "SaveButton", "CancelButton" })
+        {
+            var button = window.FindControl<Button>(name)!;
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.InRange(origin.Y + button.Bounds.Height, 0, window.ClientSize.Height);
+        }
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void TopicEditorLoads()
     {
         var window = new TopicEditorDialog

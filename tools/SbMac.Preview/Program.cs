@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "settings", "preference-failure", "states" };
+var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "settings", "preference-failure", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -61,7 +61,7 @@ try
     if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
     if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
     if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
-    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery"))) throw new ArgumentException("--native-screen needs --native and one of send|send-empty|send-delivery.");
+    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery" or "topic"))) throw new ArgumentException("--native-screen needs --native and one of send|send-empty|send-delivery|topic.");
     if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
     if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
     if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
@@ -125,6 +125,12 @@ try
         Render("send", () => new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
         Render("send-empty", () => new SendMessageDialog { DataContext = new SendMessageViewModel(new SendMessageRequest("orders")) }, 760, 700);
         Render("send-delivery", () => new SendMessageDialog { DataContext = BuildDeliveryViewModel() }, 760, 700);
+        Render("topic", () => new TopicEditorDialog { DataContext = new TopicEditorViewModel(new TopicDefinition { Name = "order-events" }, true) }, 620, 520);
+        Render("topic-edit", () => new TopicEditorDialog { DataContext = new TopicEditorViewModel(new TopicDefinition
+        { Name = "order-events", EnablePartitioning = true, RequiresDuplicateDetection = true, DuplicateDetectionHistoryTimeWindow = "PT10M" }, false)
+        { IsCreationExpanded = true } }, 620, 520);
+        Render("topic-invalid", () => new TopicEditorDialog { DataContext = new TopicEditorViewModel(new TopicDefinition
+        { Name = "order-events" }, true) { AutoDeleteOnIdle = "invalid", IsOptionalExpanded = true } }, 620, 520);
         Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
         Render("queue-edit", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition
         {

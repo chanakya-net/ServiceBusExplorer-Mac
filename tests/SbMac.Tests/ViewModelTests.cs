@@ -475,3 +475,61 @@ public class QueueEditorValidationTests
         Assert.Null(vm.ValidationError);
     }
 }
+
+public class TopicEditorValidationTests
+{
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SeededTopicRoundTripsWithCreationGuards(bool isNew)
+    {
+        var original = new SbMac.Core.ImportExport.TopicDefinition
+        {
+            Name = "events", MaxSizeInMegabytes = 5120, DefaultMessageTimeToLive = "PT1H",
+            AutoDeleteOnIdle = "P2D", DuplicateDetectionHistoryTimeWindow = "PT10M",
+            RequiresDuplicateDetection = true, EnablePartitioning = true, SupportOrdering = true,
+            EnableBatchedOperations = false, Status = "Disabled", UserMetadata = "fixture"
+        };
+        var vm = new TopicEditorViewModel(original, isNew);
+        Assert.Equal(isNew, vm.CanEditCreateOnlySettings);
+        Assert.True(vm.CanSave);
+        var result = vm.ToDefinition();
+        Assert.Equal(original.MaxSizeInMegabytes, result.MaxSizeInMegabytes);
+        Assert.Equal(original.DefaultMessageTimeToLive, result.DefaultMessageTimeToLive);
+        Assert.Equal(original.AutoDeleteOnIdle, result.AutoDeleteOnIdle);
+        Assert.Equal(original.DuplicateDetectionHistoryTimeWindow, result.DuplicateDetectionHistoryTimeWindow);
+        Assert.True(result.RequiresDuplicateDetection);
+        Assert.True(result.EnablePartitioning);
+        Assert.True(result.SupportOrdering);
+        Assert.False(result.EnableBatchedOperations);
+        Assert.Equal("Disabled", result.Status);
+        Assert.Equal("fixture", result.UserMetadata);
+    }
+
+    [Theory]
+    [InlineData("00:05:00")]
+    [InlineData("1.00:00:00")]
+    [InlineData("PT30S")]
+    [InlineData("")]
+    public void ValidDurationsRemainValid(string duration)
+    {
+        var vm = new TopicEditorViewModel(new SbMac.Core.ImportExport.TopicDefinition { Name = "events" }, true)
+        { DefaultMessageTimeToLive = duration, AutoDeleteOnIdle = duration, DuplicateDetectionHistoryTimeWindow = duration };
+        Assert.True(vm.CanSave);
+        Assert.Null(vm.RevealInvalidField());
+    }
+
+    [Fact]
+    public void ValidationRevealsOptionalAndPreservesInput()
+    {
+        var vm = new TopicEditorViewModel(new SbMac.Core.ImportExport.TopicDefinition { Name = "events" }, true)
+        { AutoDeleteOnIdle = "invalid" };
+        Assert.False(vm.CanSave);
+        Assert.Equal(nameof(vm.AutoDeleteOnIdle), vm.RevealInvalidField());
+        Assert.True(vm.IsOptionalExpanded);
+        Assert.Equal("invalid", vm.AutoDeleteOnIdle);
+        vm.AutoDeleteOnIdle = "PT5M";
+        Assert.True(vm.CanSave);
+        Assert.Null(vm.ValidationError);
+    }
+}
