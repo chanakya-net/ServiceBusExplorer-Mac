@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long" };
+var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -160,6 +160,8 @@ try
             Render(name, () => BuildMessageDialog(name), null, null);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
+        Render("resubmit", () => BuildResubmitDialog(3, "orders"), null, null);
+        Render("resubmit-long", () => BuildResubmitDialog(12, string.Concat(Enumerable.Repeat("very-long-dead-letter-target-", 40))), null, null);
         Render("states", BuildStatesWindow, 760, 560);
         void Render(string name, Func<Window> build, int? defaultWidth, int? defaultHeight, int tab = -1)
         {
@@ -295,6 +297,11 @@ static Window BuildMessageDialog(string name)
     return (Window)Activator.CreateInstance(typeof(MessageDialog), BindingFlags.Instance | BindingFlags.NonPublic,
         null, [title, message, kind, confirm, destructive, dismiss], null)!;
 }
+
+// Uses the real resubmit dialog constructor with synthetic count and target; no Azure or store access.
+static Window BuildResubmitDialog(int count, string target) =>
+    (Window)Activator.CreateInstance(typeof(ResubmitDialog), BindingFlags.Instance | BindingFlags.NonPublic,
+        null, [count, target], null)!;
 
 // Representative control states on one canvas: normal, disabled, selected, destructive,
 // status and keyboard focus. Pure static content, so nothing touches Azure or preferences.
