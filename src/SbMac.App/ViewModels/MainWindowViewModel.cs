@@ -157,6 +157,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(CanSend))]
     [NotifyPropertyChangedFor(nameof(CanEditAndResend))]
     [NotifyPropertyChangedFor(nameof(IsEventHubSelection))]
+    [NotifyPropertyChangedFor(nameof(MessageTableContext))]
     [NotifyPropertyChangedFor(nameof(EntityHeader))]
     [NotifyPropertyChangedFor(nameof(EntitySummary))]
     TreeNodeViewModel? selectedNode;
@@ -260,7 +261,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MessageSourceLabel))]
     [NotifyPropertyChangedFor(nameof(EmptyMessagesHint))]
+    [NotifyPropertyChangedFor(nameof(MessageTableContext))]
     bool showDeadLetter;
+
+    public MessageTableContext MessageTableContext => IsEventHubSelection ? MessageTableContext.EventHub
+        : ShowDeadLetter ? MessageTableContext.DeadLetter : MessageTableContext.ServiceBus;
 
     [ObservableProperty]
     int fetchCount = 100;
