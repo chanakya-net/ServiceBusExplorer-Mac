@@ -323,11 +323,13 @@
                 <Button x:Name="DeleteSelectedMessagesButton"
                         DockPanel.Dock="Right" Classes="toolbar destructive"
                         Content="Delete selected"
+                        IsVisible="{Binding HasSelectedMessages}"
                         IsEnabled="{Binding CanUseSelectedBrokerActions}"
                         Command="{Binding DeleteSelectedMessagesCommand}" />
 
                 <Button x:Name="ResubmitSelectedMessagesButton"
                         DockPanel.Dock="Right" Classes="toolbar"
+                        IsVisible="{Binding HasSelectedMessages}"
                         IsEnabled="{Binding CanUseSelectedBrokerActions}"
                         Command="{Binding ResubmitSelectedCommand}">
                   <StackPanel Orientation="Horizontal" Spacing="7">

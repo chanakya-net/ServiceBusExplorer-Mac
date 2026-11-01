@@ -640,6 +640,11 @@ public partial class UiSmokeTests
         viewModel.Namespaces.Add(namespaceNode);
         viewModel.SelectedNode = hub;
 
+        viewModel.Messages.Add(BuildMessageRow(1));
+        window.GetControl<DataGrid>("MessageGrid").SelectedItems.Add(viewModel.Messages[0]);
+        Assert.True(window.GetControl<Button>("DeleteSelectedMessagesButton").IsVisible);
+        Assert.False(window.GetControl<Button>("DeleteSelectedMessagesButton").IsEnabled);
+        Assert.False(window.GetControl<Button>("ResubmitSelectedMessagesButton").IsEnabled);
         Assert.Equal("Events", viewModel.MessageSourceLabel);
         Assert.NotNull(window.GetControl<DataGrid>("MessageGrid"));
         var actions = window.GetControl<Button>("ActionsButton");
@@ -896,6 +901,8 @@ public partial class UiSmokeTests
         Assert.Same(first, viewModel.SelectedMessage);
         Assert.Empty(viewModel.SelectedMessages);
         Assert.False(first.IsSelected);
+        Assert.False(window.GetControl<Button>("DeleteSelectedMessagesButton").IsVisible);
+        Assert.False(window.GetControl<Button>("ResubmitSelectedMessagesButton").IsVisible);
     }
 
     [AvaloniaFact]
@@ -1052,16 +1059,64 @@ public partial class UiSmokeTests
 
         Assert.False(resubmit.IsEnabled);
         Assert.False(delete.IsEnabled);
+        Assert.False(delete.IsVisible);
+        Assert.False(resubmit.IsVisible);
 
         grid.SelectedItems.Add(row);
 
         Assert.True(resubmit.IsEnabled);
         Assert.True(delete.IsEnabled);
+        Assert.True(delete.IsVisible);
+        Assert.True(resubmit.IsVisible);
 
         grid.SelectedItems.Clear();
 
         Assert.False(resubmit.IsEnabled);
         Assert.False(delete.IsEnabled);
+        Assert.False(delete.IsVisible);
+        Assert.False(resubmit.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task BulkDeleteAndResubmitConfirmSelectedCountAndTarget()
+    {
+        var ns = new NamespaceNodeViewModel(new NamespaceConnection
+        {
+            Name = "contoso", ConnectionString = EventHubFixtures.NamespaceConnectionString
+        });
+        var queue = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("orders"), null))
+        { Parent = new QueueFolderNodeViewModel { Parent = ns } };
+        RecordingUi.AttachOfflineMessages(ns);
+        var vm = NewIsolatedViewModel();
+        vm.SelectedNode = queue;
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+        vm.ShowDeadLetter = true;
+        vm.Messages.Add(BuildMessageRow(1));
+        vm.Messages.Add(BuildMessageRow(2));
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        grid.SelectedItems.Add(vm.Messages[0]);
+        grid.SelectedItems.Add(vm.Messages[1]);
+
+        var delete = vm.DeleteSelectedMessagesCommand.ExecuteAsync(null);
+        var dialog = Assert.IsType<MessageDialog>(Assert.Single(window.OwnedWindows));
+        var root = Assert.IsType<StackPanel>(dialog.Content);
+        var body = Assert.IsType<TextBlock>(Assert.IsType<ScrollViewer>(root.Children[1]).Content);
+        Assert.Contains("2 selected message(s)", body.Text);
+        Assert.Contains("orders/$DeadLetterQueue", body.Text);
+        Assert.Contains("delivery count", body.Text);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        await delete;
+        Assert.Empty(vm.Operations);
+
+        var resubmit = vm.ResubmitSelectedCommand.ExecuteAsync(null);
+        var resubmitDialog = Assert.IsType<ResubmitDialog>(Assert.Single(window.OwnedWindows));
+        Assert.Contains("2", string.Join(" ", resubmitDialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)));
+        Assert.Contains("orders", string.Join(" ", resubmitDialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)));
+        resubmitDialog.Close();
+        await resubmit;
+        Assert.Empty(vm.Operations);
+        window.Close();
     }
 
     static MessageRowViewModel BuildMessageRow(long sequenceNumber) => new(new MessageRecord
