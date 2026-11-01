@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SbMac.App.ViewModels.Tree;
 
 namespace SbMac.App.ViewModels;
 
@@ -38,13 +39,16 @@ public sealed partial class OperationViewModel : ViewModelBase
 {
     readonly CancellationTokenSource cancellation = new();
 
-    public OperationViewModel(OperationKind kind, string title)
+    public OperationViewModel(OperationKind kind, string title, TreeNodeViewModel? target = null)
     {
         Kind = kind;
         Title = title;
+        Target = target;
     }
 
     public OperationKind Kind { get; }
+
+    public TreeNodeViewModel? Target { get; }
 
     /// <summary>Stable label for the work — "Purging orders", "Peeking 100 message(s)".</summary>
     public string Title { get; }
@@ -113,7 +117,7 @@ public sealed partial class OperationViewModel : ViewModelBase
 
     /// <summary>One line for tooltips: what it is, and how it's going.</summary>
     public string StatusLine => Detail is { Length: > 0 } detail
-        ? $"{Title} — {detail}"
+        ? $"{Title} — {StateLabel}: {detail}"
         : $"{Title} — {StateLabel.ToLowerInvariant()}";
 
     /// <summary>Finished bars stay in the tray but recede, so the running ones read first.</summary>
