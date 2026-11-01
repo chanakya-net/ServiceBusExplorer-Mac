@@ -53,6 +53,31 @@ public partial class UiSmokeTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task FailedPreferenceSaveShowsSeparateStatusAndSuccessfulSaveClearsIt()
+    {
+        using var fixture = new AppearanceFixture();
+        var fail = true;
+        var preferences = new AppPreferencesService(new JsonSettingsStore(fixture.SettingsFile, _ =>
+            fail ? throw new UnauthorizedAccessException("denied") : Task.CompletedTask));
+        var window = fixture.Start(preferences);
+        var vm = (MainWindowViewModel)window.DataContext!;
+        window.Show();
+
+        Assert.False(await preferences.SetThemeAsync(AppTheme.Dark));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(AppTheme.Dark, preferences.Current.Theme);
+        Assert.Contains("not saved", vm.PreferenceSaveStatus);
+        Assert.Equal("Ready", vm.StatusText);
+        Assert.Empty(vm.Operations);
+
+        fail = false;
+        Assert.True(await preferences.SetThemeAsync(AppTheme.Light));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(vm.PreferenceSaveStatus);
+        window.Close();
+    }
+
     [AvaloniaTheory]
     [InlineData("light", "Light")]
     [InlineData("dark", "Dark")]

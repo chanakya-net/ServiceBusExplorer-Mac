@@ -65,6 +65,21 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task InvalidTimestampDoesNotDiscardValidAndUnknownFieldsOnWrite()
+    {
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(SettingsFile, """{"theme":"dark","lastUpdateCheckUtc":{},"future":{"enabled":true}}""", TestContext.Current.CancellationToken);
+        var store = new JsonUpdateCheckStateStore(SettingsFile);
+        Assert.Null(await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
+        var timestamp = new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
+        await store.SetLastCheckUtcAsync(timestamp, TestContext.Current.CancellationToken);
+        var root = Assert.IsType<JsonObject>(JsonNode.Parse(await File.ReadAllTextAsync(SettingsFile, TestContext.Current.CancellationToken)));
+        Assert.Equal("dark", root["theme"]!.GetValue<string>());
+        Assert.True(root["future"]!["enabled"]!.GetValue<bool>());
+        Assert.Equal(timestamp, await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task SavingReplacesInvalidJsonWithValidState()
     {
         Directory.CreateDirectory(directory);

@@ -611,6 +611,10 @@
                 IsVisible="{Binding IsBusy}"
                 Command="{Binding CancelAllOperationsCommand}" />
 
+        <TextBlock DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center"
+                   Text="{Binding PreferenceSaveStatus}" IsVisible="{Binding HasPreferenceSaveStatus}"
+                   AutomationProperties.Name="Preference save status" />
+
         <TextBlock VerticalAlignment="Center"
                    Classes="secondary"
                    TextTrimming="CharacterEllipsis"

@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Text;
 
+using Avalonia.Threading;
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -59,6 +61,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         this.updateChecker = updateChecker;
         this.connectionStore = connectionStore;
         this.preferences = preferences;
+        if (preferences is not null)
+        {
+            preferences.SaveCompleted += (_, _) => Dispatcher.UIThread.Post(UpdatePreferenceSaveStatus);
+            UpdatePreferenceSaveStatus();
+        }
         Namespaces = [];
         Messages = [];
         Log = [];
@@ -251,6 +258,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     int fetchCount = 100;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPreferenceSaveStatus))]
+    string? preferenceSaveStatus;
+
+    public bool HasPreferenceSaveStatus => PreferenceSaveStatus is not null;
+
+    void UpdatePreferenceSaveStatus() => PreferenceSaveStatus = preferences?.LastSaveError is null
+        ? null : "Preferences were not saved; changes apply for this session.";
 
     [ObservableProperty]
     string statusText = "Ready";
