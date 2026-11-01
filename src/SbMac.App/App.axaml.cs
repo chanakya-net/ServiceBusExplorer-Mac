@@ -120,15 +120,18 @@ public partial class App : Application
             Gesture = new KeyGesture(Key.OemComma, KeyModifiers.Meta)
         };
 
-        menu.Add(new NativeMenuItemSeparator());
-        menu.Add(item);
+        // The macOS exporter has normally added About and the standard commands already.
+        // Keep Settings directly after About, leaving Services through Quit in place.
+        var at = menu.Items.Count == 0 ? 0 : 1;
+        menu.Items.Insert(at, new NativeMenuItemSeparator());
+        menu.Items.Insert(at + 1, item);
         return item;
     }
 
     /// <summary>
-    /// The About entry Avalonia's macOS exporter creates when an app supplies no menu of
-    /// its own. Supplying one suppresses that default, so it is recreated here; the
-    /// exporter still appends Services, Hide, Hide Others, Show All and Quit after it.
+    /// Fallback for hosts without an application menu. On macOS the exporter normally
+    /// supplies About and the standard commands before framework initialization completes;
+    /// recreate About only when no menu has been supplied yet.
     /// </summary>
     static NativeMenu CreateApplicationMenu()
     {

@@ -322,29 +322,39 @@ public partial class UiSmokeTests
         owner.Close();
     }
 
-    [AvaloniaFact]
-    public void ApplicationSettingsMenuInvokesDialogBoundary()
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ApplicationSettingsMenuInvokesDialogBoundary(bool exporterPopulated)
     {
         using var fixture = new AppearanceFixture();
         var owner = fixture.Start(fixture.NewPreferences());
         var viewModel = Assert.IsType<MainWindowViewModel>(owner.DataContext);
         owner.Show();
         var existing = NativeMenu.GetMenu(CurrentApp);
-        var existingCount = existing?.Items.Count ?? 0;
         try
         {
+            NativeMenu.SetMenu(CurrentApp, exporterPopulated ? CreateExportedApplicationMenu() : null);
             var item = CurrentApp.AddSettingsMenuItem(viewModel.OpenSettingsCommand);
 
             var menu = Assert.IsType<NativeMenu>(NativeMenu.GetMenu(CurrentApp));
-            Assert.Same(item, menu.Items.Last());
+            Assert.Equal("About Avalonia", Assert.IsType<NativeMenuItem>(menu.Items[0]).Header);
+            Assert.IsType<NativeMenuItemSeparator>(menu.Items[1]);
+            Assert.Same(item, menu.Items[2]);
             Assert.Equal("Settings…", item.Header);
             Assert.Equal(new KeyGesture(Key.OemComma, KeyModifiers.Meta), item.Gesture);
             Assert.Same(viewModel.OpenSettingsCommand, item.Command);
             Assert.True(item.Command!.CanExecute(null));
-            if (existing is null)
+            if (exporterPopulated)
             {
-                // Supplying an application menu must not lose the About entry Avalonia adds.
-                Assert.Equal("About Avalonia", Assert.IsType<NativeMenuItem>(menu.Items[0]).Header);
+                Assert.Equal(new[] { "About Avalonia", "Settings…", "Services", "Hide Service Bus Explorer",
+                    "Hide Others", "Show All", "Quit" }, menu.Items.OfType<NativeMenuItem>()
+                    .Where(entry => entry is not NativeMenuItemSeparator).Select(entry => entry.Header));
+                Assert.Equal("Quit", Assert.IsType<NativeMenuItem>(menu.Items.Last()).Header);
+            }
+            else
+            {
+                Assert.Equal(3, menu.Items.Count);
             }
 
             // The path the macOS exporter takes for a click or the Cmd+, key equivalent.
@@ -361,24 +371,24 @@ public partial class UiSmokeTests
         }
         finally
         {
-            RestoreApplicationMenu(existing, existingCount);
+            NativeMenu.SetMenu(CurrentApp, existing);
             owner.Close();
         }
     }
 
-    static void RestoreApplicationMenu(NativeMenu? existing, int existingCount)
+    // The native exporter populates this menu before framework initialization completes.
+    static NativeMenu CreateExportedApplicationMenu() => new()
     {
-        if (existing is null)
-        {
-            NativeMenu.SetMenu(CurrentApp, null);
-            return;
-        }
-
-        while (existing.Items.Count > existingCount)
-        {
-            existing.Items.RemoveAt(existing.Items.Count - 1);
-        }
-    }
+        new NativeMenuItem("About Avalonia"),
+        new NativeMenuItemSeparator(),
+        new NativeMenuItem("Services") { Menu = new NativeMenu() },
+        new NativeMenuItemSeparator(),
+        new NativeMenuItem("Hide Service Bus Explorer"),
+        new NativeMenuItem("Hide Others"),
+        new NativeMenuItem("Show All"),
+        new NativeMenuItemSeparator(),
+        new NativeMenuItem("Quit")
+    };
 
     static CancellationToken Token => TestContext.Current.CancellationToken;
 }
