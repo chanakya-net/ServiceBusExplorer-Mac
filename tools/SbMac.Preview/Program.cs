@@ -316,7 +316,7 @@ MainWindow BuildMainWindow(bool preferenceFailure = false)
     selected.IsSelected = true;
     viewModel.SelectedNode = selected;
 
-    foreach (var record in SampleMessages())
+    foreach (var record in SampleMessages().Where(record => !record.IsDeadLetter))
     {
         viewModel.Messages.Add(new MessageRowViewModel(record));
     }
@@ -343,7 +343,12 @@ MainWindow BuildSidebarSearchWindow()
 MainWindow BuildDeadLetterWindow()
 {
     var window = BuildMainWindow();
-    ((MainWindowViewModel)window.DataContext!).ShowDeadLetter = true;
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.ShowDeadLetter = true;
+    vm.Messages.Clear();
+    foreach (var record in SampleMessages().Where(record => record.IsDeadLetter))
+        vm.Messages.Add(new MessageRowViewModel(record));
+    vm.SelectedMessage = vm.Messages.FirstOrDefault();
     return window;
 }
 

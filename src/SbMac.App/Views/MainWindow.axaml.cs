@@ -50,11 +50,13 @@ public partial class MainWindow : Window, IUiServices
             viewModel.Ui = this;
             viewModel.PropertyChanged += OnViewModelPropertyChanged;
             UpdateInspectorVisibility(viewModel.IsInspectorVisible, moveFocus: false);
+            ApplyMessageLayout();
         }
     }
 
     void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainWindowViewModel.MessageTableContext)) ApplyMessageLayout();
         if (e.PropertyName == nameof(MainWindowViewModel.IsInspectorVisible) && ViewModel is { } vm)
             UpdateInspectorVisibility(vm.IsInspectorVisible, moveFocus: true);
     }
@@ -75,6 +77,21 @@ public partial class MainWindow : Window, IUiServices
             rows[1].Height = new GridLength(1, GridUnitType.Star);
             rows[3].Height = new GridLength(0);
             if (moveFocus) MessageGrid.Focus();
+        }
+    }
+
+    void ApplyMessageLayout()
+    {
+        if (subscribedViewModel is null) return;
+        var columns = MessageTableLayoutViewModel.ColumnIds
+            .Select((id, index) => (id, column: MessageGrid.Columns[index]))
+            .ToDictionary(item => item.id, item => item.column);
+        var layout = MessageTableLayoutViewModel.ForContext(subscribedViewModel.MessageTableContext);
+        for (var i = 0; i < layout.Count; i++)
+        {
+            var column = columns[layout[i].Id];
+            column.IsVisible = layout[i].IsVisible;
+            column.DisplayIndex = i;
         }
     }
 

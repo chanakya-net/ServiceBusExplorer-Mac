@@ -347,6 +347,7 @@
               <DataGrid x:Name="MessageGrid"
                         ItemsSource="{Binding Messages}"
                         SelectionMode="Extended"
+                        FrozenColumnCount="1"
                         IsReadOnly="True"
                         CanUserResizeColumns="True"
                         CanUserSortColumns="True"
