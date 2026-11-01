@@ -19,13 +19,13 @@ public partial class MainWindow
         lastWorkspace = preferences.Current.Workspace;
         if (lastWorkspace.WindowBounds is { } saved)
         {
-            var workAreas = Screens.All.OrderByDescending(screen => screen.IsPrimary).Select(screen =>
-                new WindowBounds(screen.WorkingArea.X / DesktopScaling, screen.WorkingArea.Y / DesktopScaling,
-                    screen.WorkingArea.Width / DesktopScaling, screen.WorkingArea.Height / DesktopScaling)).ToArray();
-            var bounds = saved.Constrain(workAreas);
-            Width = bounds.Width;
-            Height = bounds.Height;
-            Position = new PixelPoint((int)(bounds.X * DesktopScaling), (int)(bounds.Y * DesktopScaling));
+            var screens = Screens.All.Select(screen => new ScreenWorkArea(
+                new(screen.WorkingArea.X, screen.WorkingArea.Y, screen.WorkingArea.Width, screen.WorkingArea.Height),
+                screen.Scaling, screen.IsPrimary)).ToArray();
+            var placement = WorkspaceLayoutService.Restore(saved, screens);
+            Width = placement.Logical.Width;
+            Height = placement.Logical.Height;
+            Position = placement.Position;
         }
         if (lastWorkspace.WindowState == WorkspaceWindowState.Maximized)
             WindowState = WindowState.Maximized;
