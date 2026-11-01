@@ -26,7 +26,7 @@ public sealed partial class SettingsDialogViewModel : ViewModelBase
 
         // Assigned to the field so showing the current choice does not save it again.
         selectedAppearance = Appearances.First(option => option.Theme == preferences.Current.Theme);
-        saveError = preferences.LastSaveError is null ? null : SaveFailedMessage;
+        saveError = preferences.ThemeSaveError is null ? null : SaveFailedMessage;
     }
 
     public IReadOnlyList<AppearanceOption> Appearances { get; } =
@@ -64,7 +64,7 @@ public sealed partial class SettingsDialogViewModel : ViewModelBase
 
     async Task SaveAsync(AppTheme theme)
     {
-        var saved = await preferences.SetThemeAsync(theme).ConfigureAwait(true);
-        SaveError = saved ? null : SaveFailedMessage;
+        await preferences.SetThemeAsync(theme).ConfigureAwait(true);
+        SaveError = preferences.ThemeSaveError is null ? null : SaveFailedMessage;
     }
 }

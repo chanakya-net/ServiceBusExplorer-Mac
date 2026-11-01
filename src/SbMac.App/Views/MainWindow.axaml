@@ -5,12 +5,14 @@
         xmlns:vm="using:SbMac.App.ViewModels"
         xmlns:controls="using:SbMac.App.Views.Controls"
         xmlns:tree="using:SbMac.App.ViewModels.Tree"
+        xmlns:models="using:SbMac.App.Models"
         mc:Ignorable="d"
         x:Class="SbMac.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Service Bus Explorer for Mac"
         Width="1360" Height="860"
-        MinWidth="960" MinHeight="600">
+        MinWidth="{x:Static models:WindowBounds.MinimumWidth}"
+        MinHeight="{x:Static models:WindowBounds.MinimumHeight}">
 
   <!--
     macOS puts this in the system menu bar rather than inside the window, which is why
