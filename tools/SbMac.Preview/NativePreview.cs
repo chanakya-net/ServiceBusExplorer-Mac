@@ -1,4 +1,9 @@
 using Avalonia;
+using Avalonia.Controls;
+
+using SbMac.App.ViewModels.Dialogs;
+using SbMac.App.Views.Dialogs;
+using SbMac.Core.Messaging;
 
 using SbMac.App;
 using SbMac.App.Services;
@@ -30,7 +35,7 @@ static class NativePreview
         return full;
     }
 
-    public static void Run(string stateDirectory, int? width, int? height)
+    public static void Run(string stateDirectory, int? width, int? height, string? screen = null)
     {
         var preferences = new AppPreferencesService(
             new JsonSettingsStore(Path.Combine(stateDirectory, "settings.json")));
@@ -43,6 +48,7 @@ static class NativePreview
         {
             var viewModel = MainWindowViewModel.CreateIsolated(connections, RejectAzure, loaded);
             var window = new MainWindow { DataContext = viewModel };
+            if (screen is not null) window.Opened += (_, _) => BuildSendFixture(screen).Show();
             if (width is { } w) window.Width = w;
             if (height is { } h) window.Height = h;
             return window;
@@ -56,6 +62,21 @@ static class NativePreview
             .UseHarfBuzz()
             .WithInterFont()
             .StartWithClassicDesktopLifetime([]);
+    }
+
+    /// <summary>Standalone deterministic Send dialog, so native keyboard checks reach it without Azure.</summary>
+    static SendMessageDialog BuildSendFixture(string screen)
+    {
+        var request = new SendMessageRequest("orders");
+        var viewModel = new SendMessageViewModel(request);
+        if (screen == "send-delivery")
+        {
+            viewModel.Body = "Order {n}";
+            viewModel.IsDeliveryExpanded = true;
+            viewModel.Copies = 3;
+        }
+
+        return new SendMessageDialog { DataContext = viewModel };
     }
 
     static Task RejectAzure(SbMac.App.ViewModels.Tree.NamespaceNodeViewModel node, CancellationToken token) =>

@@ -28,7 +28,7 @@ using SbMac.Preview;
 var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "queue", "settings", "preference-failure", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
-string? stateDir = null;
+string? stateDir = null, nativeScreen = null;
 int? width = null, height = null;
 bool outputSet = false, native = false, themeSet = false, screenSet = false;
 try
@@ -39,13 +39,14 @@ try
         if (arg == "--help") { Usage(); return; }
         if (arg == "--native") { native = true; continue; }
         if (arg == "--font-check") { Environment.ExitCode = FontCheck(); return; }
-        if (arg is "--theme" or "--screen" or "--size" or "--state-dir")
+        if (arg is "--theme" or "--screen" or "--size" or "--state-dir" or "--native-screen")
         {
             if (++i == args.Length) throw new ArgumentException($"Missing value for {arg}.");
             var value = args[i];
             if (arg == "--theme") { theme = value; themeSet = true; }
             else if (arg == "--screen") { screen = value; screenSet = true; }
             else if (arg == "--state-dir") stateDir = value;
+            else if (arg == "--native-screen") nativeScreen = value;
             else
             {
                 var parts = value.Split('x');
@@ -60,6 +61,7 @@ try
     if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
     if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
     if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
+    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery"))) throw new ArgumentException("--native-screen needs --native and one of send|send-empty|send-delivery.");
     if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
     if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
     if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
@@ -67,7 +69,7 @@ try
 catch (ArgumentException e) { Console.Error.WriteLine(e.Message); Usage(); Environment.ExitCode = 2; return; }
 
 // The native fixture must start before anything initialises the headless platform below.
-if (native) { NativePreview.Run(stateDir!, width, height); return; }
+if (native) { NativePreview.Run(stateDir!, width, height, nativeScreen); return; }
 
 // Native diagnostic: asks the real macOS font manager which face the shared UiFont resolves to.
 // Headless tests cannot answer this; it must run with the native backend on a Mac.
@@ -88,7 +90,7 @@ static int FontCheck()
 }
 
 void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
-    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT]\n" +
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen send|send-empty|send-delivery]\n" +
     "       SbMac.Preview --font-check   (macOS only: native system-font resolution)");
 Directory.CreateDirectory(outDir);
 var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
