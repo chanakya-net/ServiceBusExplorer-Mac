@@ -681,6 +681,52 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void ActivityPanelRemainsIndependentOfInspector()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        var panel = window.GetControl<Control>("ActivityPanel");
+        var toggle = window.GetControl<Button>("ActivityToggle");
+        var tabs = window.GetControl<TabControl>("InspectorTabs");
+        Assert.False(panel.IsVisible);
+        Assert.Equal(2, tabs.ItemCount);
+        toggle.Command!.Execute(null);
+        Assert.True(panel.IsVisible);
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Assert.False(viewModel.IsInspectorVisible);
+        Assert.True(panel.IsVisible);
+        toggle.Command.Execute(null);
+        Assert.False(panel.IsVisible);
+        Assert.False(viewModel.IsInspectorVisible);
+    }
+
+    [AvaloniaFact]
+    public void ActivityPanelControlsCancelAndClearLog()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var first = new OperationViewModel(OperationKind.Read, "Reading");
+        var second = new OperationViewModel(OperationKind.Send, "Sending");
+        viewModel.Operations.Add(first);
+        viewModel.Operations.Add(second);
+        viewModel.Log.Add("fixture log");
+        viewModel.IsActivityExpanded = true;
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var panel = window.GetControl<Control>("ActivityPanel");
+        panel.GetControl<Button>("ClearLogButton").Command!.Execute(null);
+        Assert.Empty(viewModel.Log);
+        var cancel = panel.GetVisualDescendants().OfType<Button>()
+            .Single(button => button.Name == "CancelOperationButton" && ReferenceEquals(button.DataContext, first));
+        cancel.Command!.Execute(null);
+        Assert.True(first.Token.IsCancellationRequested);
+        Assert.False(second.Token.IsCancellationRequested);
+        panel.GetControl<Button>("CancelAllButton").Command!.Execute(null);
+        Assert.True(second.Token.IsCancellationRequested);
+    }
+
+    [AvaloniaFact]
     public void QueueEditorLoadsInBothCreateAndEditModes()
     {
         var create = new QueueEditorDialog

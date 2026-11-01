@@ -3,6 +3,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:SbMac.App.ViewModels"
+        xmlns:controls="using:SbMac.App.Views.Controls"
         xmlns:tree="using:SbMac.App.ViewModels.Tree"
         mc:Ignorable="d"
         x:Class="SbMac.App.Views.MainWindow"
@@ -468,112 +469,14 @@
               </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="Activity">
-              <Grid RowDefinitions="Auto,*">
-                <Border Grid.Row="0" Classes="cardHeader" BorderThickness="0,1,0,1">
-                  <DockPanel LastChildFill="False">
-                    <TextBlock DockPanel.Dock="Left" Classes="tertiary"
-                               VerticalAlignment="Center" Text="Newest first" />
-                    <Button DockPanel.Dock="Right" Classes="toolbar"
-                            Content="Clear" Command="{Binding ClearLogCommand}" />
-                  </DockPanel>
-                </Border>
-
-                <ListBox Grid.Row="1" ItemsSource="{Binding Log}" Padding="4,6">
-                  <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                      <TextBlock Classes="mono" Text="{Binding}" TextWrapping="Wrap" />
-                    </DataTemplate>
-                  </ListBox.ItemTemplate>
-                </ListBox>
-              </Grid>
-            </TabItem>
 
           </TabControl>
         </Border>
       </Grid>
     </Grid>
 
-    <!-- ═══════════════════════ activity, expanded ═══════════════════════ -->
-    <!--
-      One row per operation, so it is obvious which are still running and which have
-      finished. Collapsed, the same operations are the coloured bars in the status bar.
-    -->
-    <Border Grid.Row="2" Classes="activityPanel"
-            IsVisible="{Binding IsActivityExpanded}">
-      <Grid RowDefinitions="Auto,Auto">
-
-        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,6">
-          <TextBlock DockPanel.Dock="Left" Classes="caption" Text="ACTIVITY"
-                     VerticalAlignment="Center" />
-
-          <Button DockPanel.Dock="Right" Classes="toolbar"
-                  Content="Hide" Padding="9,3"
-                  Command="{Binding ToggleActivityCommand}" />
-
-          <Button DockPanel.Dock="Right" Classes="toolbar"
-                  Content="Clear finished" Padding="9,3"
-                  IsEnabled="{Binding HasFinishedOperations}"
-                  Command="{Binding ClearFinishedOperationsCommand}" />
-
-          <Button DockPanel.Dock="Right" Classes="toolbar destructive"
-                  Content="Cancel all" Padding="9,3"
-                  IsEnabled="{Binding IsBusy}"
-                  Command="{Binding CancelAllOperationsCommand}" />
-        </DockPanel>
-
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding Operations}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:OperationViewModel">
-              <!-- Finished rows recede as a whole rather than a part at a time. -->
-              <Grid ColumnDefinitions="*,Auto,88" RowDefinitions="Auto,Auto" Margin="0,5"
-                    Opacity="{Binding TrayOpacity}">
-
-                <TextBlock Grid.Row="0" Grid.Column="0"
-                           Text="{Binding Title}"
-                           TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center" />
-
-                <TextBlock Grid.Row="0" Grid.Column="1"
-                           Classes="tertiary"
-                           VerticalAlignment="Center"
-                           Margin="12,0,0,0"
-                           TextTrimming="CharacterEllipsis"
-                           MaxWidth="360"
-                           Text="{Binding Detail}" />
-
-                <Button Grid.Row="0" Grid.Column="2" Classes="toolbar"
-                        Content="Cancel" Padding="9,2" Margin="10,0,0,0"
-                        HorizontalAlignment="Right"
-                        IsVisible="{Binding IsRunning}"
-                        Command="{Binding CancelCommand}" />
-
-                <TextBlock Grid.Row="0" Grid.Column="2"
-                           Classes="tertiary"
-                           VerticalAlignment="Center"
-                           Margin="10,0,4,0"
-                           HorizontalAlignment="Right"
-                           IsVisible="{Binding IsFinished}"
-                           Text="{Binding StateLabel}" />
-
-                <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
-                             Height="3" Margin="0,6,0,0"
-                             Minimum="0" Maximum="100"
-                             Value="{Binding Progress}"
-                             IsIndeterminate="{Binding IsIndeterminate}">
-                  <ProgressBar.Foreground>
-                    <MultiBinding Converter="{StaticResource BrushLookup}">
-                      <Binding Path="AccentKey" />
-                      <Binding Path="$self.ActualThemeVariant" />
-                    </MultiBinding>
-                  </ProgressBar.Foreground>
-                </ProgressBar>
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </Grid>
-    </Border>
+    <controls:ActivityPanel x:Name="ActivityPanel" Grid.Row="2"
+                            IsVisible="{Binding IsActivityExpanded}" />
 
     <!-- ═══════════════════════════ status bar ═══════════════════════════ -->
     <Border Grid.Row="3" Classes="statusBar">
@@ -583,11 +486,11 @@
           The tray: one small bar per operation, each in its kind's colour, so several
           running at once stay tellable apart. Clicking opens the full list above.
         -->
-        <Button DockPanel.Dock="Left" Classes="toolbar" Padding="6,2" Margin="0,0,10,0"
-                IsVisible="{Binding HasOperations}"
+        <Button x:Name="ActivityToggle" DockPanel.Dock="Left" Classes="toolbar" Padding="6,2" Margin="0,0,10,0"
                 Command="{Binding ToggleActivityCommand}"
                 ToolTip.Tip="Show every running and recent operation">
           <StackPanel Orientation="Horizontal" Spacing="9">
+            <TextBlock Text="Activity" VerticalAlignment="Center" />
             <ItemsControl ItemsSource="{Binding Operations}" VerticalAlignment="Center">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
