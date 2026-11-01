@@ -597,6 +597,49 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void SubscriptionSaveRevealsInvalidDurationAndKeepsActionsReachable()
+    {
+        var vm = new SubscriptionEditorViewModel("events", new SubscriptionDefinition { Name = "audit" }, true)
+        { AutoDeleteOnIdle = "invalid" };
+        var window = new SubscriptionEditorDialog { DataContext = vm, Height = 400 };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(vm.IsOptionalExpanded);
+        var input = window.FindControl<TextBox>("AutoDeleteOnIdle")!;
+        Assert.True(input.IsFocused);
+        Assert.Equal("invalid", input.Text);
+        var point = input.TranslatePoint(new Point(), window)!.Value;
+        Assert.InRange(point.Y, 0, window.ClientSize.Height - input.Bounds.Height);
+        foreach (var name in new[] { "SaveButton", "CancelButton" })
+        {
+            var button = window.FindControl<Button>(name)!;
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.InRange(origin.Y + button.Bounds.Height, 0, window.ClientSize.Height);
+        }
+        window.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, null);
+        window.KeyTextInput("00:05:00");
+        Assert.True(vm.CanSave);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SubscriptionEditLocksIdentityAndSessionAndHidesDefaultRule()
+    {
+        var vm = new SubscriptionEditorViewModel("events", new SubscriptionDefinition
+        { Name = "audit", RequiresSession = true }, false) { IsCreationExpanded = true };
+        var window = new SubscriptionEditorDialog { DataContext = vm };
+        window.Show();
+        Assert.False(window.FindControl<TextBox>("NameField")!.IsEnabled);
+        Assert.False(window.FindControl<CheckBox>("RequiresSessionField")!.IsEnabled);
+        Assert.False(window.FindControl<TextBox>("DefaultRuleFilterField")!.IsEffectivelyVisible);
+        Assert.True(vm.ToDefinition().RequiresSession);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void SubscriptionEditorLoads()
     {
         var window = new SubscriptionEditorDialog
