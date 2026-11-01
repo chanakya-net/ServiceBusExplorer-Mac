@@ -25,7 +25,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "settings", "preference-failure", "states" };
+var screens = new[] { "main", "inspector-collapsed", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "settings", "preference-failure", "states" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -61,7 +61,7 @@ try
     if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
     if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
     if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
-    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery" or "topic"))) throw new ArgumentException("--native-screen needs --native and one of send|send-empty|send-delivery|topic.");
+    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery" or "topic" or "subscription"))) throw new ArgumentException("--native-screen needs --native and one of send|send-empty|send-delivery|topic.");
     if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
     if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
     if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
@@ -90,7 +90,7 @@ static int FontCheck()
 }
 
 void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
-    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen send|send-empty|send-delivery]\n" +
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen send|send-empty|send-delivery|topic|subscription]\n" +
     "       SbMac.Preview --font-check   (macOS only: native system-font resolution)");
 Directory.CreateDirectory(outDir);
 var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
@@ -142,6 +142,14 @@ try
             new QueueDefinition { Name = "orders" }, true) { AutoDeleteOnIdle = "invalid" } }, 620, 520);
         Render("queue-creation-invalid", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(
             new QueueDefinition { Name = "orders" }, true) { DuplicateDetectionHistoryTimeWindow = "invalid" } }, 620, 520);
+        Render("subscription", () => new SubscriptionEditorDialog { DataContext = new SubscriptionEditorViewModel(
+            "order-events", new SubscriptionDefinition { Name = "audit", MaxDeliveryCount = 10 }, true) }, 620, 640);
+        Render("subscription-edit", () => new SubscriptionEditorDialog { DataContext = new SubscriptionEditorViewModel(
+            "order-events", new SubscriptionDefinition { Name = "audit", RequiresSession = true, MaxDeliveryCount = 10 }, false)
+            { IsCreationExpanded = true, IsForwardingExpanded = true } }, 620, 520);
+        Render("subscription-invalid", () => new SubscriptionEditorDialog { DataContext = new SubscriptionEditorViewModel(
+            "order-events", new SubscriptionDefinition { Name = "audit", MaxDeliveryCount = 10 }, true)
+            { AutoDeleteOnIdle = "invalid" } }, 620, 520);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
         Render("states", BuildStatesWindow, 760, 560);
@@ -215,7 +223,7 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
         }
     }
 
-    if (name.StartsWith("queue-edit-"))
+    if (name.StartsWith("queue-edit-") || name.StartsWith("subscription-edit-"))
     {
         window.FindControl<Control>("CreationSection")!.BringIntoView();
         for (var i = 0; i < 12; i++)
@@ -224,7 +232,7 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         }
     }
-    if (name.StartsWith("queue-") && name.Contains("-invalid-"))
+    if ((name.StartsWith("queue-") || name.StartsWith("subscription-")) && name.Contains("-invalid-"))
     {
         window.FindControl<Button>("SaveButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         for (var i = 0; i < 12; i++)

@@ -533,3 +533,26 @@ public class TopicEditorValidationTests
         Assert.Null(vm.ValidationError);
     }
 }
+
+public class SubscriptionEditorValidationTests
+{
+    [Fact]
+    public void CreateAndEditPreserveRulesAndRevealInvalidOptionalDuration()
+    {
+        var definition = new SbMac.Core.ImportExport.SubscriptionDefinition { Name = "audit", RequiresSession = true };
+        var create = new SubscriptionEditorViewModel("events", definition, true) { AutoDeleteOnIdle = "bad" };
+        Assert.Equal("events", create.TopicName);
+        Assert.False(create.CanSave);
+        Assert.Equal(nameof(create.AutoDeleteOnIdle), create.RevealInvalidField());
+        Assert.True(create.IsOptionalExpanded);
+        Assert.Equal("bad", create.AutoDeleteOnIdle);
+        create.AutoDeleteOnIdle = "PT5M";
+        Assert.True(create.CanSave);
+        Assert.Single(create.ToDefinition().Rules);
+        Assert.Equal("1=1", create.ToDefinition().Rules[0].SqlExpression);
+        var edit = new SubscriptionEditorViewModel("events", definition, false);
+        Assert.False(edit.CanEditCreateOnlySettings);
+        Assert.True(edit.ToDefinition().RequiresSession);
+        Assert.Empty(edit.ToDefinition().Rules);
+    }
+}

@@ -365,6 +365,42 @@ public sealed partial class SubscriptionEditorViewModel : ViewModelBase
     [ObservableProperty]
     string defaultRuleFilter;
 
+    [ObservableProperty]
+    bool isOptionalExpanded;
+
+    [ObservableProperty]
+    bool isForwardingExpanded;
+
+    [ObservableProperty]
+    bool isCreationExpanded;
+
+    [ObservableProperty]
+    string? validationError;
+
+    partial void OnNameChanged(string value) => ClearResolvedError();
+    partial void OnLockDurationChanged(string value) => ClearResolvedError();
+    partial void OnDefaultMessageTimeToLiveChanged(string value) => ClearResolvedError();
+    partial void OnAutoDeleteOnIdleChanged(string value) => ClearResolvedError();
+
+    void ClearResolvedError()
+    {
+        if (ValidationError is not null && CanSave) ValidationError = null;
+    }
+
+    public string? RevealInvalidField()
+    {
+        string? field = string.IsNullOrWhiteSpace(Name) ? nameof(Name)
+            : !DurationText.IsValid(LockDuration) ? nameof(LockDuration)
+            : !DurationText.IsValid(DefaultMessageTimeToLive) ? nameof(DefaultMessageTimeToLive)
+            : !DurationText.IsValid(AutoDeleteOnIdle) ? nameof(AutoDeleteOnIdle)
+            : null;
+        if (field == nameof(AutoDeleteOnIdle)) IsOptionalExpanded = true;
+        ValidationError = field is null ? null : field == nameof(Name)
+            ? "Enter a subscription name."
+            : "Enter a valid duration (hh:mm:ss, d.hh:mm:ss or ISO 8601).";
+        return field;
+    }
+
     public bool CanSave =>
         !string.IsNullOrWhiteSpace(Name) &&
         DurationText.IsValid(LockDuration) &&
