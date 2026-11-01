@@ -26,11 +26,9 @@ public static class WorkspaceLayoutService
         var usable = screens.Where(screen => screen.IsUsable).OrderByDescending(screen => screen.IsPrimary).ToArray();
         if (usable.Length == 0)
             return new(saved, new((int)Math.Round(saved.X), (int)Math.Round(saved.Y)));
-        var bounds = saved.Constrain(usable.Select(screen => screen.Logical).ToArray());
-        var target = usable.FirstOrDefault(screen => Contains(screen.Logical, bounds)) ?? usable[0];
+        // Pick the target once (stable sort keeps primary first on ties), then clamp and convert against it.
+        var target = usable.OrderByDescending(screen => saved.IntersectionArea(screen.Logical)).First();
+        var bounds = saved.Constrain([target.Logical]);
         return new(bounds, new((int)Math.Round(bounds.X * target.Scaling), (int)Math.Round(bounds.Y * target.Scaling)));
     }
-
-    static bool Contains(WindowBounds area, WindowBounds bounds) =>
-        bounds.X >= area.X && bounds.Y >= area.Y && bounds.X < area.X + area.Width && bounds.Y < area.Y + area.Height;
 }

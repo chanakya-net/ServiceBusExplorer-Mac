@@ -46,7 +46,7 @@ public sealed record WindowBounds(double X, double Y, double Width, double Heigh
             Math.Clamp(Y, area.Y, Math.Max(area.Y, area.Y + area.Height - height - TitleBarAllowance)), width, height);
     }
 
-    double IntersectionArea(WindowBounds area) =>
+    internal double IntersectionArea(WindowBounds area) =>
         Math.Max(0, Math.Min(X + Width, area.X + area.Width) - Math.Max(X, area.X)) *
         Math.Max(0, Math.Min(Y + Height, area.Y + area.Height) - Math.Max(Y, area.Y));
 }

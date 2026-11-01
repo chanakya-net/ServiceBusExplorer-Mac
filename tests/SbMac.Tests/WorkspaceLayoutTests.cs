@@ -166,6 +166,18 @@ public sealed partial class WorkspaceLayoutTests : IDisposable
     }
 
     [Fact]
+    public void RestoreKeepsValidPlacementOnHigherScaleExternalWhenLogicalAreasOverlap()
+    {
+        // 1x primary (0..1920 logical) and 2x external at pixels 1920..5760 (logical 960..2880) overlap logically.
+        var primary = new ScreenWorkArea(new(0, 0, 1920, 1080), 1, true);
+        var external = new ScreenWorkArea(new(1920, 0, 3840, 2160), 2, false);
+        var saved = new WindowBounds(1000, 100, 1120, 720);
+        var placement = WorkspaceLayoutService.Restore(saved, [primary, external]);
+        Assert.Equal(saved, placement.Logical);
+        Assert.Equal(new PixelPoint(2000, 200), placement.Position);
+    }
+
+    [Fact]
     public void RestoreIgnoresInvalidScreensAndFallsBackWithoutScreens()
     {
         var saved = new WindowBounds(-1200, 60, 1120, 720);
