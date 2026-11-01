@@ -31,10 +31,113 @@ namespace SbMac.Tests;
 /// </summary>
 public class UiSmokeTests
 {
+    static MainWindowViewModel NewIsolatedViewModel()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "sbmac-test-" + Guid.NewGuid());
+        var store = new ConnectionStore(Path.Combine(path, "connections.json"), new FileSecretStore(Path.Combine(path, "secrets.json")));
+        return MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Unexpected network call"));
+    }
+
+    sealed class FailingSecrets : ISecretStore
+    {
+        public int Calls { get; private set; }
+        public bool IsAvailable => true;
+        public Task SetSecretAsync(string key, string secret, CancellationToken cancellationToken = default) => Fail();
+        public async Task<string?> GetSecretAsync(string key, CancellationToken cancellationToken = default) { await Fail(); return null; }
+        public Task DeleteSecretAsync(string key, CancellationToken cancellationToken = default) => Fail();
+        Task Fail() { Calls++; throw new InvalidOperationException("secret store reached"); }
+    }
+
+    [AvaloniaFact]
+    public async Task IsolatedWindowUsesNoSecretsInEitherTheme()
+    {
+        var dir = Directory.CreateTempSubdirectory("sbmac-test-");
+        try
+        {
+            var path = Path.Combine(dir.FullName, "connections.json");
+            await new ConnectionStore(path, new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")))
+                .SaveAsync([new NamespaceConnection { Name = "fixture", AuthenticationMode = AuthenticationMode.EntraId, FullyQualifiedNamespace = "fixture.servicebus.windows.net" }]);
+            foreach (var theme in new[] { Avalonia.Styling.ThemeVariant.Light, Avalonia.Styling.ThemeVariant.Dark })
+            {
+                var secrets = new FailingSecrets();
+                var calls = 0;
+                var vm = MainWindowViewModel.CreateIsolated(new ConnectionStore(path, secrets), (_, _) => { calls++; throw new InvalidOperationException("network reached"); });
+                await vm.InitializeAsync();
+                var window = new MainWindow { DataContext = vm, RequestedThemeVariant = theme };
+                window.Show();
+                await vm.InitializeAsync();
+                window.UpdateLayout();
+                Assert.Equal(theme, window.ActualThemeVariant);
+                Assert.Equal("fixture", Assert.Single(vm.Namespaces).Title);
+                Assert.Equal(0, secrets.Calls);
+                Assert.Equal(0, calls);
+                Assert.Empty(window.OwnedWindows);
+                window.Close();
+            }
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [AvaloniaFact]
+    public async Task IsolatedWindowReportsSecretStoreFailure()
+    {
+        var dir = Directory.CreateTempSubdirectory("sbmac-test-");
+        try
+        {
+            var path = Path.Combine(dir.FullName, "connections.json");
+            var seed = new ConnectionStore(path, new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")));
+            await seed.SaveAsync([new NamespaceConnection { Name = "fixture", AuthenticationMode = AuthenticationMode.ConnectionString, ConnectionString = "fixture" }]);
+            var secrets = new FailingSecrets();
+            var vm = MainWindowViewModel.CreateIsolated(new ConnectionStore(path, secrets), (_, _) => throw new InvalidOperationException("network reached"));
+            await vm.InitializeAsync();
+            var window = new MainWindow { DataContext = vm };
+            window.Show();
+            await vm.InitializeAsync();
+            Assert.Empty(vm.Namespaces);
+            Assert.Equal(1, secrets.Calls);
+            Assert.Contains(vm.Log, line => line.Contains("Could not load saved namespaces") && line.Contains("secret store reached"));
+            window.Close();
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [AvaloniaFact]
+    public async Task IsolatedWindowLoadsFixtureWithoutConnecting()
+    {
+        var directory = Directory.CreateTempSubdirectory("sbmac-test-");
+        try
+        {
+            var store = new ConnectionStore(Path.Combine(directory.FullName, "connections.json"),
+                new FileSecretStore(Path.Combine(directory.FullName, "secrets.json")));
+            await store.SaveAsync([new NamespaceConnection { Name = "fixture", AuthenticationMode = AuthenticationMode.EntraId,
+                FullyQualifiedNamespace = "fixture.servicebus.windows.net" }]);
+            var calls = 0;
+            Task Connect(NamespaceNodeViewModel node, CancellationToken token)
+            {
+                calls++;
+                throw new InvalidOperationException("fixture provider reached");
+            }
+            var vm = MainWindowViewModel.CreateIsolated(store, Connect);
+            var first = vm.InitializeAsync();
+            Assert.Same(first, vm.InitializeAsync());
+            await first;
+            var window = new MainWindow { DataContext = vm };
+            window.Show();
+            await vm.InitializeAsync();
+            Assert.Equal("fixture", Assert.Single(vm.Namespaces).Title);
+            Assert.Equal(0, calls);
+            vm.Ui = null;
+            await vm.ConnectCommand.ExecuteAsync(vm.Namespaces[0]);
+            Assert.Equal(1, calls);
+            window.Close();
+        }
+        finally { directory.Delete(true); }
+    }
+
     [AvaloniaFact]
     public void MainWindowLoadsWithItsViewModel()
     {
-        var window = new MainWindow { DataContext = new MainWindowViewModel() };
+        var window = new MainWindow { DataContext = NewIsolatedViewModel() };
         window.Show();
 
         Assert.Equal("Service Bus Explorer for Mac", window.Title);
@@ -44,7 +147,7 @@ public class UiSmokeTests
     [AvaloniaFact]
     public void MainWindowRegistersItselfAsTheDialogHost()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -142,7 +245,7 @@ public class UiSmokeTests
             Parent = folder
         };
 
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -160,7 +263,7 @@ public class UiSmokeTests
     [AvaloniaFact]
     public void MainWindowRendersTheActivityPanel()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -238,7 +341,7 @@ public class UiSmokeTests
     [AvaloniaFact]
     public void MessageGridIsBoundToTheViewModelsMessages()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -251,7 +354,7 @@ public class UiSmokeTests
     public void ShowingMessageDetailsDoesNotImplicitlySelectItForBulkActions()
     {
         var first = BuildMessageRow(1);
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
         viewModel.Messages.Add(first);
@@ -270,7 +373,7 @@ public class UiSmokeTests
     {
         var first = BuildMessageRow(1);
         var second = BuildMessageRow(2);
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
         viewModel.Messages.Add(first);
@@ -285,7 +388,7 @@ public class UiSmokeTests
     [AvaloniaFact]
     public void BulkSelectionControlsSelectAndClearEveryLoadedMessage()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -320,7 +423,7 @@ public class UiSmokeTests
     {
         var first = BuildMessageRow(1);
         var second = BuildMessageRow(2);
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -357,7 +460,8 @@ public class UiSmokeTests
         };
 
         var row = BuildMessageRow(1);
-        var viewModel = new MainWindowViewModel { SelectedNode = queue };
+        var viewModel = NewIsolatedViewModel();
+        viewModel.SelectedNode = queue;
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
         viewModel.Messages.Add(row);
@@ -405,7 +509,7 @@ public class UiSmokeTests
     [AvaloniaFact]
     public void NamespaceTreeIsBoundToTheViewModelsNamespaces()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -417,7 +521,7 @@ public class UiSmokeTests
     [AvaloniaFact]
     public void EntitySearchBoxUpdatesTheTreeSearchTextAsTheUserTypes()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
