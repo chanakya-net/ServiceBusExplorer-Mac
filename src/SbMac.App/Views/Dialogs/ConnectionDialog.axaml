@@ -55,7 +55,7 @@
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Connection string"
                    VerticalAlignment="Top" Margin="0,6,10,0" />
-        <TextBox AutomationProperties.Name="Connection String" x:Name="ConnectionStringField" Grid.Column="1"
+        <TextBox AutomationProperties.Name="Connection string" x:Name="ConnectionStringField" Grid.Column="1"
                  Text="{Binding ConnectionString}"
                  AcceptsReturn="True"
                  TextWrapping="Wrap"
@@ -72,13 +72,13 @@
     <StackPanel Spacing="12" IsVisible="{Binding ShowEntraFields}">
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Namespace" />
-        <TextBox AutomationProperties.Name="Fully Qualified Namespace" x:Name="FullyQualifiedNamespaceField" Grid.Column="1" Text="{Binding FullyQualifiedNamespace}"
+        <TextBox AutomationProperties.Name="Namespace" x:Name="FullyQualifiedNamespaceField" Grid.Column="1" Text="{Binding FullyQualifiedNamespace}"
                  PlaceholderText="contoso.servicebus.windows.net" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Credential" />
-        <ComboBox AutomationProperties.Name="Entra credential" Grid.Column="1"
+        <ComboBox AutomationProperties.Name="Credential" Grid.Column="1"
                   HorizontalAlignment="Stretch"
                   ItemsSource="{Binding CredentialKindLabels}"
                   SelectedIndex="{Binding SelectedCredentialIndex}" />
@@ -96,7 +96,7 @@
 
       <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowClientSecretFields}">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Client secret" />
-        <TextBox AutomationProperties.Name="Client Secret" x:Name="ClientSecretField" Grid.Column="1" Text="{Binding ClientSecret}" PasswordChar="•" />
+        <TextBox AutomationProperties.Name="Client secret" x:Name="ClientSecretField" Grid.Column="1" Text="{Binding ClientSecret}" PasswordChar="•" />
       </Grid>
 
       <TextBlock Classes="tertiary" Margin="150,0,0,0"
@@ -111,7 +111,7 @@
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Event hubs"
                    VerticalAlignment="Top" Margin="0,6,10,0" />
-        <TextBox AutomationProperties.Name="Event Hub Names" Grid.Column="1"
+        <TextBox AutomationProperties.Name="Event hubs" Grid.Column="1"
                  Text="{Binding EventHubNames}"
                  AcceptsReturn="True"
                  Height="66"
@@ -124,7 +124,7 @@
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Consumer group" />
-        <TextBox AutomationProperties.Name="Consumer Group" Grid.Column="1" Text="{Binding ConsumerGroup}" PlaceholderText="$Default" />
+        <TextBox AutomationProperties.Name="Consumer group" Grid.Column="1" Text="{Binding ConsumerGroup}" PlaceholderText="$Default" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowSubscriptionField}">

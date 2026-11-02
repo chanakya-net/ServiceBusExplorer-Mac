@@ -386,6 +386,18 @@ windows are not included in the owner-window screenshot capture; chooser activat
 verified through the resulting column visibility and restored focus. VoiceOver end-to-end
 validation remains explicitly deferred.
 
+Review revisions after those native observations are verified by headless tests and
+Light/Dark renders only; a native recheck of them is still outstanding:
+
+| Behaviour | Automated evidence |
+|---|---|
+| Toolbar and message-header Tab/Shift+Tab follow on-screen left-to-right order at 1360x860 and 960x600 (More last when compact) | `ToolbarAndHeaderTabOrderFollowsVisualOrder` |
+| Populated workspace traverses toolbar, sidebar, header, grid, inspector and status bar in both directions without changing the explicit selection; Shift+Tab leaves the inspector content through its tab header | `MainWorkspaceKeyboardTraversalReachesNamedRegions` |
+| Arrow keys move the grid row and inspector; Space on a row checkbox toggles only that row | `MessageGridArrowKeysMoveRowAndSpaceTogglesOnlyFocusedCheckbox` |
+| Enter activates Actions › Copy body, Columns and More › Inspector items | `WorkspaceMenusSupportKeyboardActivationAndReturnFocus` |
+| Destructive confirmations open focused on the message, so Space does nothing; Return confirms and Escape cancels | `DestructiveConfirmationIgnoresSpaceAtOpen` |
+| Editor field names match their visible labels | `DialogKeyboardRoundTripsPreserveDefaultsAndOwnerFocus` |
+
 ## Building
 
 Requires the .NET 10 SDK.

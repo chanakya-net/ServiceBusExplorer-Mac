@@ -66,6 +66,22 @@ public partial class MainWindow
             ?.Focus(NavigationMethod.Tab) == true;
     }
 
+    void OnInspectorTabsKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Shift+Tab from the first stop of the selected tab's content stays put on the
+        // default navigator; step back to the selected tab header so the splitter follows.
+        if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.Shift ||
+            InspectorTabs.ContainerFromIndex(Math.Max(0, InspectorTabs.SelectedIndex)) is not { } header ||
+            FocusManager?.GetFocusedElement() is not InputElement focused ||
+            !ReferenceEquals(focused, FirstContentTabStop())) return;
+        e.Handled = header.Focus(NavigationMethod.Tab);
+    }
+
+    InputElement? FirstContentTabStop() => InspectorTabs.GetVisualDescendants()
+        .OfType<InputElement>()
+        .Where(c => c is not TabItem && !c.GetVisualAncestors().OfType<TabItem>().Any())
+        .FirstOrDefault(c => c.Focusable && c.IsTabStop && c.IsEffectivelyVisible && c.IsEffectivelyEnabled);
+
     void OnEntityTreeKeyDown(object? sender, KeyEventArgs e)
     {
         if ((e.Key == Key.F10 && e.KeyModifiers == KeyModifiers.Shift) ||

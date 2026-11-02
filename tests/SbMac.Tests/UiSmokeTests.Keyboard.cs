@@ -1,11 +1,8 @@
-using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
-using Avalonia.Styling;
 using Avalonia.Threading;
-using Avalonia.VisualTree;
 using SbMac.App.Views;
 using Xunit;
 
@@ -18,76 +15,6 @@ public partial class UiSmokeTests
         window.KeyPress(key, modifiers, (PhysicalKey)0, null);
         if (window.IsVisible) window.KeyRelease(key, modifiers, (PhysicalKey)0, null);
         Dispatcher.UIThread.RunJobs();
-    }
-
-    [AvaloniaTheory]
-    [InlineData(1360, 860, false)]
-    [InlineData(960, 600, true)]
-    public void MainWorkspaceKeyboardTraversalReachesNamedRegions(int width, int height, bool dark)
-    {
-        var vm = NewIsolatedViewModel();
-        var window = new MainWindow { DataContext = vm, Width = width, Height = height,
-            RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light };
-        window.Show();
-        try
-        {
-            var search = window.GetControl<TextBox>("EntitySearchBox");
-            search.Focus(NavigationMethod.Tab);
-            var reached = new HashSet<string>();
-            for (var i = 0; i < 60; i++)
-            {
-                if (window.FocusManager?.GetFocusedElement() is Avalonia.Visual visual)
-                    foreach (var control in visual.GetSelfAndVisualAncestors().OfType<Control>())
-                        if (control.Name is { } name) reached.Add(name);
-                Press(window, Key.Tab, i < 30 ? RawInputModifiers.None : RawInputModifiers.Shift);
-                if (i == 29) search.Focus(NavigationMethod.Tab);
-            }
-            Assert.True(reached.Contains("ActionsButton"), string.Join(",", reached));
-            Assert.Contains("ColumnsButton", reached);
-            Assert.Contains("FetchCountInput", reached);
-            Assert.Equal("Fetch count", AutomationProperties.GetName(window.GetControl<NumericUpDown>("FetchCountInput")));
-            Assert.Equal("Messages", AutomationProperties.GetName(window.GetControl<DataGrid>("MessageGrid")));
-            Assert.Empty(vm.SelectedMessages);
-            search.Focus(NavigationMethod.Tab);
-            Press(window, Key.Tab, RawInputModifiers.Shift);
-            Assert.False(search.IsKeyboardFocusWithin);
-        }
-        finally { window.Close(); }
-    }
-    [AvaloniaTheory]
-    [InlineData("ActionsButton")]
-    [InlineData("ColumnsButton")]
-    [InlineData("MessageActionsButton")]
-    public void WorkspaceMenusSupportKeyboardActivationAndReturnFocus(string name)
-    {
-        var vm = NewIsolatedViewModel();
-        var window = new MainWindow { DataContext = vm, Width = 960, Height = 600 };
-        window.Show();
-        try
-        {
-            var button = window.GetControl<Button>(name);
-            Assert.True(button.IsEffectivelyVisible);
-            button.Focus(NavigationMethod.Tab);
-            Press(window, Key.Enter);
-            var menu = Assert.IsType<MenuFlyout>(button.Flyout);
-            Assert.True(menu.IsOpen);
-            Press(window, Key.Down);
-            if (name == "ColumnsButton")
-            {
-                var before = vm.MessageColumns.ToArray();
-                Press(window, Key.Enter);
-                Assert.False(before.SequenceEqual(vm.MessageColumns));
-                Assert.False(menu.IsOpen);
-                Assert.True(button.IsKeyboardFocusWithin);
-                Press(window, Key.Enter);
-                Assert.True(menu.IsOpen);
-            }
-            Press(window, Key.Escape);
-            Assert.False(menu.IsOpen);
-            Assert.True(button.IsKeyboardFocusWithin);
-            Assert.Empty(vm.SelectedMessages);
-        }
-        finally { window.Close(); }
     }
 
     [AvaloniaFact]

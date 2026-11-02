@@ -29,24 +29,24 @@
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Max size (MB)" />
-          <NumericUpDown AutomationProperties.Name="Maximum size in megabytes" Grid.Column="1" Minimum="1024" Maximum="81920" Increment="1024"
+          <NumericUpDown x:Name="MaxSizeField" AutomationProperties.Name="Max size (MB)" Grid.Column="1" Minimum="1024" Maximum="81920" Increment="1024"
                          FormatString="0" Value="{Binding MaxSizeInMegabytes}" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Max delivery count" />
-          <NumericUpDown AutomationProperties.Name="Maximum delivery count" Grid.Column="1" Minimum="1" Maximum="2000" Increment="1"
+          <NumericUpDown AutomationProperties.Name="Max delivery count" Grid.Column="1" Minimum="1" Maximum="2000" Increment="1"
                          FormatString="0" Value="{Binding MaxDeliveryCount}" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Lock duration" />
-          <TextBox AutomationProperties.Name="Lock Duration" Grid.Column="1" x:Name="LockDuration" Text="{Binding LockDuration}" PlaceholderText="00:00:30" />
+          <TextBox AutomationProperties.Name="Lock duration" Grid.Column="1" x:Name="LockDuration" Text="{Binding LockDuration}" PlaceholderText="00:00:30" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default time to live" />
-          <TextBox AutomationProperties.Name="Default Message Time To Live" Grid.Column="1" x:Name="DefaultMessageTimeToLive" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
+          <TextBox AutomationProperties.Name="Default time to live" Grid.Column="1" x:Name="DefaultMessageTimeToLive" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
         </Grid>
 
         <TextBlock Classes="tertiary" TextWrapping="Wrap"
@@ -57,7 +57,7 @@
           <StackPanel Spacing="12" Margin="0,10,0,0">
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Auto-delete on idle" />
-          <TextBox AutomationProperties.Name="Auto Delete On IDle" Grid.Column="1" x:Name="AutoDeleteOnIdle" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
+          <TextBox AutomationProperties.Name="Auto-delete on idle" Grid.Column="1" x:Name="AutoDeleteOnIdle" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
         </Grid>
 
 
@@ -77,17 +77,17 @@
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward to" />
-          <TextBox AutomationProperties.Name="Forward To" Grid.Column="1" Text="{Binding ForwardTo}" PlaceholderText="another queue or topic" />
+          <TextBox AutomationProperties.Name="Forward to" Grid.Column="1" Text="{Binding ForwardTo}" PlaceholderText="another queue or topic" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward dead-letters to" />
-          <TextBox AutomationProperties.Name="Forward Dead Lettered Messages To" Grid.Column="1" Text="{Binding ForwardDeadLetteredMessagesTo}" />
+          <TextBox AutomationProperties.Name="Forward dead-letters to" Grid.Column="1" Text="{Binding ForwardDeadLetteredMessagesTo}" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="User metadata" />
-          <TextBox AutomationProperties.Name="User Metadata" Grid.Column="1" Text="{Binding UserMetadata}" />
+          <TextBox AutomationProperties.Name="User metadata" Grid.Column="1" Text="{Binding UserMetadata}" />
         </Grid>
           </StackPanel>
         </Expander>
@@ -109,7 +109,7 @@
 
           <Grid ColumnDefinitions="190,*">
             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Duplicate detection window" />
-            <TextBox AutomationProperties.Name="Duplicate Detection History Time Window" Grid.Column="1"
+            <TextBox AutomationProperties.Name="Duplicate detection window" Grid.Column="1"
                      x:Name="DuplicateDetectionHistoryTimeWindow" Text="{Binding DuplicateDetectionHistoryTimeWindow}"
                      IsEnabled="{Binding CanEditCreateOnlySettings}"
                      PlaceholderText="00:10:00" />

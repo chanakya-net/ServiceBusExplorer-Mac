@@ -26,7 +26,7 @@
 
     <Grid ColumnDefinitions="150,*">
       <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Filter type" />
-      <ComboBox AutomationProperties.Name="Filter type" Grid.Column="1" HorizontalAlignment="Stretch"
+      <ComboBox x:Name="FilterTypeField" AutomationProperties.Name="Filter type" Grid.Column="1" HorizontalAlignment="Stretch"
                 ItemsSource="{Binding FilterTypes}"
                 SelectedIndex="{Binding SelectedFilterIndex}" />
     </Grid>
@@ -69,7 +69,7 @@
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Label" />
-        <TextBox AutomationProperties.Name="Subject" Grid.Column="1" Text="{Binding Subject}" />
+        <TextBox AutomationProperties.Name="Label" Grid.Column="1" Text="{Binding Subject}" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
@@ -79,7 +79,7 @@
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Reply to" />
-        <TextBox AutomationProperties.Name="Reply To" Grid.Column="1" Text="{Binding ReplyTo}" />
+        <TextBox AutomationProperties.Name="Reply to" Grid.Column="1" Text="{Binding ReplyTo}" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
@@ -89,7 +89,7 @@
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Content type" />
-        <TextBox AutomationProperties.Name="Content Type" Grid.Column="1" Text="{Binding ContentType}" />
+        <TextBox AutomationProperties.Name="Content type" Grid.Column="1" Text="{Binding ContentType}" />
       </Grid>
       </StackPanel>
       </Expander>

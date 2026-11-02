@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
-using Avalonia.VisualTree;
 using Avalonia.Threading;
 
 using SbMac.App.ViewModels.Dialogs;
@@ -25,7 +24,7 @@ public partial class QueueEditorDialog : Window
     {
         isOpen = true;
         FitWorkArea();
-        (NameField.IsEnabled ? (Control)NameField : this.GetVisualDescendants().OfType<NumericUpDown>().First()).Focus(NavigationMethod.Tab);
+        (NameField.IsEnabled ? (Control)NameField : MaxSizeField).Focus(NavigationMethod.Tab);
     }
 
     void FitWorkArea()

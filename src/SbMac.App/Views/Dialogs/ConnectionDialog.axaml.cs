@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
-using Avalonia.VisualTree;
 
 using SbMac.App.ViewModels.Dialogs;
 

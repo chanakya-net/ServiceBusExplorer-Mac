@@ -43,6 +43,7 @@ public partial class MainWindow : Window, IUiServices
         SidebarSplitter.DragCompleted += (_, _) => CapturePanelLayout();
         EntityTree.KeyDown += OnEntityTreeKeyDown;
         DetailsSplitter.KeyDown += OnInspectorSplitterKeyDown;
+        InspectorTabs.KeyDown += OnInspectorTabsKeyDown;
         DetailsSplitter.DragCompleted += (_, _) => CapturePanelLayout();
         MainSplitLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
         MessageDetailLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
