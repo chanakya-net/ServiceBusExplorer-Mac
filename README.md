@@ -265,6 +265,10 @@ frame. The update checker's timestamp and any keys this version doesn't recognis
 that file and are preserved: every writer updates it through one serialized, atomic
 read-modify-replace.
 
+If the save fails, Settings shows *"Couldn't save the appearance. It still applies until
+SB-Mac quits."* The choice stays for the current session; the next launch uses the last
+appearance that reached disk.
+
 Every colour in the app resolves through a token in `src/SbMac.App/Styles/Theme.axaml`,
 which defines a light and a dark set behind the same names (`SurfaceBrush`,
 `TextSecondaryBrush`, `AccentBrush`, `DangerBrush`, and so on). `AppStyles.axaml` contains
@@ -303,6 +307,56 @@ A few deliberate choices:
   offset): showing locks, expiry and redelivery at their defaults would read as fact
   rather than as absence.
 
+### Layout, saved panels and columns
+
+Window size and position, the sidebar width, the details pane height and its collapsed
+states, and each message table's column visibility, order and width are saved to
+`settings.json` as they change, and restored on the next launch.
+
+**Reset Layout** (Settings → Layout) restores:
+
+- the default window size, un-maximised, with default sidebar, details and Activity panel states
+- the default message columns for the Service Bus, dead-letter and Event Hubs tables
+
+It does **not** change the appearance, the word-wrap choice, saved connections, namespaces
+or credentials. If the reset cannot be saved, Settings says so; the layout still resets for
+the current session.
+
+### Reading message bodies
+
+The Body tab shows the detected format (JSON, XML, Text, Text (WCF DataContract),
+Binary (hex) or Empty).
+
+- **Word wrap** is a checkbox in the body header. Its state is saved (`bodyViewer.wordWrap`)
+  and applies to every body.
+- **Find** (the Find button, or ⌘F while the body has focus) opens a find bar. Matching is
+  case-insensitive. Enter moves to the next match, Shift+Enter to the previous, and Escape
+  closes the bar and returns focus to the body. The counter reads `n of N`, and stops at
+  10,000 matches, shown as `10000+`.
+- **Copy** (the Copy button, or ⌘C with no body text selected) copies the full body. With
+  text selected in the body, ⌘C copies just the selection.
+
+Large bodies fall back as follows:
+
+| Body | What you see | Full data |
+|---|---|---|
+| Text larger than 1 MiB | Shown in full as plain text, with syntax highlighting off: *"This body is larger than 1 MiB, so syntax highlighting is off and it is shown as plain text."* | Find, select and copy use all of it |
+| Any single line longer than 200,000 characters | Word wrap is off for that body, even with the checkbox on: *"A line in this body is extremely long, so word wrap is not applied to it."* | Unchanged |
+| Binary (not valid UTF-8) larger than 1 MiB | Hex dump of the first 1 MiB, ending *"… truncated at 1,048,576 of N bytes."* | Find and copy use the displayed dump only; the message's bytes are unchanged |
+
+### Advanced form sections
+
+Each dialog keeps its less common fields in an expandable section. Where a section opens on
+its own, the table says when.
+
+| Dialog | Section | Contents | Opens automatically |
+|---|---|---|---|
+| Connection | Advanced connection options | Transport (AMQP over WebSockets), Event hubs, consumer group, subscription ID | When any of them already has a value |
+| Send message | Message metadata · Application properties · Copies and scheduling | Metadata fields · custom properties · copy count and scheduled time | Copies and scheduling, when its validation fails |
+| Queue / topic | Optional behaviour · Fixed at creation | Optional settings · settings Azure fixes at creation (locked once the entity exists) | Optional behaviour when save finds auto-delete-on-idle invalid; Fixed at creation when save finds the duplicate-detection history window invalid |
+| Subscription | Optional behaviour · Forwarding and metadata · Fixed at creation | As above, plus forwarding targets | Optional behaviour only, when save finds auto-delete-on-idle invalid; Forwarding and metadata and Fixed at creation never open on their own |
+| Rule | Optional SQL action · Advanced correlation fields | SQL action · correlation fields | When the rule already has a SQL action, or any correlation field is set |
+
 ### Seeing the UI
 
 macOS needs screen-recording permission to capture a running app, which is awkward in
@@ -329,10 +383,13 @@ Keychain, check for updates, or connect to Azure. Normal application startup rem
 unchanged.
 
 Use `--theme light|dark|both` (default `both`), `--size WIDTHxHEIGHT` (960x600
-through 4096x4096), and `--screen` to select `all` (default), `main`, `activity`,
-`props`, `eventhubs`, `eventhubs-props`, `connection`, `connection-eventhubs`,
-`send`, `queue`, or `settings`. Size defaults to each fixture's usual dimensions — the
-Settings dialog renders at its natural size — and `--help` prints usage. For example:
+through 4096x4096), and `--screen` to select `all` (default) or one fixture name. The names
+include `main`, `activity`, `props`, `body-json`, `body-long-wrapped`, `body-large-find`,
+`eventhubs`, `eventhubs-props`, `connection`, `connection-eventhubs`, `send`, `queue`,
+`topic`, `subscription`, `rule-sql`, `settings`, `settings-reset`, `reset-layout`,
+`preference-failure` and `message-error`; `--help` prints the full list. Size defaults to
+each fixture's usual dimensions — the Settings dialog renders at its natural size. The
+output directory is the first positional argument. For example:
 
 ```bash
 dotnet run --project tools/SbMac.Preview -- --theme dark --screen main --size 1200x760 ./artifacts/shot
@@ -356,15 +413,18 @@ appearance being restored. Delete the directory when you are done.
 ### Keyboard verification
 
 Use fresh temporary state for each native size (saved window bounds override the initial
-`--size`). Add `--native-screen table-layout`, `body-json`, or `send` to the native
-command above. These fixtures refuse Azure access. The send fixture is standalone;
+`--size`). Add `--native-screen` to the native command above with one of `body-json`,
+`body-xml`, `body-large`, `body-longline`, `send`, `send-empty`, `send-delivery`, `topic`,
+`subscription`, `rule`, `resubmit`, `resubmit-long` or `table-layout`. `--native` accepts
+only `--state-dir`, `--size` and `--native-screen`; other options are rejected. These fixtures refuse Azure access. The send fixture is standalone;
 owned dialog restoration is covered through the real `IUiServices` paths in UI tests.
 
 The S33 integration checks use real Tab/Shift+Tab, arrows, Enter, Escape and native menu
 exporter dispatch. Existing slice tests remain in place. The native menu's Copy action
 uses the focused input or property selection; a password or empty input selection never
 falls back to a stale body selection. Grid copy and the explicit Copy body action copy
-the full body. Cmd+F stays inside the body viewer. Shift+F10 (or Menu) opens the tree
+the full body, except a binary body over 1 MiB, which copies only the displayed hex dump
+(see the large-body table above). Cmd+F stays inside the body viewer. Shift+F10 (or Menu) opens the tree
 context menu. Plain Tab leaves the multiline composer without changing the draft.
 
 Observed on macOS 27.2 (26B123), Avalonia Native/Skia, using isolated fixture state on
@@ -404,7 +464,7 @@ Requires the .NET 10 SDK.
 
 ```bash
 dotnet build          # build everything
-dotnet test           # 172 tests
+dotnet test           # 529 tests
 dotnet run --project src/SbMac.App    # run without packaging
 ```
 
@@ -462,7 +522,7 @@ SB-Mac/
     Views/                 windows and dialogs
     Styles/                Theme.axaml (tokens), Icons.axaml, AppStyles.axaml
     Converters/            icon-name to geometry lookup
-  tests/SbMac.Tests/       172 tests, including headless UI and real-keychain tests
+  tests/SbMac.Tests/       529 tests, including headless UI and real-keychain tests
   tools/SbMac.Preview/     dev-only screenshot harness (not in the solution)
   build/                   Info.plist, icon generator, packaging and signing scripts
 ```
@@ -478,7 +538,7 @@ or tests without a UI.
 dotnet test
 ```
 
-172 tests, all passing, no Azure connection required. They cover message body decoding,
+529 tests, all passing, no Azure connection required. They cover message body decoding,
 connection string parsing, secret storage, import/export round-trips, the Event Hubs
 session, mappers and read-window arithmetic, and view model logic.
 
