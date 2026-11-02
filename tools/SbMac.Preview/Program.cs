@@ -316,13 +316,14 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         }
-        if (name.StartsWith("body-find-") || name == "body-large-find")
+        if (name.StartsWith("body-find-") || name.StartsWith("body-large-find-"))
         {
             var viewer = window.FindControl<SbMac.App.Views.Controls.MessageBodyViewer>("BodyViewer")!;
             viewer.FindControl<Button>("OpenFindButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            viewer.FindControl<TextBox>("FindQuery")!.Text = name == "body-large-find" ? "gamma" : name.StartsWith("body-find-match") ? "order" : "missing";
+            viewer.FindControl<TextBox>("FindQuery")!.Text = name.StartsWith("body-large-find-") ? "gamma" : name.StartsWith("body-find-match") ? "order" : "missing";
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            if (name.StartsWith("body-large-find-")) WaitForLargeFind(viewer);
         }
     }
     if (name.StartsWith("selection-selected-") || name.StartsWith("adaptive-") || name.StartsWith("table-layout-"))
@@ -368,6 +369,24 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
     }
 
     window.Close();
+}
+
+void WaitForLargeFind(SbMac.App.Views.Controls.MessageBodyViewer viewer)
+{
+    var timer = System.Diagnostics.Stopwatch.StartNew();
+    var status = viewer.FindControl<TextBlock>("FindStatus")!;
+    while (status.Text != "1 of 10000+" && timer.Elapsed < TimeSpan.FromSeconds(20))
+    {
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Thread.Sleep(5);
+    }
+    if (status.Text != "1 of 10000+" || !viewer.FindControl<StackPanel>("FindBar")!.IsVisible ||
+        viewer.FindControl<TextBox>("FindQuery")!.Text != "gamma" ||
+        viewer.FindControl<AvaloniaEdit.TextEditor>("Editor")!.SelectedText != "gamma")
+        throw new InvalidOperationException($"Large find fixture did not settle: {status.Text}");
+    Dispatcher.UIThread.RunJobs();
+    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
 }
 
 // Uses the actual dialog constructor; all fixture text is synthetic and isolated.

@@ -49,6 +49,7 @@ public partial class MessageBodyViewer : UserControl
     int matchIndex = -1;
     int loadVersion;
     CancellationTokenSource? searchCts;
+    bool searchInvalidated;
 
     /// <summary>Number of times the editor document was actually replaced (test/diagnostic aid).</summary>
     internal int DocumentLoads { get; private set; }
@@ -117,6 +118,8 @@ public partial class MessageBodyViewer : UserControl
         if (text.Length > DeferredLoadChars && !string.Equals(Editor.Text, text, StringComparison.Ordinal))
         {
             searchCts?.Cancel();
+            searchInvalidated = true;
+            IsSearching = false;
             Dispatcher.UIThread.Post(() => { if (version == loadVersion) Apply(text); }, DispatcherPriority.Background);
             return;
         }
@@ -133,7 +136,11 @@ public partial class MessageBodyViewer : UserControl
         HighlightNotice.IsVisible = plainOnly || hasHugeLine;
         ApplyWrap();
         editor.SyntaxHighlighting = plainOnly ? null : DefinitionFor(Format, ActualThemeVariant);
-        if (string.Equals(editor.Text, text, StringComparison.Ordinal)) return;
+        if (string.Equals(editor.Text, text, StringComparison.Ordinal))
+        {
+            if (searchInvalidated) RefreshMatches();
+            return;
+        }
         editor.Text = text;
         DocumentLoads++;
         RefreshMatches();
@@ -141,15 +148,14 @@ public partial class MessageBodyViewer : UserControl
 
     void ApplyWrap() => Editor.WordWrap = WrapToggle.IsChecked == true && !hasHugeLine;
 
-    static bool HasLineLongerThan(string text, int limit)
+    internal static bool HasLineLongerThan(string text, int limit)
     {
         if (text.Length <= limit) return false;
-        for (var start = 0; start < text.Length;)
+        var length = 0;
+        foreach (var character in text)
         {
-            var end = text.IndexOf('\n', start);
-            if (end < 0) end = text.Length;
-            if (end - start > limit) return true;
-            start = end + 1;
+            if (character is '\r' or '\n') length = 0;
+            else if (++length > limit) return true;
         }
 
         return false;
@@ -197,6 +203,7 @@ public partial class MessageBodyViewer : UserControl
 
     void RefreshMatches()
     {
+        searchInvalidated = false;
         searchCts?.Cancel();
         searchCts = null;
         IsSearching = false;

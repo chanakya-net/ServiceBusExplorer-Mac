@@ -389,6 +389,46 @@ public partial class UiSmokeTests
         Assert.False(viewer.IsSearching);
     }
 
+    [AvaloniaFact]
+    public void ReturningToDisplayedBodyRestartsCancelledSearch()
+    {
+        var body = string.Concat(Enumerable.Repeat("alpha beta ", 6000));
+        var (window, _, viewer, _) = OpenBody(BodyRow(body));
+        Dispatcher.UIThread.RunJobs();
+        viewer.FindQuery.Text = "alpha";
+        viewer.OpenFind();
+        Assert.True(viewer.IsSearching);
+        var loads = viewer.DocumentLoads;
+        viewer.Text = new string('b', MessageBodyViewer.DeferredLoadChars + 1);
+        viewer.Text = body;
+        WaitForSearch(viewer);
+        Assert.Equal(body, viewer.Editor.Text);
+        Assert.Equal(loads, viewer.DocumentLoads);
+        Assert.Equal("1 of 6000", viewer.FindStatus.Text);
+        viewer.FindNext();
+        Assert.Equal("2 of 6000", viewer.FindStatus.Text);
+        Assert.Equal("alpha", viewer.SelectedText);
+        window.Close();
+    }
+
+    [AvaloniaTheory]
+    [InlineData("\r")]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void WrapUsesLogicalLineBoundaries(string delimiter)
+    {
+        var line = new string('w', 500);
+        var body = string.Concat(Enumerable.Repeat(line + delimiter, 500));
+        var (window, _, viewer, _) = OpenBody(BodyRow(body));
+        Dispatcher.UIThread.RunJobs();
+        viewer.WrapToggle.IsChecked = true;
+        Assert.True(viewer.Editor.WordWrap);
+        Assert.False(viewer.HighlightNotice.IsVisible);
+        Assert.False(MessageBodyViewer.HasLineLongerThan(new string('w', MessageBodyViewer.WrapLineLimit) + delimiter + "x", MessageBodyViewer.WrapLineLimit));
+        Assert.True(MessageBodyViewer.HasLineLongerThan(new string('w', MessageBodyViewer.WrapLineLimit + 1) + delimiter, MessageBodyViewer.WrapLineLimit));
+        window.Close();
+    }
+
     /// <summary>Records timings for local investigation; asserts only correctness, never wall-clock.</summary>
     [AvaloniaFact]
     public void TenThousandRowsShareFewLargeBodiesAndRecordSelectionTimings()
