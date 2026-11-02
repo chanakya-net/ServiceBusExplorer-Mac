@@ -19,6 +19,8 @@ public partial class MainWindow
     {
         defaultClientSize = new Size(Width, Height);
         workspacePreferences = preferences;
+        BodyViewer.WrapToggle.IsChecked = preferences.Current.WordWrap;
+        BodyViewer.WrapToggle.IsCheckedChanged += (_, _) => _ = preferences.SetWordWrapAsync(BodyViewer.WrapToggle.IsChecked == true);
         preferences.LayoutReset += OnLayoutReset;
         lastWorkspace = preferences.Current.Workspace;
         if (lastWorkspace.WindowBounds is { } saved)

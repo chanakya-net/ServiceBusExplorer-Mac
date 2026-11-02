@@ -64,7 +64,7 @@ static class NativePreview
                     NativeTableLayoutFixture.Seed(window, viewModel);
                 };
             }
-            else if (screen is "body-json" or "body-xml")
+            else if (screen is "body-json" or "body-xml" or "body-long")
                 SeedBodyFixture(viewModel, window, screen);
             else if (screen is "resubmit" or "resubmit-long")
                 window.Opened += async (_, _) => await ShowResubmitFixture(window, screen);
@@ -86,7 +86,7 @@ static class NativePreview
 
     static void SeedBodyFixture(MainWindowViewModel viewModel, MainWindow window, string screen)
     {
-        var body = screen == "body-json"
+        var body = screen == "body-long" ? string.Concat(Enumerable.Repeat("A long message body with readable words and details. ", 30)) : screen == "body-json"
             ? "{\n  \"name\": \"orders\",\n  \"count\": 42,\n  \"ok\": true\n}"
             : "<order id=\"7\">\n  <name>orders</name>\n</order>";
         var row = new MessageRowViewModel(new MessageRecord

@@ -18,6 +18,8 @@ public sealed record AppPreferences(AppTheme Theme)
     /// <summary>Settings schema written alongside these preferences.</summary>
     public const int SchemaVersion = 3;
 
+    public bool WordWrap { get; init; }
+
     public WorkspacePreferences Workspace { get; init; } = new(null, WorkspaceWindowState.Normal);
 
     public Dictionary<string, IReadOnlyList<MessageColumnState>> MessageTables { get; init; } = EmptyMessageTables;

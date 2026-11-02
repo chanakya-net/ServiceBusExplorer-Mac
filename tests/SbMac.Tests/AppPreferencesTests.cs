@@ -18,6 +18,31 @@ public sealed partial class AppPreferencesTests : IDisposable
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"bodyViewer\":{\"wordWrap\":\"yes\"}}")]
+    [InlineData("{\"bodyViewer\":42}")]
+    public void MissingOrMalformedWordWrapDefaultsToFalse(string json)
+    {
+        File.WriteAllText(SettingsFile, json);
+        Assert.False(new AppPreferencesService(new JsonSettingsStore(SettingsFile)).Load().WordWrap);
+    }
+
+    [Fact]
+    public async Task WordWrapSurvivesRestartAndPreservesOtherSettings()
+    {
+        File.WriteAllText(SettingsFile, """{"lastUpdateCheckUtc":"2026-08-14T04:30:00Z","bodyViewer":{"future":7},"future":true}""");
+        var service = new AppPreferencesService(new JsonSettingsStore(SettingsFile));
+        service.Load();
+        Assert.True(await service.SetWordWrapAsync(true));
+        Assert.True(new AppPreferencesService(new JsonSettingsStore(SettingsFile)).Load().WordWrap);
+        Assert.Equal(7, ReadRoot()["bodyViewer"]!["future"]!.GetValue<int>());
+        Assert.True(ReadRoot()["future"]!.GetValue<bool>());
+        Assert.Equal(Timestamp, await new JsonUpdateCheckStateStore(SettingsFile).GetLastCheckUtcAsync(Token));
+        Assert.True(await service.SetWordWrapAsync(false));
+        Assert.False(new AppPreferencesService(new JsonSettingsStore(SettingsFile)).Load().WordWrap);
+    }
+
+    [Theory]
     [InlineData(AppTheme.System, "system")]
     [InlineData(AppTheme.Light, "light")]
     [InlineData(AppTheme.Dark, "dark")]

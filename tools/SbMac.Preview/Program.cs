@@ -27,7 +27,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "body-json", "body-xml", "body-find-match", "body-find-none", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "settings-reset", "reset-layout", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "body-json", "body-xml", "body-long-wrapped", "body-long-unwrapped", "body-find-match", "body-find-none", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "settings-reset", "reset-layout", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -63,7 +63,7 @@ try
     if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
     if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
     if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
-    if (nativeScreen is not null && (!native || nativeScreen is not ("body-json" or "body-xml" or "send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule" or "resubmit" or "resubmit-long" or "table-layout"))) throw new ArgumentException("--native-screen needs --native and a supported screen.");
+    if (nativeScreen is not null && (!native || nativeScreen is not ("body-json" or "body-xml" or "body-long" or "send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule" or "resubmit" or "resubmit-long" or "table-layout"))) throw new ArgumentException("--native-screen needs --native and a supported screen.");
     if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
     if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
     if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
@@ -133,6 +133,8 @@ try
         Render("activity-inspector-hidden", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
         Render("activity-collapsed", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsActivityExpanded = false; return window; }, 1360, 860);
         Render("props", () => BuildMainWindow(), 1360, 860, 1);
+        Render("body-long-wrapped", () => BuildLongBodyWindow(true), 1360, 860);
+        Render("body-long-unwrapped", () => BuildLongBodyWindow(false), 1360, 860);
         Render("body-json", () => BuildMainWindow(), 1360, 860);
         Render("body-xml", () => BuildMainWindow(), 1360, 860);
         Render("body-find-match", () => BuildMainWindow(), 1360, 860);
@@ -531,6 +533,19 @@ MainWindow BuildMainWindow(bool preferenceFailure = false, bool tableLayout = fa
 }
 
 // Restores a saved panel layout through the real preference path, from a temporary settings file.
+MainWindow BuildLongBodyWindow(bool wrap)
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.Messages.Clear();
+    vm.Messages.Add(new MessageRowViewModel(new MessageRecord {
+        Body = BinaryData.FromString(string.Concat(Enumerable.Repeat("A long message body with readable words and details. ", 30))),
+        SourceEntityPath = "orders", SequenceNumber = 1 }));
+    window.FindControl<SbMac.App.Views.Controls.MessageBodyViewer>("BodyViewer")!
+        .FindControl<CheckBox>("WrapToggle")!.IsChecked = wrap;
+    return window;
+}
+
 MainWindow BuildRestoredLayoutWindow()
 {
     var theme = Application.Current!.RequestedThemeVariant == ThemeVariant.Dark ? "dark" : "light";
