@@ -5,6 +5,7 @@ using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -26,7 +27,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "settings-reset", "reset-layout", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -174,6 +175,8 @@ try
             Render(name, () => BuildMessageDialog(name), null, null);
         // Natural size unless --size is given, so a large canvas cannot hide clipping.
         Render("settings", () => BuildSettingsDialog(tag), null, null);
+        Render("settings-reset", () => BuildSettingsDialog(tag), null, null);
+        Render("reset-layout", () => LayoutResetFixture.Build(stateRoot.FullName, tag, Pump), null, null);
         Render("resubmit", () => BuildResubmitDialog(3, "orders"), null, null);
         Render("resubmit-long", () => BuildResubmitDialog(12, string.Concat(Enumerable.Repeat("very-long-dead-letter-target-", 40))), null, null);
         Render("import-policy", () => BuildImportPolicyDialog("The file contains 2 queue(s), 1 topic(s) and 3 subscription(s).\n\nExported from preview-namespace.servicebus.windows.net."), null, null);
@@ -241,6 +244,21 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
     }
 
+    if (name.StartsWith("settings-reset-"))
+    {
+        var vm = (SettingsDialogViewModel)window.DataContext!;
+        window.FindControl<Button>("ResetLayoutButton")!.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Pump(vm.ResetLayoutCommand.ExecutionTask!);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+    }
+    if (name.StartsWith("reset-layout-"))
+    {
+        Pump(((AppPreferencesService)window.Tag!).ResetLayoutAsync());
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+    }
     if (selectTab >= 0)
     {
         var tabs = window.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();

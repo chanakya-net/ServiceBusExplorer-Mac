@@ -38,6 +38,9 @@ public sealed partial class AppPreferencesService
     /// <summary>Raised on the caller's thread as soon as a preference changes.</summary>
     public event EventHandler<AppPreferences>? Changed;
 
+    /// <summary>Raised after layout defaults apply in memory, on the caller's thread.</summary>
+    public event EventHandler? LayoutReset;
+
     /// <summary>Raised when a queued save completes, on its completion thread.</summary>
     public event EventHandler? SaveCompleted;
 
@@ -101,6 +104,26 @@ public sealed partial class AppPreferencesService
             pendingSave = SaveAfterAsync(pendingSave);
             return pendingSave;
         }
+    }
+
+    /// <summary>Resets only workspace and table layouts, superseding deferred captures.</summary>
+    public Task<bool> ResetLayoutAsync()
+    {
+        AppPreferences updated;
+        lock (saveLock)
+        {
+            CancelWorkspaceDelay();
+            delayedWorkspace = null;
+            Current = updated = Current with
+            {
+                Workspace = WorkspacePreferences.Default,
+                MessageTables = new() { ["serviceBus"] = [], ["deadLetter"] = [], ["eventHubs"] = [] }
+            };
+            workspaceDirty = tablesDirty = true;
+        }
+        Changed?.Invoke(this, updated);
+        LayoutReset?.Invoke(this, EventArgs.Empty);
+        lock (saveLock) return pendingSave = SaveAfterAsync(pendingSave);
     }
 
     public Task<bool> SetMessageColumnsAsync(string context, IReadOnlyList<MessageColumnState> columns)

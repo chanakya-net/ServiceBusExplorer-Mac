@@ -17,7 +17,7 @@ public partial class SettingsDialog : Window
     {
         base.OnOpened(e);
 
-        // Keyboard users land on the only setting, with a visible focus ring.
+        // Keyboard users land on Appearance, with a visible focus ring.
         AppearanceSelector.Focus(NavigationMethod.Tab);
     }
 

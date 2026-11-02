@@ -38,9 +38,23 @@
     <TextBlock x:Name="SaveErrorText" Classes="error" Text="{Binding SaveError}"
                IsVisible="{Binding SaveError, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
+    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto">
+      <TextBlock Classes="fieldLabel" Text="Layout" />
+      <Button x:Name="ResetLayoutButton" Grid.Column="1" Content="Reset Layout"
+              TabIndex="1" AutomationProperties.Name="Reset Layout"
+              Command="{Binding ResetLayoutCommand}" />
+      <TextBlock Grid.Row="1" Grid.Column="1" Classes="tertiary"
+                 Margin="0,6,0,0" TextWrapping="Wrap"
+                 Text="Restore default window, panels, and message columns. Appearance stays the same." />
+      <TextBlock x:Name="LayoutStatusText" Grid.Row="2" Grid.Column="1"
+                 Classes="tertiary" Classes.error="{Binding LayoutResetFailed}"
+                 Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding LayoutStatus}"
+                 IsVisible="{Binding LayoutStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </Grid>
+
     <!-- Escape closes too: a choice has already applied, so there is nothing to cancel. -->
     <StackPanel Classes="dialogButtons" Orientation="Horizontal" HorizontalAlignment="Right">
-      <Button x:Name="CloseButton" Classes="primary" Content="Close" TabIndex="1"
+      <Button x:Name="CloseButton" Classes="primary" Content="Close" TabIndex="2"
               IsCancel="True" Click="OnClose" />
     </StackPanel>
 

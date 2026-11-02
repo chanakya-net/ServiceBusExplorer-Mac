@@ -229,6 +229,8 @@ public partial class UiSmokeTests
         Assert.Equal(ThemeVariant.Light, CurrentApp.RequestedThemeVariant);
 
         dialog.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        Assert.True(dialog.GetControl<Button>("ResetLayoutButton").IsFocused);
+        dialog.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
         Assert.True(dialog.GetControl<Button>("CloseButton").IsFocused);
 
         dialog.Close();
