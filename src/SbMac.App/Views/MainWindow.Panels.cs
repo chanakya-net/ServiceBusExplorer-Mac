@@ -13,7 +13,7 @@ public partial class MainWindow
 {
     // The message table and the sidebar's usable minimums; clamping never squeezes past these.
     const double MinimumTableHeight = 220;
-    const double MinimumTableWidth = 420;
+    const double MinimumTableWidth = 560;
 
     bool applyingSavedPanels;
 
@@ -79,7 +79,7 @@ public partial class MainWindow
         var width = MainSplitLayout.Bounds.Width;
         if (width > 0 && SidebarColumn.Width.IsAbsolute)
         {
-            var maximum = Math.Max(WorkspacePreferences.MinSidebarWidth, width - MinimumTableWidth);
+            var maximum = Math.Max(WorkspacePreferences.MinSidebarWidth, width - SidebarSplitter.Width - MinimumTableWidth);
             SidebarColumn.Width = new GridLength(Math.Clamp(SidebarColumn.Width.Value,
                 WorkspacePreferences.MinSidebarWidth, Math.Min(WorkspacePreferences.MaxSidebarWidth, maximum)), GridUnitType.Pixel);
         }

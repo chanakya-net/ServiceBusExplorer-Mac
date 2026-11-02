@@ -1035,7 +1035,7 @@ public partial class UiSmokeTests
     public void InspectorTogglePreservesDetailsSelectionAndHeight()
     {
         var viewModel = NewIsolatedViewModel();
-        var window = new MainWindow { DataContext = viewModel };
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = viewModel };
         window.Show();
         var first = BuildMessageRow(1);
         var second = BuildMessageRow(2);
@@ -1048,8 +1048,14 @@ public partial class UiSmokeTests
         var body = viewModel.BodyText;
         var properties = viewModel.PropertiesText;
         var layout = window.GetControl<Grid>("MessageDetailLayout");
-        layout.RowDefinitions[3].Height = new GridLength(250);
+        layout.RowDefinitions[3].Height = new GridLength(180);
+        window.UpdateLayout();
+        var visibleTableHeight = layout.RowDefinitions[1].ActualHeight;
         viewModel.ToggleInspectorCommand.Execute(null);
+        window.UpdateLayout();
+        Assert.Equal(0, layout.RowDefinitions[3].ActualHeight);
+        Assert.Equal(0, layout.RowDefinitions[3].MinHeight);
+        Assert.True(layout.RowDefinitions[1].ActualHeight > visibleTableHeight);
         Assert.False(viewModel.IsInspectorVisible);
         Assert.False(window.GetControl<Border>("MessageInspector").IsVisible);
         Assert.Same(inspected, viewModel.SelectedMessage);
@@ -1058,7 +1064,10 @@ public partial class UiSmokeTests
         Assert.Equal(2, viewModel.SelectedMessages.Count);
         viewModel.ToggleInspectorCommand.Execute(null);
         Assert.True(window.GetControl<Border>("MessageInspector").IsVisible);
-        Assert.Equal(new GridLength(250), layout.RowDefinitions[3].Height);
+        Assert.Equal(new GridLength(180), layout.RowDefinitions[3].Height);
+        window.UpdateLayout();
+        Assert.Equal(90, layout.RowDefinitions[3].MinHeight);
+        Assert.True(layout.RowDefinitions[3].ActualHeight >= 90);
         Assert.Same(inspected, viewModel.SelectedMessage);
         Assert.Equal(2, viewModel.SelectedMessages.Count);
     }
@@ -1079,6 +1088,159 @@ public partial class UiSmokeTests
         var tabs = window.GetControl<TabControl>("InspectorTabs");
         Assert.True(tabs.IsEffectivelyVisible);
         Assert.True(tabs.IsKeyboardFocusWithin);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("queue")]
+    [InlineData("subscription")]
+    [InlineData("eventhubs")]
+    public void MaximumSidebarKeepsHeaderActionsUsable(string context)
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = vm };
+        window.Show();
+        var ns = new NamespaceNodeViewModel(new NamespaceConnection { Name = "isolated" });
+        vm.SelectedNode = context switch
+        {
+            "queue" => new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("orders"), null))
+                { Parent = new QueueFolderNodeViewModel { Parent = ns } },
+            "subscription" => new SubscriptionNodeViewModel(new SubscriptionEntity(Model<SubscriptionProperties>("orders", "audit"), null))
+                { Parent = ns },
+            _ => new EventHubNodeViewModel(new EventHubEntity("telemetry", DateTimeOffset.UtcNow, ["0"], ["$Default"]))
+                { Parent = new EventHubFolderNodeViewModel { Parent = ns } }
+        };
+        var split = window.GetControl<Grid>("MainSplitLayout");
+        split.ColumnDefinitions[0].Width = new GridLength(540);
+        vm.Messages.Add(BuildMessageRow(1));
+        foreach (var selected in new[] { false, true })
+        {
+            if (selected) window.GetControl<DataGrid>("MessageGrid").SelectAll();
+            window.UpdateLayout();
+            var header = window.GetControl<DockPanel>("MessageHeader");
+            var buttons = new[] { "SelectAllMessagesButton", "ClearMessageSelectionButton", "MessageActionsButton", "ColumnsButton" }
+                .Select(window.GetControl<Button>).ToArray();
+            var bounds = buttons.Select(b => (Left: b.TranslatePoint(new Avalonia.Point(), header)!.Value.X, b.Bounds.Width)).OrderBy(b => b.Left).ToArray();
+            Assert.All(bounds, b => Assert.True(b.Width >= 45 && b.Left >= 0 && b.Left + b.Width <= header.Bounds.Width + 0.5));
+            for (var i = 1; i < bounds.Length; i++) Assert.True(bounds[i - 1].Left + bounds[i - 1].Width <= bounds[i].Left + 0.5);
+        }
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SelectionRemeasuresAfterBoundContentSettles()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 1700, Height = 600, DataContext = vm };
+        window.Show();
+        vm.Messages.Add(BuildMessageRow(1));
+        window.UpdateLayout();
+        Assert.False(window.HeaderCompact);
+        window.GetControl<DataGrid>("MessageGrid").SelectAll();
+        // Simulate a native font or bound label becoming wider after selection notification.
+        window.GetControl<Button>("InspectorButton").Width = 1400;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(window.HeaderCompact);
+        Assert.True(window.GetControl<Button>("MessageActionsButton").IsEffectivelyVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SelectionTransitionReevaluatesSettledHeaderWidth()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 1100, Height = 600, DataContext = vm };
+        window.Show();
+        vm.Messages.Add(BuildMessageRow(1));
+        window.UpdateLayout();
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        grid.SelectAll();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        var header = window.GetControl<DockPanel>("MessageHeader");
+        var visible = header.Children.OfType<Control>().Where(c => c.IsEffectivelyVisible).ToArray();
+        var bounds = visible.Select(c => (Left: c.TranslatePoint(new Avalonia.Point(), header)!.Value.X, c.Bounds.Width))
+            .OrderBy(b => b.Left).ToArray();
+        for (var i = 1; i < bounds.Length; i++)
+            Assert.True(bounds[i - 1].Left + bounds[i - 1].Width <= bounds[i].Left + 0.5);
+        grid.SelectedItems.Clear();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.Empty(vm.SelectedMessages);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void NarrowMessageHeaderKeepsSelectionControlsAndMovesActionsToMenu()
+    {
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        Assert.True(window.GetControl<Button>("SelectAllMessagesButton").IsEffectivelyVisible);
+        Assert.True(window.GetControl<Button>("MessageActionsButton").IsEffectivelyVisible);
+        Assert.False(window.GetControl<Button>("EditAndResendButton").IsEffectivelyVisible);
+        var menu = Assert.IsType<MenuFlyout>(window.GetControl<Button>("MessageActionsButton").Flyout);
+        Assert.Contains(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, "Edit and resend…"));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void OverflowMenuItemsShareCommandsAndGuardsWithInlineControls()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = vm };
+        window.Show();
+        window.UpdateLayout();
+        var button = window.GetControl<Button>("MessageActionsButton");
+        var menu = Assert.IsType<MenuFlyout>(button.Flyout);
+        menu.ShowAt(button);
+        window.UpdateLayout();
+        var items = menu.Items.OfType<MenuItem>().ToDictionary(i => (string)i.Header!);
+        Assert.Same(vm.ResubmitSelectedCommand, items["Resubmit selected…"].Command);
+        Assert.Same(vm.DeleteSelectedMessagesCommand, items["Delete selected…"].Command);
+        Assert.Same(vm.ResubmitCommand, items["Edit and resend…"].Command);
+        Assert.Same(vm.ToggleInspectorCommand, items["Inspector"].Command);
+        // No selection -> bulk commands stay guarded, exactly as the inline buttons are.
+        Assert.False(items["Resubmit selected…"].IsEffectivelyEnabled);
+        Assert.False(items["Delete selected…"].IsEffectivelyEnabled);
+        Assert.False(items["Edit and resend…"].IsEffectivelyEnabled);
+        Assert.Empty(vm.SelectedMessages);
+        menu.Hide();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void WideHeaderKeepsInlineActionsAndHidesOverflow()
+    {
+        var window = new MainWindow { Width = 1700, Height = 900, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        Assert.False(window.HeaderCompact);
+        Assert.True(window.GetControl<Button>("EditAndResendButton").IsEffectivelyVisible);
+        Assert.False(window.GetControl<Button>("MessageActionsButton").IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void MainToolbarFitsWithLabelsAtMinimumWindow()
+    {
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        var toolbar = window.GetControl<DockPanel>("MainToolbar");
+        Assert.False(window.ToolbarCompact);
+        Assert.All(toolbar.Children.OfType<Control>().Where(c => c.IsVisible),
+            c => Assert.True(c.Bounds.Right <= toolbar.Bounds.Width + 0.5));
+        window.Close();
+    }
+
+    [Fact]
+    public void AdaptiveWidthFlagsContentWiderThanAvailableSpace()
+    {
+        var wide = new Border { Width = 300 };
+        var other = new Border { Width = 200 };
+        Assert.True(SbMac.App.Views.AdaptiveWidth.NeedsCompaction([wide, other], 400));
+        Assert.False(SbMac.App.Views.AdaptiveWidth.NeedsCompaction([wide, other], 500));
     }
 
     [AvaloniaFact]

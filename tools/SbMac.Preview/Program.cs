@@ -26,7 +26,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -109,6 +109,9 @@ try
         var tag = variant == ThemeVariant.Light ? "light" : "dark";
         if (theme != "both" && theme != tag) continue;
         Application.Current!.RequestedThemeVariant = variant;
+        Render("adaptive-queue", () => BuildAdaptiveWindow("queue"), 1360, 860);
+        Render("adaptive-subscription", () => BuildAdaptiveWindow("subscription"), 1360, 860);
+        Render("adaptive-eventhubs", () => BuildAdaptiveWindow("eventhubs"), 1360, 860);
         Render("main", () => BuildMainWindow(), 1360, 860);
         Render("workspace-first-run", BuildFirstRunWindow, 1360, 860);
         Render("workspace-loading", BuildLoadingWindow, 1360, 860);
@@ -269,7 +272,7 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         }
     }
-    if (name.StartsWith("selection-selected-"))
+    if (name.StartsWith("selection-selected-") || name.StartsWith("adaptive-"))
     {
         var grid = window.FindControl<DataGrid>("MessageGrid")!;
         var vm = (MainWindowViewModel)window.DataContext!;
@@ -510,6 +513,32 @@ MainWindow BuildDeadLetterWindow()
     foreach (var record in SampleMessages().Where(record => record.IsDeadLetter))
         vm.Messages.Add(new MessageRowViewModel(record));
     vm.SelectedMessage = vm.Messages.FirstOrDefault();
+    return window;
+}
+
+MainWindow BuildAdaptiveWindow(string context)
+{
+    var window = context == "eventhubs" ? BuildEventHubsWindow() : BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    var ns = vm.Namespaces.Single();
+    const string longName = "international-reconciliation-processing-long-name";
+    if (context == "queue")
+    {
+        var folder = ns.Children.OfType<QueueFolderNodeViewModel>().Single();
+        AddQueue(folder, longName, 1284, 17, 0);
+        vm.SelectedNode = folder.Children.Last();
+    }
+    else if (context == "subscription")
+    {
+        var topic = (TopicNodeViewModel)ns.Children.OfType<TopicFolderNodeViewModel>().Single().Children[0];
+        AddSubscription(topic, "order-events", longName, 220, 0);
+        vm.SelectedNode = topic.Children.Last();
+    }
+    else
+        vm.SelectedNode = AddEventHub(ns.Children.OfType<EventHubFolderNodeViewModel>().Single(), longName, ["0"], ["$Default"]);
+    vm.IsActivityExpanded = true;
+    vm.Operations.Add(new OperationViewModel(OperationKind.Read, "Reading messages for layout verification"));
+    vm.Log.Add("Preview activity log entry");
     return window;
 }
 
