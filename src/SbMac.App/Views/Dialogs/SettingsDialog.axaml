@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SbMac.App.ViewModels.Dialogs"
+        mc:Ignorable="d"
+        x:Class="SbMac.App.Views.Dialogs.SettingsDialog"
+        x:DataType="vm:SettingsDialogViewModel"
+        Title="Settings"
+        Width="440" SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+
+  <StackPanel Margin="22" Spacing="16">
+
+    <TextBlock Text="Settings" Classes="title" />
+
+    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto">
+      <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Appearance" />
+      <ComboBox x:Name="AppearanceSelector" Grid.Column="1"
+                HorizontalAlignment="Stretch"
+                TabIndex="0"
+                AutomationProperties.Name="Appearance"
+                ItemsSource="{Binding Appearances}"
+                SelectedItem="{Binding SelectedAppearance}">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:AppearanceOption">
+            <TextBlock Text="{Binding Label}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <TextBlock Grid.Row="1" Grid.Column="1" Classes="tertiary"
+                 Margin="0,6,0,0" TextWrapping="Wrap"
+                 Text="System follows the macOS appearance. Changes apply immediately." />
+    </Grid>
+
+    <TextBlock x:Name="SaveErrorText" Classes="error" Text="{Binding SaveError}"
+               IsVisible="{Binding SaveError, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto">
+      <TextBlock Classes="fieldLabel" Text="Layout" />
+      <Button x:Name="ResetLayoutButton" Grid.Column="1" Content="Reset Layout"
+              TabIndex="1" AutomationProperties.Name="Reset Layout"
+              Command="{Binding ResetLayoutCommand}" />
+      <TextBlock Grid.Row="1" Grid.Column="1" Classes="tertiary"
+                 Margin="0,6,0,0" TextWrapping="Wrap"
+                 Text="Restore default window, panels, and message columns. Appearance stays the same." />
+      <TextBlock x:Name="LayoutStatusText" Grid.Row="2" Grid.Column="1"
+                 Classes="tertiary" Classes.error="{Binding LayoutResetFailed}"
+                 Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding LayoutStatus}"
+                 IsVisible="{Binding LayoutStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </Grid>
+
+    <!-- Escape closes too: a choice has already applied, so there is nothing to cancel. -->
+    <StackPanel Classes="dialogButtons" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="CloseButton" Classes="primary" Content="Close" TabIndex="2"
+              IsCancel="True" Click="OnClose" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

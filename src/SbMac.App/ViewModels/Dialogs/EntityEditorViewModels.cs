@@ -93,6 +93,42 @@ public sealed partial class QueueEditorViewModel : ViewModelBase
     [ObservableProperty]
     string userMetadata;
 
+    [ObservableProperty]
+    bool isOptionalExpanded;
+
+    [ObservableProperty]
+    bool isCreationExpanded;
+
+    [ObservableProperty]
+    string? validationError;
+
+    partial void OnNameChanged(string value) => ClearResolvedError();
+    partial void OnLockDurationChanged(string value) => ClearResolvedError();
+    partial void OnDefaultMessageTimeToLiveChanged(string value) => ClearResolvedError();
+    partial void OnAutoDeleteOnIdleChanged(string value) => ClearResolvedError();
+    partial void OnDuplicateDetectionHistoryTimeWindowChanged(string value) => ClearResolvedError();
+
+    void ClearResolvedError()
+    {
+        if (ValidationError is not null && CanSave) ValidationError = null;
+    }
+
+    public string? RevealInvalidField()
+    {
+        string? field = string.IsNullOrWhiteSpace(Name) ? nameof(Name)
+            : !DurationText.IsValid(LockDuration) ? nameof(LockDuration)
+            : !DurationText.IsValid(DefaultMessageTimeToLive) ? nameof(DefaultMessageTimeToLive)
+            : !DurationText.IsValid(AutoDeleteOnIdle) ? nameof(AutoDeleteOnIdle)
+            : !DurationText.IsValid(DuplicateDetectionHistoryTimeWindow) ? nameof(DuplicateDetectionHistoryTimeWindow)
+            : null;
+        if (field == nameof(AutoDeleteOnIdle)) IsOptionalExpanded = true;
+        if (field == nameof(DuplicateDetectionHistoryTimeWindow)) IsCreationExpanded = true;
+        ValidationError = field is null ? null : field == nameof(Name)
+            ? "Enter a queue name."
+            : "Enter a valid duration (hh:mm:ss, d.hh:mm:ss or ISO 8601).";
+        return field;
+    }
+
     public bool CanSave =>
         !string.IsNullOrWhiteSpace(Name) &&
         DurationText.IsValid(LockDuration) &&
@@ -186,6 +222,40 @@ public sealed partial class TopicEditorViewModel : ViewModelBase
 
     [ObservableProperty]
     string userMetadata;
+
+    [ObservableProperty]
+    bool isOptionalExpanded;
+
+    [ObservableProperty]
+    bool isCreationExpanded;
+
+    [ObservableProperty]
+    string? validationError;
+
+    partial void OnNameChanged(string value) => ClearResolvedError();
+    partial void OnDefaultMessageTimeToLiveChanged(string value) => ClearResolvedError();
+    partial void OnAutoDeleteOnIdleChanged(string value) => ClearResolvedError();
+    partial void OnDuplicateDetectionHistoryTimeWindowChanged(string value) => ClearResolvedError();
+
+    void ClearResolvedError()
+    {
+        if (ValidationError is not null && CanSave) ValidationError = null;
+    }
+
+    public string? RevealInvalidField()
+    {
+        string? field = string.IsNullOrWhiteSpace(Name) ? nameof(Name)
+            : !DurationText.IsValid(DefaultMessageTimeToLive) ? nameof(DefaultMessageTimeToLive)
+            : !DurationText.IsValid(AutoDeleteOnIdle) ? nameof(AutoDeleteOnIdle)
+            : !DurationText.IsValid(DuplicateDetectionHistoryTimeWindow) ? nameof(DuplicateDetectionHistoryTimeWindow)
+            : null;
+        if (field == nameof(AutoDeleteOnIdle)) IsOptionalExpanded = true;
+        if (field == nameof(DuplicateDetectionHistoryTimeWindow)) IsCreationExpanded = true;
+        ValidationError = field is null ? null : field == nameof(Name)
+            ? "Enter a topic name."
+            : "Enter a valid duration (hh:mm:ss, d.hh:mm:ss or ISO 8601).";
+        return field;
+    }
 
     public bool CanSave =>
         !string.IsNullOrWhiteSpace(Name) &&
@@ -295,6 +365,42 @@ public sealed partial class SubscriptionEditorViewModel : ViewModelBase
     [ObservableProperty]
     string defaultRuleFilter;
 
+    [ObservableProperty]
+    bool isOptionalExpanded;
+
+    [ObservableProperty]
+    bool isForwardingExpanded;
+
+    [ObservableProperty]
+    bool isCreationExpanded;
+
+    [ObservableProperty]
+    string? validationError;
+
+    partial void OnNameChanged(string value) => ClearResolvedError();
+    partial void OnLockDurationChanged(string value) => ClearResolvedError();
+    partial void OnDefaultMessageTimeToLiveChanged(string value) => ClearResolvedError();
+    partial void OnAutoDeleteOnIdleChanged(string value) => ClearResolvedError();
+
+    void ClearResolvedError()
+    {
+        if (ValidationError is not null && CanSave) ValidationError = null;
+    }
+
+    public string? RevealInvalidField()
+    {
+        string? field = string.IsNullOrWhiteSpace(Name) ? nameof(Name)
+            : !DurationText.IsValid(LockDuration) ? nameof(LockDuration)
+            : !DurationText.IsValid(DefaultMessageTimeToLive) ? nameof(DefaultMessageTimeToLive)
+            : !DurationText.IsValid(AutoDeleteOnIdle) ? nameof(AutoDeleteOnIdle)
+            : null;
+        if (field == nameof(AutoDeleteOnIdle)) IsOptionalExpanded = true;
+        ValidationError = field is null ? null : field == nameof(Name)
+            ? "Enter a subscription name."
+            : "Enter a valid duration (hh:mm:ss, d.hh:mm:ss or ISO 8601).";
+        return field;
+    }
+
     public bool CanSave =>
         !string.IsNullOrWhiteSpace(Name) &&
         DurationText.IsValid(LockDuration) &&
@@ -353,6 +459,8 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
         replyTo = definition.ReplyTo ?? string.Empty;
         sessionId = definition.SessionId ?? string.Empty;
         contentType = definition.ContentType ?? string.Empty;
+        isSqlActionExpanded = !string.IsNullOrWhiteSpace(sqlAction);
+        isCorrelationAdvancedExpanded = new[] { messageId, subject, to, replyTo, sessionId, contentType }.Any(value => !string.IsNullOrWhiteSpace(value));
 
         selectedFilterIndex = definition.FilterType.ToLowerInvariant() switch
         {
@@ -407,6 +515,33 @@ public sealed partial class RuleEditorViewModel : ViewModelBase
 
     [ObservableProperty]
     string contentType;
+
+    [ObservableProperty]
+    bool isSqlActionExpanded;
+
+    [ObservableProperty]
+    bool isCorrelationAdvancedExpanded;
+
+    [ObservableProperty]
+    string? validationError;
+
+    partial void OnNameChanged(string value) => RefreshValidation();
+    partial void OnSqlExpressionChanged(string value) => RefreshValidation();
+    partial void OnSelectedFilterIndexChanged(int value) => RefreshValidation();
+
+    void RefreshValidation()
+    {
+        if (ValidationError is not null) RevealInvalidField();
+    }
+
+    public string? RevealInvalidField()
+    {
+        var field = string.IsNullOrWhiteSpace(Name) ? nameof(Name)
+            : ShowSqlFields && string.IsNullOrWhiteSpace(SqlExpression) ? nameof(SqlExpression) : null;
+        ValidationError = field == nameof(Name) ? "Enter a rule name."
+            : field == nameof(SqlExpression) ? "Enter a SQL expression." : null;
+        return field;
+    }
 
     public bool ShowSqlFields => SelectedFilterIndex == 0;
 

@@ -111,6 +111,60 @@ public class EntityTreeSearchTests
         Assert.True(tree.Namespace.IsVisible);
     }
 
+    [Fact]
+    public void LongNestedSubscriptionMatchKeepsItsFullNameAndAncestorsVisible()
+    {
+        var tree = BuildTree();
+        const string longName = "audit-international-reconciliation-subscription";
+        var longSub = Subscription("order-events", longName, tree.OrderEvents);
+        tree.OrderEvents.Children.Add(longSub);
+        tree.Namespace.IsExpanded = false;
+        tree.Topics.IsExpanded = false;
+        tree.OrderEvents.IsExpanded = false;
+
+        tree.ViewModel.EntitySearchText = "international-reconciliation";
+
+        Assert.Equal(longName, longSub.Title);
+        Assert.True(longSub.IsVisible);
+        Assert.True(tree.OrderEvents.IsVisible);
+        Assert.True(tree.Topics.IsVisible);
+        Assert.True(tree.Namespace.IsVisible);
+        Assert.False(tree.Audit.IsVisible);
+        Assert.False(tree.Billing.IsVisible);
+        Assert.True(tree.Namespace.IsExpanded);
+        Assert.True(tree.Topics.IsExpanded);
+        Assert.True(tree.OrderEvents.IsExpanded);
+    }
+
+    [Fact]
+    public void SearchDoesNotChangeCountBadgesOrNamespaceHierarchy()
+    {
+        var tree = BuildTree();
+        var badge = tree.Audit.ActiveBadge;
+        var deadLetter = tree.Audit.DeadLetterBadge;
+
+        tree.ViewModel.EntitySearchText = "audit";
+
+        Assert.Equal(badge, tree.Audit.ActiveBadge);
+        Assert.Equal(deadLetter, tree.Audit.DeadLetterBadge);
+        Assert.Same(tree.Namespace, tree.ViewModel.Namespaces.Single());
+        Assert.Same(tree.OrderEvents, tree.Audit.Parent);
+        Assert.Same(tree.Topics, tree.OrderEvents.Parent);
+        Assert.Same(tree.Namespace, tree.Topics.Parent);
+    }
+
+    [Fact]
+    public void NonMatchingQueryHidesEverythingBelowTheNamespace()
+    {
+        var tree = BuildTree();
+
+        tree.ViewModel.EntitySearchText = "zzz-nothing";
+
+        Assert.False(tree.Audit.IsVisible);
+        Assert.False(tree.OrderEvents.IsVisible);
+        Assert.False(tree.Orders.IsVisible);
+    }
+
     static SearchTree BuildTree()
     {
         var empty = BuildEmptyTree();

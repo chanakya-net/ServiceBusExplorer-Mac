@@ -65,6 +65,21 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task InvalidTimestampDoesNotDiscardValidAndUnknownFieldsOnWrite()
+    {
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(SettingsFile, """{"theme":"dark","lastUpdateCheckUtc":{},"future":{"enabled":true}}""", TestContext.Current.CancellationToken);
+        var store = new JsonUpdateCheckStateStore(SettingsFile);
+        Assert.Null(await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
+        var timestamp = new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
+        await store.SetLastCheckUtcAsync(timestamp, TestContext.Current.CancellationToken);
+        var root = Assert.IsType<JsonObject>(JsonNode.Parse(await File.ReadAllTextAsync(SettingsFile, TestContext.Current.CancellationToken)));
+        Assert.Equal("dark", root["theme"]!.GetValue<string>());
+        Assert.True(root["future"]!["enabled"]!.GetValue<bool>());
+        Assert.Equal(timestamp, await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task SavingReplacesInvalidJsonWithValidState()
     {
         Directory.CreateDirectory(directory);
@@ -78,27 +93,31 @@ public sealed class UpdateCheckStateStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task RelativeFilenameSavesInCurrentDirectory()
+    public async Task RelativePathSavesToTheResolvedTemporaryFile()
     {
-        var fileName = $"settings-{Guid.NewGuid():N}.json";
+        // Relative to the working directory, but still inside this test's temporary folder.
+        var relative = Path.GetRelativePath(Environment.CurrentDirectory, SettingsFile);
         var timestamp = new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
+        var store = new JsonUpdateCheckStateStore(relative);
 
-        try
-        {
-            var store = new JsonUpdateCheckStateStore(fileName);
+        await store.SetLastCheckUtcAsync(timestamp, TestContext.Current.CancellationToken);
 
-            await store.SetLastCheckUtcAsync(timestamp, TestContext.Current.CancellationToken);
+        Assert.True(File.Exists(SettingsFile));
+        Assert.Equal(timestamp, await new JsonUpdateCheckStateStore(SettingsFile)
+            .GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
+    }
 
-            Assert.True(File.Exists(fileName));
-            Assert.Equal(timestamp, await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
-        }
-        finally
-        {
-            if (File.Exists(fileName))
-            {
-                File.Delete(fileName);
-            }
-        }
+    [Fact]
+    public async Task CancelledWriteLeavesTheTimestampUnchanged()
+    {
+        var timestamp = new DateTimeOffset(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
+        var store = new JsonUpdateCheckStateStore(SettingsFile);
+        await store.SetLastCheckUtcAsync(timestamp, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            store.SetLastCheckUtcAsync(timestamp.AddDays(1), new CancellationToken(canceled: true)));
+
+        Assert.Equal(timestamp, await store.GetLastCheckUtcAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]

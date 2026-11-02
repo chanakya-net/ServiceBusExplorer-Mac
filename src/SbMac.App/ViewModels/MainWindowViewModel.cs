@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Text;
 
+using Avalonia.Threading;
+
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -25,6 +27,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 {
     readonly ConnectionStore connectionStore;
     readonly IUpdateChecker? updateChecker;
+    readonly AppPreferencesService? preferences;
+    Func<NamespaceNodeViewModel, CancellationToken, Task> connectNamespace = (node, token) => node.ConnectAsync(token);
+    Task? initialization;
 
     /// <summary>
     /// Descriptions of the operations currently in flight. Different work runs side by
@@ -41,10 +46,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
     }
 
-    internal MainWindowViewModel(IUpdateChecker? updateChecker, ConnectionStore connectionStore)
+    /// <summary>The shipping view model, with the preferences the Settings dialog edits.</summary>
+    public MainWindowViewModel(IUpdateChecker? updateChecker, AppPreferencesService preferences)
+        : this(updateChecker, ConnectionStore.CreateDefault(), preferences)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+    }
+
+    internal MainWindowViewModel(
+        IUpdateChecker? updateChecker,
+        ConnectionStore connectionStore,
+        AppPreferencesService? preferences = null)
     {
         this.updateChecker = updateChecker;
         this.connectionStore = connectionStore;
+        this.preferences = preferences;
+        if (preferences is not null)
+        {
+            preferences.LayoutReset += OnLayoutReset;
+            preferences.SaveCompleted += (_, _) => Dispatcher.UIThread.Post(UpdatePreferenceSaveStatus);
+            UpdatePreferenceSaveStatus();
+        }
         Namespaces = [];
         Messages = [];
         Log = [];
@@ -69,6 +91,19 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Operations.CollectionChanged += (_, _) => RaiseActivityChanged();
     }
 
+    /// <summary>
+    /// Creates a fixture with caller-owned storage and an isolated connection provider.
+    /// Settings is only available when the caller supplies its own preferences.
+    /// </summary>
+    public static MainWindowViewModel CreateIsolated(ConnectionStore store,
+        Func<NamespaceNodeViewModel, CancellationToken, Task> connectionProvider,
+        AppPreferencesService? preferences = null)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        ArgumentNullException.ThrowIfNull(connectionProvider);
+        return new MainWindowViewModel(null, store, preferences) { connectNamespace = connectionProvider };
+    }
+
     /// <summary>Set by the window once it's constructed; every dialog goes through this.</summary>
     public IUiServices? Ui { get; set; }
 
@@ -84,6 +119,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             namespaceNode.ApplySearch(value);
         }
     }
+
+    [ObservableProperty]
+    bool isInspectorVisible = true;
+
+    [RelayCommand]
+    void ToggleInspector() => IsInspectorVisible = !IsInspectorVisible;
 
     public ObservableCollection<MessageRowViewModel> Messages { get; }
 
@@ -117,6 +158,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(CanSend))]
     [NotifyPropertyChangedFor(nameof(CanEditAndResend))]
     [NotifyPropertyChangedFor(nameof(IsEventHubSelection))]
+    [NotifyPropertyChangedFor(nameof(MessageTableContext))]
     [NotifyPropertyChangedFor(nameof(EntityHeader))]
     [NotifyPropertyChangedFor(nameof(EntitySummary))]
     TreeNodeViewModel? selectedNode;
@@ -220,10 +262,51 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MessageSourceLabel))]
     [NotifyPropertyChangedFor(nameof(EmptyMessagesHint))]
+    [NotifyPropertyChangedFor(nameof(MessageTableContext))]
     bool showDeadLetter;
+
+    readonly Dictionary<string, IReadOnlyList<SbMac.App.Models.MessageColumnState>> sessionColumns = new();
+    string MessageTableKey => MessageTableContext switch
+    {
+        MessageTableContext.DeadLetter => "deadLetter",
+        MessageTableContext.EventHub => "eventHubs",
+        _ => "serviceBus"
+    };
+
+    public IReadOnlyList<MessageColumnMetadata> MessageColumns
+    {
+        get
+        {
+            var tables = preferences?.Current.MessageTables ?? sessionColumns;
+            tables.TryGetValue(MessageTableKey, out var saved);
+            return MessageTableLayoutViewModel.Resolve(MessageTableContext, saved);
+        }
+    }
+
+    public void SetMessageColumns(IReadOnlyList<MessageColumnMetadata> columns)
+    {
+        var states = columns.Select((c, index) => new SbMac.App.Models.MessageColumnState(c.Id, c.IsVisible, index, c.Width)).ToArray();
+        if (preferences is null) sessionColumns[MessageTableKey] = states;
+        else _ = preferences.SetMessageColumnsAsync(MessageTableKey, states);
+        OnPropertyChanged(nameof(MessageColumns));
+    }
+
+    public void RestoreMessageColumns() => SetMessageColumns(MessageTableLayoutViewModel.ForContext(MessageTableContext));
+
+    public MessageTableContext MessageTableContext => IsEventHubSelection ? MessageTableContext.EventHub
+        : ShowDeadLetter ? MessageTableContext.DeadLetter : MessageTableContext.ServiceBus;
 
     [ObservableProperty]
     int fetchCount = 100;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPreferenceSaveStatus))]
+    string? preferenceSaveStatus;
+
+    public bool HasPreferenceSaveStatus => PreferenceSaveStatus is not null;
+
+    void UpdatePreferenceSaveStatus() => PreferenceSaveStatus = preferences?.LastSaveError is null
+        ? null : "Preferences were not saved; changes apply for this session.";
 
     [ObservableProperty]
     string statusText = "Ready";
@@ -239,6 +322,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public bool IsBusy => Operations.Any(operation => operation.IsRunning);
 
     public bool HasOperations => Operations.Count > 0;
+
+    public bool HasFailedOperations => Operations.Any(operation => operation.State == OperationState.Failed);
 
     public bool HasFinishedOperations => Operations.Any(operation => operation.IsFinished);
 
@@ -274,8 +359,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>Drives the placeholder shown in place of an empty message grid.</summary>
     public bool HasNoMessages => Messages.Count == 0;
 
+    TreeNodeViewModel? lastEmptyResultNode;
+    bool lastEmptyResultDeadLetter;
+
     /// <summary>Short hint shown where the message list would be, when it's empty.</summary>
-    public string EmptyMessagesHint => (HasMessageEntity, CurrentEventHubName is not null) switch
+    public string EmptyMessagesHint => Operations.Any(operation => operation.IsRunning &&
+        operation.Target is not null && ReferenceEquals(operation.Target, SelectedNode))
+        ? "Loading messages… You can continue browsing while this runs."
+        : ReferenceEquals(lastEmptyResultNode, SelectedNode) && SelectedNode is not null && lastEmptyResultDeadLetter == ShowDeadLetter
+        ? $"No {(CurrentEventHubName is null ? "messages" : "events")} found. Try Peek again or select another entity."
+        : (HasMessageEntity, CurrentEventHubName is not null) switch
     {
         (true, true) =>
             "No events loaded. Choose Peek to read the most recent events — Event Hubs reads never remove anything.",
@@ -364,7 +457,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ------------------------------------------------------------- lifecycle
 
     /// <summary>Loads saved namespaces. Called once when the window opens.</summary>
-    public async Task InitializeAsync()
+    public Task InitializeAsync() => initialization ??= InitializeCoreAsync();
+
+    async Task InitializeCoreAsync()
     {
         try
         {
@@ -436,6 +531,26 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // exiting anyway; this just gives them the chance to close politely.
             _ = node.DisposeAsync().AsTask();
         }
+    }
+
+    // ------------------------------------------------------------- settings
+
+    /// <summary>Settings needs preferences to edit; isolated fixtures may have none.</summary>
+    public bool CanOpenSettings => preferences is not null;
+
+    /// <summary>
+    /// Opens Settings. The command stays disabled while the dialog is up, so the menu
+    /// item and Cmd+, cannot stack a second one.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanOpenSettings))]
+    async Task OpenSettingsAsync()
+    {
+        if (Ui is null || preferences is null)
+        {
+            return;
+        }
+
+        await Ui.ShowSettingsAsync(preferences).ConfigureAwait(true);
     }
 
     // ---------------------------------------------------- connection commands
@@ -548,7 +663,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         await RunAsync(OperationKind.Connect, $"Connecting to {node.Title}…", async cancellationToken =>
         {
-            await node.ConnectAsync(cancellationToken).ConfigureAwait(true);
+            await connectNamespace(node, cancellationToken).ConfigureAwait(true);
             AppendLog($"Connected to {node.Connection.ResolvedNamespace}.");
         }).ConfigureAwait(true);
     }
@@ -642,7 +757,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             AppendLog($"Peeked {records.Count} message(s) from {label}.");
 
             ShowMessagesFor(origin, records, label);
-        }).ConfigureAwait(true);
+        }, origin).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -672,7 +787,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             AppendLog($"Read {records.Count} event(s) from {source}.");
 
             ShowMessagesFor(origin, records, source);
-        }).ConfigureAwait(true);
+        }, origin).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -712,7 +827,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             ShowMessagesFor(origin, records, path.ToString());
             await RefreshNodeAsync(origin, cancellationToken).ConfigureAwait(true);
-        }).ConfigureAwait(true);
+        }, origin).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -1038,6 +1153,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         await Ui.SetClipboardTextAsync(SelectedMessage.BodyText).ConfigureAwait(true);
         StatusText = "Body copied to the clipboard.";
+    }
+
+    /// <summary>Supplies the body viewer's current selection; set by the view.</summary>
+    public Func<string>? BodySelectionProvider { get; set; }
+
+    /// <summary>Cmd+C: copies the selected body text when there is one, otherwise the full body.</summary>
+    [RelayCommand]
+    async Task CopySelectionOrBodyAsync()
+    {
+        var selection = BodySelectionProvider?.Invoke();
+        if (string.IsNullOrEmpty(selection) || Ui is null)
+        {
+            await CopyBodyAsync().ConfigureAwait(true);
+            return;
+        }
+
+        await Ui.SetClipboardTextAsync(selection).ConfigureAwait(true);
+        StatusText = "Selection copied to the clipboard.";
     }
 
     [RelayCommand]
@@ -1543,8 +1676,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// Runs an operation as its own tracked activity, funnelling any failure into the log
     /// and an error dialog rather than letting it reach the dispatcher.
     /// </summary>
-    Task RunAsync(OperationKind kind, string description, Func<CancellationToken, Task> operation) =>
-        RunAsync(kind, description, (_, cancellationToken) => operation(cancellationToken));
+    Task RunAsync(OperationKind kind, string description, Func<CancellationToken, Task> operation, TreeNodeViewModel? target = null) =>
+        RunAsync(kind, description, (_, cancellationToken) => operation(cancellationToken), target);
 
     /// <summary>
     /// As above, but hands the operation its own tray entry so it can report progress
@@ -1559,7 +1692,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     async Task RunAsync(
         OperationKind kind,
         string description,
-        Func<OperationViewModel, CancellationToken, Task> operation)
+        Func<OperationViewModel, CancellationToken, Task> operation,
+        TreeNodeViewModel? target = null)
     {
         if (!activeOperations.Add(description))
         {
@@ -1568,7 +1702,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var tracked = new OperationViewModel(kind, description);
+        var tracked = new OperationViewModel(kind, description, target);
 
         TrimFinishedOperations();
         Operations.Add(tracked);
@@ -1635,7 +1769,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     void RaiseActivityChanged()
     {
         OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(EmptyMessagesHint));
         OnPropertyChanged(nameof(HasOperations));
+        OnPropertyChanged(nameof(HasFailedOperations));
         OnPropertyChanged(nameof(HasFinishedOperations));
         OnPropertyChanged(nameof(RunningOperationCount));
         OnPropertyChanged(nameof(ActivitySummary));
@@ -1663,6 +1799,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        lastEmptyResultNode = records.Count == 0 ? origin : null;
+        lastEmptyResultDeadLetter = ShowDeadLetter;
+        OnPropertyChanged(nameof(EmptyMessagesHint));
         Messages.Clear();
         SelectedMessages.Clear();
 

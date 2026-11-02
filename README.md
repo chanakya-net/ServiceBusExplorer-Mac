@@ -257,8 +257,17 @@ Namespace**, and paste the connection string again. It will stick this time.
 
 ## The interface
 
-Light and dark both follow the system appearance — there is no in-app theme switch and
-no second palette to maintain.
+Appearance is **System**, **Light** or **Dark**, chosen in Settings (application menu →
+Settings…, or ⌘,). System follows the macOS appearance. A choice applies to every open
+window immediately and is saved to `settings.json` in the app's Application Support folder
+(`"theme": "system" | "light" | "dark"`), so the next launch opens in it from the first
+frame. The update checker's timestamp and any keys this version doesn't recognise share
+that file and are preserved: every writer updates it through one serialized, atomic
+read-modify-replace.
+
+If the save fails, Settings shows *"Couldn't save the appearance. It still applies until
+SB-Mac quits."* The choice stays for the current session; the next launch uses the last
+appearance that reached disk.
 
 Every colour in the app resolves through a token in `src/SbMac.App/Styles/Theme.axaml`,
 which defines a light and a dark set behind the same names (`SurfaceBrush`,
@@ -298,6 +307,56 @@ A few deliberate choices:
   offset): showing locks, expiry and redelivery at their defaults would read as fact
   rather than as absence.
 
+### Layout, saved panels and columns
+
+Window size and position, the sidebar width, the details pane height and its collapsed
+states, and each message table's column visibility, order and width are saved to
+`settings.json` as they change, and restored on the next launch.
+
+**Reset Layout** (Settings → Layout) restores:
+
+- the default window size, un-maximised, with default sidebar, details and Activity panel states
+- the default message columns for the Service Bus, dead-letter and Event Hubs tables
+
+It does **not** change the appearance, the word-wrap choice, saved connections, namespaces
+or credentials. If the reset cannot be saved, Settings says so; the layout still resets for
+the current session.
+
+### Reading message bodies
+
+The Body tab shows the detected format (JSON, XML, Text, Text (WCF DataContract),
+Binary (hex) or Empty).
+
+- **Word wrap** is a checkbox in the body header. Its state is saved (`bodyViewer.wordWrap`)
+  and applies to every body.
+- **Find** (the Find button, or ⌘F while the body has focus) opens a find bar. Matching is
+  case-insensitive. Enter moves to the next match, Shift+Enter to the previous, and Escape
+  closes the bar and returns focus to the body. The counter reads `n of N`, and stops at
+  10,000 matches, shown as `10000+`.
+- **Copy** (the Copy button, or ⌘C with no body text selected) copies the full body. With
+  text selected in the body, ⌘C copies just the selection.
+
+Large bodies fall back as follows:
+
+| Body | What you see | Full data |
+|---|---|---|
+| Text larger than 1 MiB | Shown in full as plain text, with syntax highlighting off: *"This body is larger than 1 MiB, so syntax highlighting is off and it is shown as plain text."* | Find, select and copy use all of it |
+| Any single line longer than 200,000 characters | Word wrap is off for that body, even with the checkbox on: *"A line in this body is extremely long, so word wrap is not applied to it."* | Unchanged |
+| Binary (not valid UTF-8) larger than 1 MiB | Hex dump of the first 1 MiB, ending *"… truncated at 1,048,576 of N bytes."* | Find and copy use the displayed dump only; the message's bytes are unchanged |
+
+### Advanced form sections
+
+Each dialog keeps its less common fields in an expandable section. Where a section opens on
+its own, the table says when.
+
+| Dialog | Section | Contents | Opens automatically |
+|---|---|---|---|
+| Connection | Advanced connection options | Transport (AMQP over WebSockets), Event hubs, consumer group, subscription ID | When any of them already has a value |
+| Send message | Message metadata · Application properties · Copies and scheduling | Metadata fields · custom properties · copy count and scheduled time | Copies and scheduling, when its validation fails |
+| Queue / topic | Optional behaviour · Fixed at creation | Optional settings · settings Azure fixes at creation (locked once the entity exists) | Optional behaviour when save finds auto-delete-on-idle invalid; Fixed at creation when save finds the duplicate-detection history window invalid |
+| Subscription | Optional behaviour · Forwarding and metadata · Fixed at creation | As above, plus forwarding targets | Optional behaviour only, when save finds auto-delete-on-idle invalid; Forwarding and metadata and Fixed at creation never open on their own |
+| Rule | Optional SQL action · Advanced correlation fields | SQL action · correlation fields | When the rule already has a SQL action, or any correlation field is set |
+
 ### Seeing the UI
 
 macOS needs screen-recording permission to capture a running app, which is awkward in
@@ -306,21 +365,98 @@ windows — same XAML, same styles, same compiled bindings — straight to PNG t
 Avalonia's headless platform with Skia drawing:
 
 ```bash
-dotnet run --project tools/SbMac.Preview ./artifacts/screenshots
+dotnet run --project tools/SbMac.Preview -- ./artifacts/screenshots
 ```
 
 It writes both themes for the main window, the expanded activity panel, the properties
-pane, the Event Hubs tree and its event properties, and the connection, send and queue
-dialogs — including the Event Hubs variant of the connection dialog — populated with
-representative sample data.
+pane, the Event Hubs tree and its event properties, and the connection, send, queue and
+Settings dialogs — including the Event Hubs variant of the connection dialog — populated
+with representative sample data.
 
 `tools/SbMac.Preview` is **not** in `SB-Mac.sln`, on purpose. It fabricates sample entities
 through the Service Bus SDK's internal constructors, so an SDK upgrade can break it —
 keeping it out of the solution means that breaks the screenshot tool rather than the build.
 
-Note that it opens the real main window, so it loads whatever namespaces you have saved in
-`~/Library/Application Support/SB-Mac/connections.json` and they will appear in the
-rendered sidebar alongside the sample data.
+Each preview uses deterministic sample data and temporary connection and settings stores,
+removed after rendering. It does not load saved namespaces or preferences, access
+Keychain, check for updates, or connect to Azure. Normal application startup remains
+unchanged.
+
+Use `--theme light|dark|both` (default `both`), `--size WIDTHxHEIGHT` (960x600
+through 4096x4096), and `--screen` to select `all` (default) or one fixture name. The names
+include `main`, `activity`, `props`, `body-json`, `body-long-wrapped`, `body-large-find`,
+`eventhubs`, `eventhubs-props`, `connection`, `connection-eventhubs`, `send`, `queue`,
+`topic`, `subscription`, `rule-sql`, `settings`, `settings-reset`, `reset-layout`,
+`preference-failure` and `message-error`; `--help` prints the full list. Size defaults to
+each fixture's usual dimensions — the Settings dialog renders at its natural size. The
+output directory is the first positional argument. For example:
+
+```bash
+dotnet run --project tools/SbMac.Preview -- --theme dark --screen main --size 1200x760 ./artifacts/shot
+dotnet run --project tools/SbMac.Preview -- --screen settings ./artifacts/settings
+```
+
+Native behaviour — the application menu, ⌘, and relaunching into a saved appearance —
+can't be shown headlessly. `--native` runs the real app on the macOS backend against a
+directory you own inside the OS temporary folder instead:
+
+```bash
+STATE="$(mktemp -d)/state"
+dotnet run --project tools/SbMac.Preview -- --native --state-dir "$STATE" --size 960x600
+```
+
+It reads and writes only `settings.json`, `connections.json` and `secrets.json` in that
+directory (seeding one Entra ID fixture namespace), has no update checker, and refuses to
+connect to Azure. Quitting and relaunching with the same `--state-dir` shows the saved
+appearance being restored. Delete the directory when you are done.
+
+### Keyboard verification
+
+Use fresh temporary state for each native size (saved window bounds override the initial
+`--size`). Add `--native-screen` to the native command above with one of `body-json`,
+`body-xml`, `body-large`, `body-longline`, `send`, `send-empty`, `send-delivery`, `topic`,
+`subscription`, `rule`, `resubmit`, `resubmit-long` or `table-layout`. `--native` accepts
+only `--state-dir`, `--size` and `--native-screen`; other options are rejected. These fixtures refuse Azure access. The send fixture is standalone;
+owned dialog restoration is covered through the real `IUiServices` paths in UI tests.
+
+The S33 integration checks use real Tab/Shift+Tab, arrows, Enter, Escape and native menu
+exporter dispatch. Existing slice tests remain in place. The native menu's Copy action
+uses the focused input or property selection; a password or empty input selection never
+falls back to a stale body selection. Grid copy and the explicit Copy body action copy
+the full body, except a binary body over 1 MiB, which copies only the displayed hex dump
+(see the large-body table above). Cmd+F stays inside the body viewer. Shift+F10 (or Menu) opens the tree
+context menu. Plain Tab leaves the multiline composer without changing the draft.
+
+Observed on macOS 27.2 (26B123), Avalonia Native/Skia, using isolated fixture state on
+2026-11-02, on the issue-42 changes based on `41459774`:
+
+| Check | Native observation | Automated evidence |
+|---|---|---|
+| Cmd+, | One Settings window; Appearance, Reset Layout and Close reachable in both directions; visible focus in Light/Dark; Escape restores owner focus; theme saved to fixture settings | Existing Appearance tests and dialog keyboard round trips |
+| Cmd+F | Body Tab path opens Find; Enter/Shift+Enter navigate; Escape returns to the editor; entity search does not open body Find | `BodyFindKeyboardPathRemainsScopedAndEscapable` |
+| Cmd+C | Body copied as `Synthetic message 1`; search, Find query, property (`fixture-1`) and owned Connection name copy their own text; empty search selection preserves clipboard | `NativeCopy*` tests additionally cover password and hidden-inspector cases |
+| Columns | Tab reaches Columns; Enter/Down/Enter changes ENQUEUED visibility; popup closes and focus returns; reopening/Escape works | `WorkspaceMenusSupportKeyboardActivationAndReturnFocus` and existing layout tests |
+| Panes | Tab from inspector splitter reaches Body with a visible cue; body Tab exits to Activity; Activity opens at Hide; inspector shortcut hides to grid and shows to selected tab | Workspace visibility and inspector traversal tests |
+| Composer | Body Tab reaches Content type; reverse Tab returns; Enter adds a newline; traversal reaches Send and Cancel; Escape cancels without sending | `ComposerKeyboardPathLeavesBodyWithoutSubmitting` |
+
+Native screenshots were inspected in the worker session (Settings in Light/Dark, dark
+Body tab/Activity focus and composer Content type focus). Headless Light/Dark renders
+cover the workspace, chooser, activity, body find and dialog variants. Native popup
+windows are not included in the owner-window screenshot capture; chooser activation is
+verified through the resulting column visibility and restored focus. VoiceOver end-to-end
+validation remains explicitly deferred.
+
+Review revisions after those native observations are verified by headless tests and
+Light/Dark renders only; a native recheck of them is still outstanding:
+
+| Behaviour | Automated evidence |
+|---|---|
+| Toolbar and message-header Tab/Shift+Tab follow on-screen left-to-right order at 1360x860 and 960x600 (More last when compact) | `ToolbarAndHeaderTabOrderFollowsVisualOrder` |
+| Populated workspace traverses toolbar, sidebar, header, grid, inspector and status bar in both directions without changing the explicit selection; Shift+Tab leaves the inspector content through its tab header | `MainWorkspaceKeyboardTraversalReachesNamedRegions` |
+| Arrow keys move the grid row and inspector; Space on a row checkbox toggles only that row | `MessageGridArrowKeysMoveRowAndSpaceTogglesOnlyFocusedCheckbox` |
+| Enter activates Actions › Copy body, Columns and More › Inspector items | `WorkspaceMenusSupportKeyboardActivationAndReturnFocus` |
+| Destructive confirmations open focused on the message, so Space does nothing; Return confirms and Escape cancels | `DestructiveConfirmationIgnoresSpaceAtOpen` |
+| Editor field names match their visible labels | `DialogKeyboardRoundTripsPreserveDefaultsAndOwnerFocus` |
 
 ## Building
 
@@ -328,7 +464,7 @@ Requires the .NET 10 SDK.
 
 ```bash
 dotnet build          # build everything
-dotnet test           # 172 tests
+dotnet test           # 529 tests
 dotnet run --project src/SbMac.App    # run without packaging
 ```
 
@@ -386,7 +522,7 @@ SB-Mac/
     Views/                 windows and dialogs
     Styles/                Theme.axaml (tokens), Icons.axaml, AppStyles.axaml
     Converters/            icon-name to geometry lookup
-  tests/SbMac.Tests/       172 tests, including headless UI and real-keychain tests
+  tests/SbMac.Tests/       529 tests, including headless UI and real-keychain tests
   tools/SbMac.Preview/     dev-only screenshot harness (not in the solution)
   build/                   Info.plist, icon generator, packaging and signing scripts
 ```
@@ -402,7 +538,7 @@ or tests without a UI.
 dotnet test
 ```
 
-172 tests, all passing, no Azure connection required. They cover message body decoding,
+529 tests, all passing, no Azure connection required. They cover message body decoding,
 connection string parsing, secret storage, import/export round-trips, the Event Hubs
 session, mappers and read-window arithmetic, and view model logic.
 
@@ -437,6 +573,119 @@ Rendering the UI (rather than only compiling it) caught two more:
    lost their headings, hint text and panel borders while still compiling cleanly.
 
 ---
+
+### S35 validation record (2026-11-02)
+
+**Platform verification remains incomplete.** Runtime evidence was collected at
+`d6ca126ae3cf6074a9b2fedb3f3d3121f1829e51` on macOS 27.2 (26B123), Apple M5 Max
+(arm64), .NET SDK 10.0.403. The S35 check-in changes only this README; post-commit
+regression results and the exact documentation commit SHA are recorded outside the
+source tree to avoid a self-referencing commit.
+
+| Required check at the runtime revision | Observed result |
+|---|---|
+| `dotnet build SB-Mac.slnx --configuration Release` | Passed |
+| `dotnet test tests/SbMac.Tests/SbMac.Tests.csproj --configuration Release --no-build` | 529 passed, 0 failed, 0 skipped; 1 m 18 s |
+| `bash tests/next-release-version.sh` | Passed |
+| `bash tests/release-workflow.sh` | Passed |
+| Release Preview build and full render matrix | Passed: 64 supported screens × Light/Dark = 128 PNGs, plus 33 workspace screens × Light/Dark at 960×600 = 66 PNGs |
+
+All **194 images** were inspected for clipping, overlap, focus cues and readable theme
+surfaces, with one observation per image. Dialogs retained their fixture/natural sizes;
+workspace defaults were 1360×860. Rendering success is separate from visual approval:
+
+- Import Policy's focused “Skip entities that already exist” label clips at its right
+  edge in both themes, including the long-summary fixture.
+- At 960×600, expanded Activity leaves the inspector's Wrap/Find controls clipped and
+  its body hidden. Find and large-body notices can also consume the inspector viewport,
+  clipping the large-body Find controls. These findings remain unfixed in this
+  validation-only slice.
+- The `settings-reset` frame uses programmatic focus and shows no distinct keyboard
+  outline. `topic-invalid` seeds an invalid value without pressing Save, so that frame
+  does not establish submitted validation. Supplemental native checks remained pending in the first attempt; see the resume record below.
+
+| Self-contained package | Version | Host/runtime architecture | Signature | Native evidence |
+|---|---|---|---|---|
+| `./build/make-app.sh osx-arm64` | 0.0.0 | arm64 | Ad-hoc | Startup, menu/Settings, Light/Dark and isolated restart observed |
+| `./build/make-app.sh osx-x64` | 0.0.0 | x86_64 | Ad-hoc | Static inspection only; physical Intel checks waived/unverified |
+
+The native arm64 package stayed running for at least 20 seconds. Its menu included
+File/Entity/Messages/View and Settings; menu activation and Cmd+, opened Settings with
+Appearance focused. Light then Dark were saved to temporary HOME state, and a subsequent
+isolated restart restored Dark. Native Preview likewise exercised its real menus,
+Cmd+,, both live themes and clean Quit against `contoso-fixture` temporary state, with
+Azure connections refused. Its supplemental restart attempts failed twice with native
+RenderTimer error `-6661`; the UI tool then confirmed the Mac was locked. These failed
+commands remain recorded as failures, not inapplicable checks.
+
+Isolation exception: after Quit, a UI-tool state query automatically reopened the owned
+package with the default HOME. That exact process was stopped; subsequent launches used
+explicit temporary HOME. No personal configuration was inspected by the worker, but
+personal-store nonaccess/nonmutation cannot be certified for the unintended startup.
+The existing full test suite separately creates and removes disposable Keychain fixture
+records with unique account/connection keys.
+
+**First resume record (2026-11-02):** the user explicitly waived physical Intel checks;
+these remain unverified and were never passed. At preserved documentation revision
+`fa9562b6c7d682dfe073149f880a395bf9f12ba8`, the first isolated Preview relaunch
+again aborted with RenderTimer `-6661` (SIGABRT, subprocess return code -6).
+A transient display-wake assertion allowed another process to start, but the subsequent
+capture showed the login screen and the OS reported `CGSSessionScreenIsLocked=true`.
+Cmd+, did not establish Settings activation; the Settings AX query failed with `-1728`.
+The owned process was stopped by exact PID with SIGTERM; clean interactive Quit was
+not verified in this resume. Process liveness is not a successful restart/interactions
+check. Settings Reset keyboard
+focus and submitted Topic validation in Light and Dark were not verified in that attempt.
+All launches specified temporary HOME and fixture state; no closed app was queried through the UI tool.
+The 529-test Release suite and both release-script checks passed again before this
+README-only follow-up; exact post-commit checks are stored in the resume evidence.
+
+**Second native retry (2026-11-02):** the desktop was visibly unlocked at preserved
+revision `a9aeef5eb91e79c05351daea7294e0b1459aa605`, whose runtime tree matches
+`d6ca126`. Fresh fixture state and an explicit temporary HOME were used for all three
+native Preview sessions; each quit/restart reused that same HOME/state. Both Dark and
+Light persisted through Cmd+Q and explicit relaunch, with Settings showing the saved
+appearance. In both themes, Tab gave Reset Layout a distinct keyboard outline and Space
+produced “Layout reset.” without changing appearance. In a fresh 400px-high Topic
+fixture per theme, Return invoked Save, expanded Optional behaviour, scrolled to and
+focused the invalid Auto-delete on idle field, and displayed the duration error with
+Save/Cancel still visible. Screenshots and accessibility observations establish these
+native interactions; headless frames alone did not. Three owned Preview PIDs exited
+after Cmd+Q, and the temporary owned caffeinate process was stopped. No security setting
+changed. All launches specified isolated HOME/state; no closed app was queried through
+the UI tool. The earlier failures and isolation exception remain historical disclosures.
+F1–F3 remain unfixed visual findings; this is a validation record, not full visual approval.
+Release build, the 529-test suite and both release scripts are required again at the final
+README-only commit, with exact revision/results stored outside the source tree.
+
+**Unverified / standing limitations:**
+
+- **Waived by user: physical Intel/osx-x64 startup, menus, Light/Dark and restart.** No
+  Intel hardware was exercised. The historical Rosetta probe failed with “Bad CPU type
+  in executable”; cross-building or Rosetta would not establish physical Intel verification.
+- VoiceOver, multi-monitor recovery/secondary-screen placement, and Developer ID
+  signing/notarization remain unverified; the existing release/signing behavior is unchanged.
+
+Durable local evidence is under
+`.run-with-it/issues/44/evidence/impl-d9c47956/` in the run's parent repository,
+**outside this worktree**: `commands.jsonl` records applicability before execution;
+`results.jsonl` records exact commands, revisions and exit codes; `inspection.md` and
+`images.tsv` cover every image; `packages/` preserves both bundles, file/hash manifests
+and the Intel ZIP; `native/native-checks.md` records native observations and the
+isolation exception; `hitl.md` gives the remaining human checks. These are local run
+artifacts, not committed release assets or evidence of complete platform verification.
+The preserved evidence above is reused because the runtime tree is unchanged. Resume
+commands, failures, isolation/revision proof and final regression logs are under
+`.run-with-it/issues/44/evidence/impl-f9905751/`; `native/native-checks.md` records the
+then-blocked checks and `summary.json` records the exact first follow-up commit. The
+original `impl-d9c47956` evidence and historical failures are retained without relabelling.
+Second-retry evidence is under `.run-with-it/issues/44/evidence/impl-2e118cf8/`:
+`native/native-checks.md` records completed native checks, process ownership, screenshot
+observations and corrected observation-script errors; `native/actions.jsonl` preserves
+PID-targeted actions; `revision-proof.json` records runtime equivalence; `final/` and
+`summary.json` record required checks at the final documentation SHA. The adjusted native
+scope is complete; physical Intel remains waived/unverified and full platform verification
+remains incomplete.
 
 ## Implementation notes
 

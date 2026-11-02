@@ -7,6 +7,7 @@
   -->
 
   <Style Selector="Window">
+    <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
     <Setter Property="FontSize" Value="{StaticResource FontBody}" />
     <Setter Property="Background" Value="{DynamicResource CanvasBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
@@ -137,7 +138,7 @@
   <!-- Neutral bordered button, for Cancel and secondary actions. -->
   <Style Selector="Button.secondary">
     <Setter Property="Background" Value="{DynamicResource ControlBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="Padding" Value="{StaticResource PadControl}" />
     <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
@@ -284,7 +285,7 @@
     <Setter Property="Background" Value="{DynamicResource ChromeBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
     <Setter Property="BorderThickness" Value="0,0,0,1" />
-    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Padding" Value="12,6" />
   </Style>
 
   <Style Selector="Border.toolbar">
@@ -344,10 +345,14 @@
   <Style Selector="TreeViewItem /template/ Border#PART_LayoutRoot">
     <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
     <Setter Property="Margin" Value="2,1" />
+    <Setter Property="BorderThickness" Value="3,0,0,0" />
+    <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
 
+  <!-- Selection is a tint plus a solid accent bar: the tint alone is far below 3:1. -->
   <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
     <Setter Property="Background" Value="{DynamicResource SelectionBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
   </Style>
 
   <Style Selector="TreeViewItem:pointerover /template/ Border#PART_LayoutRoot">
@@ -356,6 +361,11 @@
 
   <Style Selector="TreeViewItem:selected:pointerover /template/ Border#PART_LayoutRoot">
     <Setter Property="Background" Value="{DynamicResource SelectionBrush}" />
+  </Style>
+
+  <Style Selector="TreeViewItem:focus-visible /template/ Border#PART_LayoutRoot">
+    <Setter Property="BorderThickness" Value="2" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
   </Style>
 
   <!-- A disabled entity is dimmed but still legible; it must stay findable. -->
@@ -375,7 +385,8 @@
     <Setter Property="RowBackground" Value="Transparent" />
     <Setter Property="GridLinesVisibility" Value="Horizontal" />
     <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource DividerBrush}" />
-    <Setter Property="RowHeight" Value="30" />
+    <Setter Property="RowHeight" Value="28" />
+    <Setter Property="MinHeight" Value="96" />
   </Style>
 
   <Style Selector="DataGridColumnHeader">
@@ -383,7 +394,7 @@
     <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
     <Setter Property="FontSize" Value="{StaticResource FontCaption}" />
     <Setter Property="FontWeight" Value="SemiBold" />
-    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="Padding" Value="10,5" />
     <Setter Property="SeparatorBrush" Value="Transparent" />
   </Style>
 
@@ -414,6 +425,7 @@
   <!-- ═══════════════════════════════ inputs ═══════════════════════════════ -->
 
   <Style Selector="TextBox">
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
     <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
     <Setter Property="Padding" Value="9,6" />
     <Setter Property="MinHeight" Value="30" />
@@ -426,6 +438,7 @@
   </Style>
 
   <Style Selector="ComboBox">
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
     <Setter Property="CornerRadius" Value="{StaticResource RadiusSmall}" />
     <Setter Property="MinHeight" Value="30" />
     <Setter Property="Padding" Value="9,5" />
@@ -477,6 +490,13 @@
   <Style Selector="ListBoxItem">
     <Setter Property="Padding" Value="10,3" />
     <Setter Property="MinHeight" Value="0" />
+    <Setter Property="BorderThickness" Value="3,0,0,0" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource SelectionBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
   </Style>
 
   <Style Selector="ProgressBar">

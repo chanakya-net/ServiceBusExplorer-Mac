@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 // Avalonia 12 moved SetTextAsync off IClipboard onto ClipboardExtensions in this namespace.
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
@@ -8,6 +10,7 @@ using SbMac.App.Services;
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
 using SbMac.App.Views.Dialogs;
+using SbMac.App.Views.Behaviors;
 
 using SbMac.Core;
 using SbMac.Core.Connections;
@@ -18,6 +21,10 @@ namespace SbMac.App.Views;
 public partial class MainWindow : Window, IUiServices
 {
     readonly IUriLauncher uriLauncher;
+    GridLength tableHeight = new(1.5, GridUnitType.Star);
+    GridLength inspectorHeight = new(1, GridUnitType.Star);
+    MainWindowViewModel? subscribedViewModel;
+    readonly MessageTableLayoutBehavior messageLayout;
 
     public MainWindow() : this(new SystemUriLauncher())
     {
@@ -27,10 +34,65 @@ public partial class MainWindow : Window, IUiServices
     {
         this.uriLauncher = uriLauncher;
         InitializeComponent();
+        messageLayout = new(MessageGrid, ColumnsButton);
 
         // The grid's SelectedItems isn't a bindable property in Avalonia's DataGrid, so
         // the multi-selection is mirrored into the view model by hand.
         MessageGrid.SelectionChanged += OnMessageSelectionChanged;
+
+        SidebarSplitter.DragCompleted += (_, _) => CapturePanelLayout();
+        EntityTree.KeyDown += OnEntityTreeKeyDown;
+        DetailsSplitter.KeyDown += OnInspectorSplitterKeyDown;
+        InspectorTabs.KeyDown += OnInspectorTabsKeyDown;
+        DetailsSplitter.DragCompleted += (_, _) => CapturePanelLayout();
+        MainSplitLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
+        MessageDetailLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
+        MessageHeader.SizeChanged += (_, _) => UpdateHeaderLayout();
+        MainToolbar.SizeChanged += (_, _) => UpdateToolbarLayout();
+        SizeChanged += (_, _) => ActivityPanel.MaxHeight = Math.Max(120, Math.Min(280, Bounds.Height * 0.25));
+    }
+
+    // Selection summary, Select all/Clear and Columns always stay; the rest overflow into "More".
+    internal bool HeaderCompact { get; private set; }
+
+    void UpdateHeaderLayout()
+    {
+        var moreHadFocus = MessageActionsButton.IsKeyboardFocusWithin;
+        SetHeaderCompact(false);
+        var available = MessageHeader.Bounds.Width;
+        var compact = AdaptiveWidth.NeedsCompaction(MessageHeader.Children.OfType<Control>().Where(c => !ReferenceEquals(c, MessageActionsButton)), available);
+        SetHeaderCompact(compact);
+        if (moreHadFocus)
+            (compact ? MessageActionsButton : InspectorButton).Focus(NavigationMethod.Tab);
+    }
+
+    void SetHeaderCompact(bool compact)
+    {
+        var restoreFocus = compact && (InspectorButton.IsKeyboardFocusWithin ||
+            BulkButtons.IsKeyboardFocusWithin || EditAndResendButton.IsKeyboardFocusWithin);
+        HeaderCompact = compact;
+        InspectorButton.IsVisible = !compact;
+        BulkButtons.IsVisible = !compact;
+        EditAndResendButton.IsVisible = !compact;
+        MessageActionsButton.IsVisible = compact;
+        if (restoreFocus) MessageActionsButton.Focus(NavigationMethod.Tab);
+    }
+
+    // Labels collapse to icons (tooltip + automation name keep the words) before controls clip.
+    internal bool ToolbarCompact { get; private set; }
+
+    void UpdateToolbarLayout()
+    {
+        SetToolbarCompact(false);
+        var compact = AdaptiveWidth.NeedsCompaction(MainToolbar.Children.OfType<Control>(), MainToolbar.Bounds.Width);
+        SetToolbarCompact(compact);
+    }
+
+    void SetToolbarCompact(bool compact)
+    {
+        ToolbarCompact = compact;
+        foreach (var label in MainToolbar.GetVisualDescendants().OfType<TextBlock>().Where(t => t.Classes.Contains("toolbarLabel")))
+            label.IsVisible = !compact;
     }
 
     MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
@@ -38,11 +100,70 @@ public partial class MainWindow : Window, IUiServices
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        messageLayout?.ClearContext();
 
-        if (ViewModel is { } viewModel)
+        if (subscribedViewModel is not null)
+        {
+            subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            subscribedViewModel.BodySelectionProvider = null;
+        }
+        subscribedViewModel = ViewModel;
+        if (subscribedViewModel is { } viewModel)
         {
             viewModel.Ui = this;
+            viewModel.BodySelectionProvider = () => BodyViewer.SelectedText;
+            viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            UpdateInspectorVisibility(viewModel.IsInspectorVisible, moveFocus: false);
+            ApplyMessageLayout();
         }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        messageLayout.Dispose();
+        if (subscribedViewModel is not null)
+            subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        base.OnClosed(e);
+    }
+
+    void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MainWindowViewModel.MessageTableContext) or nameof(MainWindowViewModel.MessageColumns)) ApplyMessageLayout();
+        if (e.PropertyName == nameof(MainWindowViewModel.MessageSelectionSummary))
+            Avalonia.Threading.Dispatcher.UIThread.Post(UpdateHeaderLayout, Avalonia.Threading.DispatcherPriority.Loaded);
+        if (e.PropertyName == nameof(MainWindowViewModel.IsInspectorVisible) && ViewModel is { } vm)
+            UpdateInspectorVisibility(vm.IsInspectorVisible, moveFocus: !applyingSavedPanels);
+        if (e.PropertyName == nameof(MainWindowViewModel.IsActivityExpanded) && !applyingSavedPanels)
+            MoveActivityFocus();
+        if (e.PropertyName is nameof(MainWindowViewModel.IsInspectorVisible) or nameof(MainWindowViewModel.IsActivityExpanded))
+            CapturePanelVisibility();
+    }
+
+    void UpdateInspectorVisibility(bool visible, bool moveFocus)
+    {
+        var rows = MessageDetailLayout.RowDefinitions;
+        rows[3].MinHeight = visible ? 90 : 0;
+        if (visible)
+        {
+            rows[1].Height = tableHeight;
+            rows[3].Height = inspectorHeight;
+            ClampPanelsToLayout();
+            if (moveFocus) Avalonia.Threading.Dispatcher.UIThread.Post(() => InspectorTabs.ContainerFromIndex(Math.Max(0, InspectorTabs.SelectedIndex))?.Focus(NavigationMethod.Tab));
+        }
+        else
+        {
+            tableHeight = rows[1].Height;
+            inspectorHeight = rows[3].Height;
+            rows[1].Height = new GridLength(1, GridUnitType.Star);
+            rows[3].Height = new GridLength(0);
+            if (moveFocus) MessageGrid.Focus(NavigationMethod.Tab);
+        }
+    }
+
+    void ApplyMessageLayout()
+    {
+        if (subscribedViewModel is null) return;
+        messageLayout.Apply(subscribedViewModel);
     }
 
     protected override async void OnLoaded(RoutedEventArgs e)
@@ -115,6 +236,12 @@ public partial class MainWindow : Window, IUiServices
                 // Opening the release page is best-effort.
             }
         }
+    }
+
+    public Task ShowSettingsAsync(AppPreferencesService preferences)
+    {
+        var dialog = new SettingsDialog { DataContext = new SettingsDialogViewModel(preferences) };
+        return dialog.ShowDialog(this);
     }
 
     public async Task<NamespaceConnection?> EditConnectionAsync(NamespaceConnection? existing)

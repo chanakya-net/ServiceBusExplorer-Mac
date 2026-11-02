@@ -36,6 +36,40 @@ public class EntityPathTests
 public class SendMessageViewModelTests
 {
     [Fact]
+    public void SendMessageEmptyBodyPreservesOtherFields()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Copies = 3, Subject = "label" };
+        Assert.Null(vm.Build());
+        Assert.Equal("A message body is required.", vm.ValidationError);
+        Assert.Equal(SendValidationField.Body, vm.InvalidField);
+        Assert.Equal(3, vm.Copies);
+        Assert.Equal("label", vm.Subject);
+    }
+
+    [Fact]
+    public void OptionalSectionsStartCollapsedAndSeededSectionsOpen()
+    {
+        var empty = new SendMessageViewModel(new SendMessageRequest("orders"));
+        Assert.False(empty.IsMetadataExpanded);
+        Assert.False(empty.IsPropertiesExpanded);
+        Assert.False(empty.IsDeliveryExpanded);
+        var seed = new MessageRecord { Body = BinaryData.FromString("body"), SourceEntityPath = "orders", Subject = "label", ApplicationProperties = new Dictionary<string, object?> { ["key"] = "value" } };
+        var seeded = new SendMessageViewModel(new SendMessageRequest("orders", seed));
+        Assert.True(seeded.IsMetadataExpanded);
+        Assert.True(seeded.IsPropertiesExpanded);
+        Assert.False(seeded.IsDeliveryExpanded);
+    }
+
+    [Fact]
+    public void InvalidDeliveryRevealsSectionAndPreservesBody()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Body = "payload", Copies = 0 };
+        Assert.Null(vm.Build());
+        Assert.True(vm.IsDeliveryExpanded);
+        Assert.Equal("payload", vm.Body);
+    }
+
+    [Fact]
     public void BuildProducesOneMessagePerCopy()
     {
         var viewModel = new SendMessageViewModel(new SendMessageRequest("orders"))
@@ -388,4 +422,182 @@ public class DurationTextTests
     [InlineData("PT")]
     [InlineData("99:99")]
     public void InvalidInputIsRejected(string value) => Assert.False(DurationText.IsValid(value));
+}
+
+public class QueueEditorValidationTests
+{
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NondefaultDefinitionRoundTripsAndCreateOnlySettingsStayLockedOnEdit(bool isNew)
+    {
+        var definition = new SbMac.Core.ImportExport.QueueDefinition
+        {
+            Name = "orders", MaxSizeInMegabytes = 5120, MaxDeliveryCount = 25,
+            LockDuration = "PT1M", DefaultMessageTimeToLive = "P2D", AutoDeleteOnIdle = "P5D",
+            DuplicateDetectionHistoryTimeWindow = "PT10M", RequiresSession = true,
+            RequiresDuplicateDetection = true, EnablePartitioning = true,
+            DeadLetteringOnMessageExpiration = true, EnableBatchedOperations = false,
+            Status = "Disabled", ForwardTo = "target", ForwardDeadLetteredMessagesTo = "dead", UserMetadata = "metadata"
+        };
+        var vm = new QueueEditorViewModel(definition, isNew);
+        Assert.True(vm.CanSave);
+        Assert.Equal(isNew, vm.CanEditCreateOnlySettings);
+        var result = vm.ToDefinition();
+        Assert.Equal(definition.LockDuration, result.LockDuration);
+        Assert.Equal(definition.DefaultMessageTimeToLive, result.DefaultMessageTimeToLive);
+        Assert.Equal(definition.AutoDeleteOnIdle, result.AutoDeleteOnIdle);
+        Assert.Equal(definition.DuplicateDetectionHistoryTimeWindow, result.DuplicateDetectionHistoryTimeWindow);
+        Assert.Equal(definition.MaxSizeInMegabytes, result.MaxSizeInMegabytes);
+        Assert.Equal(definition.MaxDeliveryCount, result.MaxDeliveryCount);
+        Assert.True(result.RequiresSession && result.RequiresDuplicateDetection && result.EnablePartitioning);
+        Assert.True(result.DeadLetteringOnMessageExpiration);
+        Assert.False(result.EnableBatchedOperations);
+        Assert.Equal("Disabled", result.Status);
+        Assert.Equal("target", result.ForwardTo);
+        Assert.Equal("dead", result.ForwardDeadLetteredMessagesTo);
+        Assert.Equal("metadata", result.UserMetadata);
+    }
+
+    [Fact]
+    public void InvalidOptionalDurationRevealsSectionAndPreservesInput()
+    {
+        var vm = new QueueEditorViewModel(new SbMac.Core.ImportExport.QueueDefinition { Name = "orders" }, true)
+        { AutoDeleteOnIdle = "invalid" };
+        Assert.Equal("AutoDeleteOnIdle", vm.RevealInvalidField());
+        Assert.True(vm.IsOptionalExpanded);
+        Assert.Equal("invalid", vm.AutoDeleteOnIdle);
+        Assert.False(vm.CanSave);
+        vm.AutoDeleteOnIdle = "00:05:00";
+        Assert.Null(vm.ValidationError);
+        Assert.Null(vm.RevealInvalidField());
+        Assert.True(vm.CanSave);
+        Assert.Null(vm.ValidationError);
+    }
+}
+
+public class TopicEditorValidationTests
+{
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SeededTopicRoundTripsWithCreationGuards(bool isNew)
+    {
+        var original = new SbMac.Core.ImportExport.TopicDefinition
+        {
+            Name = "events", MaxSizeInMegabytes = 5120, DefaultMessageTimeToLive = "PT1H",
+            AutoDeleteOnIdle = "P2D", DuplicateDetectionHistoryTimeWindow = "PT10M",
+            RequiresDuplicateDetection = true, EnablePartitioning = true, SupportOrdering = true,
+            EnableBatchedOperations = false, Status = "Disabled", UserMetadata = "fixture"
+        };
+        var vm = new TopicEditorViewModel(original, isNew);
+        Assert.Equal(isNew, vm.CanEditCreateOnlySettings);
+        Assert.True(vm.CanSave);
+        var result = vm.ToDefinition();
+        Assert.Equal(original.MaxSizeInMegabytes, result.MaxSizeInMegabytes);
+        Assert.Equal(original.DefaultMessageTimeToLive, result.DefaultMessageTimeToLive);
+        Assert.Equal(original.AutoDeleteOnIdle, result.AutoDeleteOnIdle);
+        Assert.Equal(original.DuplicateDetectionHistoryTimeWindow, result.DuplicateDetectionHistoryTimeWindow);
+        Assert.True(result.RequiresDuplicateDetection);
+        Assert.True(result.EnablePartitioning);
+        Assert.True(result.SupportOrdering);
+        Assert.False(result.EnableBatchedOperations);
+        Assert.Equal("Disabled", result.Status);
+        Assert.Equal("fixture", result.UserMetadata);
+    }
+
+    [Theory]
+    [InlineData("00:05:00")]
+    [InlineData("1.00:00:00")]
+    [InlineData("PT30S")]
+    [InlineData("")]
+    public void ValidDurationsRemainValid(string duration)
+    {
+        var vm = new TopicEditorViewModel(new SbMac.Core.ImportExport.TopicDefinition { Name = "events" }, true)
+        { DefaultMessageTimeToLive = duration, AutoDeleteOnIdle = duration, DuplicateDetectionHistoryTimeWindow = duration };
+        Assert.True(vm.CanSave);
+        Assert.Null(vm.RevealInvalidField());
+    }
+
+    [Fact]
+    public void ValidationRevealsOptionalAndPreservesInput()
+    {
+        var vm = new TopicEditorViewModel(new SbMac.Core.ImportExport.TopicDefinition { Name = "events" }, true)
+        { AutoDeleteOnIdle = "invalid" };
+        Assert.False(vm.CanSave);
+        Assert.Equal(nameof(vm.AutoDeleteOnIdle), vm.RevealInvalidField());
+        Assert.True(vm.IsOptionalExpanded);
+        Assert.Equal("invalid", vm.AutoDeleteOnIdle);
+        vm.AutoDeleteOnIdle = "PT5M";
+        Assert.True(vm.CanSave);
+        Assert.Null(vm.ValidationError);
+    }
+}
+
+public class SubscriptionEditorValidationTests
+{
+    [Fact]
+    public void CreateAndEditPreserveRulesAndRevealInvalidOptionalDuration()
+    {
+        var definition = new SbMac.Core.ImportExport.SubscriptionDefinition { Name = "audit", RequiresSession = true };
+        var create = new SubscriptionEditorViewModel("events", definition, true) { AutoDeleteOnIdle = "bad" };
+        Assert.Equal("events", create.TopicName);
+        Assert.False(create.CanSave);
+        Assert.Equal(nameof(create.AutoDeleteOnIdle), create.RevealInvalidField());
+        Assert.True(create.IsOptionalExpanded);
+        Assert.Equal("bad", create.AutoDeleteOnIdle);
+        create.AutoDeleteOnIdle = "PT5M";
+        Assert.True(create.CanSave);
+        Assert.Single(create.ToDefinition().Rules);
+        Assert.Equal("1=1", create.ToDefinition().Rules[0].SqlExpression);
+        var edit = new SubscriptionEditorViewModel("events", definition, false);
+        Assert.False(edit.CanEditCreateOnlySettings);
+        Assert.True(edit.ToDefinition().RequiresSession);
+        Assert.Empty(edit.ToDefinition().Rules);
+    }
+}
+
+public class RuleEditorViewModelTests
+{
+    [Theory]
+    [InlineData("Sql", 0)]
+    [InlineData("Correlation", 1)]
+    [InlineData("True", 2)]
+    [InlineData("False", 3)]
+    public void FilterTypesAndOptionalValuesRoundTrip(string type, int index)
+    {
+        var seed = new SbMac.Core.ImportExport.RuleDefinition { Name = "rule", FilterType = type, SqlExpression = "a = 1", SqlAction = "SET a = 2", CorrelationId = "c", MessageId = "m", Subject = "s", To = "t", ReplyTo = "r", SessionId = "i", ContentType = "json" };
+        var vm = new RuleEditorViewModel(seed, false);
+        Assert.Equal(index, vm.SelectedFilterIndex);
+        Assert.Equal(index == 0, vm.ShowSqlFields);
+        Assert.Equal(index == 1, vm.ShowCorrelationFields);
+        Assert.True(vm.IsSqlActionExpanded);
+        Assert.True(vm.IsCorrelationAdvancedExpanded);
+        var result = vm.ToDefinition();
+        Assert.Equal(type, result.FilterType);
+        Assert.Equal(seed.SqlExpression, result.SqlExpression);
+        Assert.Equal(seed.SqlAction, result.SqlAction);
+        Assert.Equal(seed.CorrelationId, result.CorrelationId);
+        Assert.Equal(seed.MessageId, result.MessageId);
+        Assert.Equal(seed.Subject, result.Subject);
+        Assert.Equal(seed.To, result.To);
+        Assert.Equal(seed.ReplyTo, result.ReplyTo);
+        Assert.Equal(seed.SessionId, result.SessionId);
+        Assert.Equal(seed.ContentType, result.ContentType);
+    }
+
+    [Fact]
+    public void ValidationRevealsFirstInvalidField()
+    {
+        var vm = new RuleEditorViewModel(new SbMac.Core.ImportExport.RuleDefinition { Name = "" }, true) { SqlExpression = "" };
+        Assert.False(vm.IsSqlActionExpanded);
+        Assert.False(vm.IsCorrelationAdvancedExpanded);
+        Assert.Equal(nameof(vm.Name), vm.RevealInvalidField());
+        Assert.NotNull(vm.ValidationError);
+        vm.Name = "rule";
+        Assert.Equal(nameof(vm.SqlExpression), vm.RevealInvalidField());
+        vm.SqlExpression = "1=1";
+        Assert.Null(vm.RevealInvalidField());
+        Assert.Null(vm.ValidationError);
+    }
 }

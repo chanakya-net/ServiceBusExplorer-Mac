@@ -1,6 +1,7 @@
 using Azure.Messaging.ServiceBus.Administration;
 
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -8,6 +9,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 
+using SbMac.App.Models;
+using SbMac.App.Services;
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
 using SbMac.App.ViewModels.Tree;
@@ -29,12 +32,162 @@ namespace SbMac.Tests;
 /// bad template only shows up when the XAML is actually instantiated, so these tests
 /// build each window rather than asserting on the view models alone.
 /// </summary>
-public class UiSmokeTests
+public partial class UiSmokeTests
 {
+    [AvaloniaFact]
+    public async Task MessageDialogKeepsLongWarningScrollableAndEscapeCancels()
+    {
+        var owner = new Window();
+        owner.Show();
+        var message = "Delete 123 messages from orders?\n" + string.Concat(Enumerable.Repeat("Long warning text. ", 500));
+        var result = MessageDialog.ConfirmAsync(owner, "Delete messages", message, "Delete", true);
+        var dialog = Assert.IsType<MessageDialog>(Assert.Single(owner.OwnedWindows));
+        dialog.UpdateLayout();
+        var root = Assert.IsType<StackPanel>(dialog.Content);
+        var scroller = Assert.IsType<ScrollViewer>(root.Children[1]);
+        var body = Assert.IsType<TextBlock>(scroller.Content);
+        var buttons = Assert.IsType<StackPanel>(root.Children[2]).Children.Cast<Button>().ToArray();
+        Assert.Equal(message, body.Text);
+        Assert.True(double.IsPositiveInfinity(body.MaxHeight));
+        Assert.True(scroller.Extent.Height > scroller.Viewport.Height);
+        Assert.Contains("secondary", buttons[0].Classes);
+        Assert.Contains("destructive", buttons[1].Classes);
+        Assert.True(buttons[1].IsDefault);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.False(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task MessageDialogEnterConfirmsDefaultAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = MessageDialog.ConfirmAsync(owner, "Proceed", "Continue?", "Continue", false);
+        var dialog = Assert.IsType<MessageDialog>(Assert.Single(owner.OwnedWindows));
+        var root = Assert.IsType<StackPanel>(dialog.Content);
+        var buttons = Assert.IsType<StackPanel>(root.Children[2]).Children.Cast<Button>().ToArray();
+        Assert.Equal("Cancel", buttons[0].Content);
+        Assert.Equal("Continue", buttons[1].Content);
+        Assert.Contains("primary", buttons[1].Classes);
+        Assert.True(buttons[1].IsFocused); // Initial focus preserves the default Enter action.
+        buttons[0].Focus();
+        Assert.True(buttons[0].IsFocused);
+        dialog.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        Assert.True(buttons[1].IsFocused);
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.True(await result);
+        owner.Close();
+    }
+
+    static MainWindowViewModel NewIsolatedViewModel(SbMac.App.Services.AppPreferencesService? preferences = null)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "sbmac-test-" + Guid.NewGuid());
+        var store = new ConnectionStore(Path.Combine(path, "connections.json"), new FileSecretStore(Path.Combine(path, "secrets.json")));
+        return MainWindowViewModel.CreateIsolated(
+            store, (_, _) => throw new InvalidOperationException("Unexpected network call"), preferences);
+    }
+
+    sealed class FailingSecrets : ISecretStore
+    {
+        public int Calls { get; private set; }
+        public bool IsAvailable => true;
+        public Task SetSecretAsync(string key, string secret, CancellationToken cancellationToken = default) => Fail();
+        public async Task<string?> GetSecretAsync(string key, CancellationToken cancellationToken = default) { await Fail(); return null; }
+        public Task DeleteSecretAsync(string key, CancellationToken cancellationToken = default) => Fail();
+        Task Fail() { Calls++; throw new InvalidOperationException("secret store reached"); }
+    }
+
+    [AvaloniaFact]
+    public async Task IsolatedWindowUsesNoSecretsInEitherTheme()
+    {
+        var dir = Directory.CreateTempSubdirectory("sbmac-test-");
+        try
+        {
+            var path = Path.Combine(dir.FullName, "connections.json");
+            await new ConnectionStore(path, new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")))
+                .SaveAsync([new NamespaceConnection { Name = "fixture", AuthenticationMode = AuthenticationMode.EntraId, FullyQualifiedNamespace = "fixture.servicebus.windows.net" }]);
+            foreach (var theme in new[] { Avalonia.Styling.ThemeVariant.Light, Avalonia.Styling.ThemeVariant.Dark })
+            {
+                var secrets = new FailingSecrets();
+                var calls = 0;
+                var vm = MainWindowViewModel.CreateIsolated(new ConnectionStore(path, secrets), (_, _) => { calls++; throw new InvalidOperationException("network reached"); });
+                await vm.InitializeAsync();
+                var window = new MainWindow { DataContext = vm, RequestedThemeVariant = theme };
+                window.Show();
+                await vm.InitializeAsync();
+                window.UpdateLayout();
+                Assert.Equal(theme, window.ActualThemeVariant);
+                Assert.Equal("fixture", Assert.Single(vm.Namespaces).Title);
+                Assert.Equal(0, secrets.Calls);
+                Assert.Equal(0, calls);
+                Assert.Empty(window.OwnedWindows);
+                window.Close();
+            }
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [AvaloniaFact]
+    public async Task IsolatedWindowReportsSecretStoreFailure()
+    {
+        var dir = Directory.CreateTempSubdirectory("sbmac-test-");
+        try
+        {
+            var path = Path.Combine(dir.FullName, "connections.json");
+            var seed = new ConnectionStore(path, new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")));
+            await seed.SaveAsync([new NamespaceConnection { Name = "fixture", AuthenticationMode = AuthenticationMode.ConnectionString, ConnectionString = "fixture" }]);
+            var secrets = new FailingSecrets();
+            var vm = MainWindowViewModel.CreateIsolated(new ConnectionStore(path, secrets), (_, _) => throw new InvalidOperationException("network reached"));
+            await vm.InitializeAsync();
+            var window = new MainWindow { DataContext = vm };
+            window.Show();
+            await vm.InitializeAsync();
+            Assert.Empty(vm.Namespaces);
+            Assert.Equal(1, secrets.Calls);
+            Assert.Contains(vm.Log, line => line.Contains("Could not load saved namespaces") && line.Contains("secret store reached"));
+            window.Close();
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [AvaloniaFact]
+    public async Task IsolatedWindowLoadsFixtureWithoutConnecting()
+    {
+        var directory = Directory.CreateTempSubdirectory("sbmac-test-");
+        try
+        {
+            var store = new ConnectionStore(Path.Combine(directory.FullName, "connections.json"),
+                new FileSecretStore(Path.Combine(directory.FullName, "secrets.json")));
+            await store.SaveAsync([new NamespaceConnection { Name = "fixture", AuthenticationMode = AuthenticationMode.EntraId,
+                FullyQualifiedNamespace = "fixture.servicebus.windows.net" }]);
+            var calls = 0;
+            Task Connect(NamespaceNodeViewModel node, CancellationToken token)
+            {
+                calls++;
+                throw new InvalidOperationException("fixture provider reached");
+            }
+            var vm = MainWindowViewModel.CreateIsolated(store, Connect);
+            var first = vm.InitializeAsync();
+            Assert.Same(first, vm.InitializeAsync());
+            await first;
+            var window = new MainWindow { DataContext = vm };
+            window.Show();
+            await vm.InitializeAsync();
+            Assert.Equal("fixture", Assert.Single(vm.Namespaces).Title);
+            Assert.Equal(0, calls);
+            vm.Ui = null;
+            await vm.ConnectCommand.ExecuteAsync(vm.Namespaces[0]);
+            Assert.Equal(1, calls);
+            window.Close();
+        }
+        finally { directory.Delete(true); }
+    }
+
     [AvaloniaFact]
     public void MainWindowLoadsWithItsViewModel()
     {
-        var window = new MainWindow { DataContext = new MainWindowViewModel() };
+        var window = new MainWindow { DataContext = NewIsolatedViewModel() };
         window.Show();
 
         Assert.Equal("Service Bus Explorer for Mac", window.Title);
@@ -44,7 +197,7 @@ public class UiSmokeTests
     [AvaloniaFact]
     public void MainWindowRegistersItselfAsTheDialogHost()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -60,6 +213,72 @@ public class UiSmokeTests
         window.Show();
 
         Assert.Equal("Add namespace", window.Title);
+    }
+
+    [AvaloniaFact]
+    public void ConnectionDialogSaveFocusesMissingCredentialWithoutLosingInput()
+    {
+        var vm = new ConnectionDialogViewModel(null)
+        {
+            Name = "fixture", UseEntraId = true,
+            FullyQualifiedNamespace = "fixture.servicebus.windows.net",
+            SelectedCredentialKind = EntraCredentialKind.ClientSecret
+        };
+        var window = new ConnectionDialog { DataContext = vm };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.True(window.FindControl<TextBox>("TenantIdField")!.IsFocused);
+        Assert.Equal("fixture", vm.Name);
+        Assert.NotNull(vm.ValidationError);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void ConnectionDialogKeepsExpandedFooterInsideWorkArea()
+    {
+        var vm = new ConnectionDialogViewModel(null)
+        {
+            Name = "fixture", UseEventHubs = true, UseEntraId = true,
+            SelectedCredentialKind = EntraCredentialKind.ClientSecret
+        };
+        var window = new ConnectionDialog { DataContext = vm, MaxHeight = 400 };
+        window.Show();
+        var screen = window.Screens.ScreenFromWindow(window) ?? window.Screens.Primary!;
+        window.Position = new PixelPoint(screen.WorkingArea.X, screen.WorkingArea.Bottom - 200);
+        vm.IsAdvancedExpanded = true;
+        window.UpdateLayout();
+        var frame = window.FrameSize ?? window.ClientSize;
+        foreach (var name in new[] { "SaveButton", "CancelButton" })
+        {
+            var button = window.FindControl<Button>(name)!;
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.True(origin.Y >= 0 && origin.Y + button.Bounds.Height <= window.ClientSize.Height);
+            Assert.True(origin.X >= 0 && origin.X + button.Bounds.Width <= window.ClientSize.Width);
+        }
+        Assert.True(window.Position.X >= screen.WorkingArea.X);
+        Assert.True(window.Position.Y >= screen.WorkingArea.Y);
+        Assert.True(window.Position.X + frame.Width * screen.Scaling <= screen.WorkingArea.Right);
+        Assert.True(window.Position.Y + frame.Height * screen.Scaling <= screen.WorkingArea.Bottom);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void ConnectionDialogSupportsKeyboardAndConstrainedHeight()
+    {
+        var vm = new ConnectionDialogViewModel(new NamespaceConnection
+        {
+            Name = "fixture", Kind = NamespaceKind.EventHubs,
+            EventHubNames = ["telemetry"], Transport = ServiceBusTransport.AmqpWebSockets
+        });
+        var window = new ConnectionDialog { DataContext = vm, MaxHeight = 600 };
+        window.Show();
+        var name = window.FindControl<TextBox>("NameField")!;
+        Assert.True(name.Focus());
+        window.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        Assert.False(name.IsFocused);
+        Assert.True(window.Bounds.Height <= 600);
+        Assert.True(window.FindControl<Button>("SaveButton")!.IsVisible);
+        window.Close();
     }
 
     [AvaloniaFact]
@@ -110,6 +329,81 @@ public class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void SendMessageKeepsExpandedFooterInsideWorkArea()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders"));
+        var window = new SendMessageDialog { DataContext = vm, MaxHeight = 400 };
+        window.Show();
+        var area = (window.Screens.ScreenFromWindow(window) ?? window.Screens.Primary!).WorkingArea;
+        window.Position = new PixelPoint(area.X, area.Bottom - 100);
+        vm.IsMetadataExpanded = vm.IsPropertiesExpanded = vm.IsDeliveryExpanded = true;
+        window.UpdateLayout();
+        var screen = window.Screens.ScreenFromWindow(window) ?? window.Screens.Primary!;
+        var frame = window.FrameSize ?? window.ClientSize;
+        Assert.True(window.Position.X >= area.X && window.Position.Y >= area.Y);
+        Assert.True(window.Position.X + frame.Width * screen.Scaling <= area.Right);
+        Assert.True(window.Position.Y + frame.Height * screen.Scaling <= area.Bottom);
+        foreach (var button in window.GetVisualDescendants().OfType<Button>().Where(b => Equals(b.Content, "Send") || Equals(b.Content, "Cancel")))
+        {
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.True(origin.Y >= 0 && origin.Y + button.Bounds.Height <= window.ClientSize.Height);
+        }
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SendMessageEmptyBodyValidationFocusesBodyAfterScrolling()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { IsMetadataExpanded = true, IsDeliveryExpanded = true, Copies = 3 };
+        var window = new SendMessageDialog { DataContext = vm, MaxHeight = 400 };
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+        window.Show();
+        window.UpdateLayout();
+        var scroll = window.GetVisualDescendants().OfType<ScrollViewer>().First();
+        scroll.Offset = new Vector(0, scroll.Extent.Height);
+        var send = window.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Send"));
+        send.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.False(closed);
+        Assert.True(window.FindControl<TextBox>("BodyInput")!.IsKeyboardFocusWithin);
+        Assert.Equal(3, vm.Copies);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SendMessageEnterInBodyDoesNotSendAndEscapeCancels()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Body = "first" };
+        var window = new SendMessageDialog { DataContext = vm };
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+        window.Show();
+        var body = window.FindControl<TextBox>("BodyInput")!;
+        body.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.False(closed);
+        Assert.Contains("\n", body.Text);
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.True(closed);
+    }
+
+    [AvaloniaFact]
+    public void SendMessageValidationRevealsAndFocusesSchedule()
+    {
+        var vm = new SendMessageViewModel(new SendMessageRequest("orders")) { Body = "body", Schedule = true, ScheduledDate = DateTimeOffset.Now.AddDays(-1) };
+        var window = new SendMessageDialog { DataContext = vm };
+        window.Show();
+        var send = window.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Send"));
+        send.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(vm.IsDeliveryExpanded);
+        Assert.Equal("body", vm.Body);
+        Assert.True(window.FindControl<CheckBox>("ScheduleToggle")!.IsKeyboardFocusWithin);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void SendMessageDialogLoadsForAnEventHub()
     {
         var window = new SendMessageDialog
@@ -120,6 +414,205 @@ public class UiSmokeTests
         window.Show();
 
         Assert.Equal("Send to telemetry", window.Title);
+    }
+
+    static Task<ResubmitAction?> OpenResubmit(Window owner, out ResubmitDialog dialog, int count = 3, string target = "orders")
+    {
+        var result = ResubmitDialog.ShowAsync(owner, count, target);
+        dialog = Assert.IsType<ResubmitDialog>(Assert.Single(owner.OwnedWindows));
+        dialog.UpdateLayout();
+        return result;
+    }
+
+    static Button ResubmitButton(ResubmitDialog dialog, string label) =>
+        dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, label));
+
+    [AvaloniaFact]
+    public async Task ResubmitDialogNamesCountAndTargetAndDefaultsToKeepingCopies()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog, 3, "orders");
+        var text = string.Join("\n", dialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text));
+        var keep = ResubmitButton(dialog, "Resubmit only");
+        var delete = ResubmitButton(dialog, "Resubmit and delete");
+        var cancel = ResubmitButton(dialog, "Cancel");
+        Assert.Contains("Send 3 message(s) back to “orders”.", text);
+        Assert.Contains("Resubmit only keeps the dead-lettered copies", text);
+        Assert.Contains("Resubmit and delete removes them", text);
+        Assert.True(keep.IsDefault);
+        Assert.False(delete.IsDefault);
+        Assert.True(cancel.IsCancel);
+        Assert.Contains("destructive", delete.Classes);
+        Assert.Contains("keep", AutomationProperties.GetName(keep)!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("delete", AutomationProperties.GetName(delete)!, StringComparison.OrdinalIgnoreCase);
+        cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitOnlyChoiceReturnsKeepAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        ResubmitButton(dialog, "Resubmit only").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ResubmitAction.ResubmitOnly, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitAndDeleteChoiceReturnsDeleteAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        ResubmitButton(dialog, "Resubmit and delete").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ResubmitAction.ResubmitAndDelete, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitEscapeCancelsWithoutAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitWindowCloseCancelsWithoutAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        dialog.Close();
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void ResubmitLongTargetKeepsDescriptionScrollableAndActionsReachable()
+    {
+        var owner = new Window();
+        owner.Show();
+        _ = OpenResubmit(owner, out var dialog, 12, string.Concat(Enumerable.Repeat("very-long-queue-name-", 60)));
+        dialog.UpdateLayout();
+        var scroller = Assert.Single(dialog.GetVisualDescendants().OfType<ScrollViewer>());
+        Assert.True(double.IsFinite(scroller.MaxHeight));
+        Assert.True(scroller.MaxHeight <= 340);
+        foreach (var label in new[] { "Cancel", "Resubmit only", "Resubmit and delete" })
+        {
+            var button = ResubmitButton(dialog, label);
+            var origin = button.TranslatePoint(new Point(), dialog)!.Value;
+            Assert.True(origin.Y >= 0 && origin.Y + button.Bounds.Height <= dialog.ClientSize.Height);
+        }
+        dialog.Close();
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitInitialFocusIsKeepAndEnterReturnsKeepAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        var keep = ResubmitButton(dialog, "Resubmit only");
+        Assert.True(keep.IsFocused);
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.Equal(ResubmitAction.ResubmitOnly, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ResubmitEscapeCancelsFromKeepFocusWithoutAction()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenResubmit(owner, out var dialog);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void ResubmitLongDescriptionScrollsToHiddenText()
+    {
+        var owner = new Window();
+        owner.Show();
+        _ = OpenResubmit(owner, out var dialog, 12, string.Concat(Enumerable.Repeat("very-long-queue-name-", 60)));
+        dialog.UpdateLayout();
+        var scroller = Assert.Single(dialog.GetVisualDescendants().OfType<ScrollViewer>());
+        Assert.True(scroller.Extent.Height > scroller.Viewport.Height);
+        scroller.Offset = new Vector(0, scroller.Extent.Height);
+        dialog.UpdateLayout();
+        Assert.True(scroller.Offset.Y > 0);
+        Assert.Equal(scroller.Extent.Height - scroller.Viewport.Height, scroller.Offset.Y, 1);
+        dialog.Close();
+        owner.Close();
+    }
+
+    static readonly string[] SecondaryActionHeaders =
+    [
+        "Receive and delete…", "Purge…", "Resubmit selected…", "Delete selected…",
+        "Edit and resend…", "Copy body", "Save messages…"
+    ];
+
+    [AvaloniaFact]
+    public void ToolbarExposesEverySecondaryActionWithoutASelection()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        var actions = window.GetControl<Button>("ActionsButton");
+        var flyout = Assert.IsType<MenuFlyout>(actions.Flyout);
+        flyout.ShowAt(actions);
+        var items = flyout.Items.OfType<MenuItem>().ToList();
+
+        foreach (var header in SecondaryActionHeaders)
+            Assert.Contains(items, item => Equals(item.Header, header));
+
+        Assert.False(items.Single(item => Equals(item.Header, "Receive and delete…")).IsEnabled);
+        Assert.Same(viewModel.ReceiveCommand, items.Single(item => Equals(item.Header, "Receive and delete…")).Command);
+        flyout.Hide();
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ServiceBusQueueSelectionEnablesReceiveAndPurge(bool deadLetter)
+    {
+        var namespaceNode = new NamespaceNodeViewModel(new NamespaceConnection { Name = "contoso" });
+        var queue = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("orders"), null))
+        {
+            Parent = new QueueFolderNodeViewModel { Parent = namespaceNode }
+        };
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        viewModel.SelectedNode = queue;
+        viewModel.ShowDeadLetter = deadLetter;
+
+        var actions = window.GetControl<Button>("ActionsButton");
+        var flyout = Assert.IsType<MenuFlyout>(actions.Flyout);
+        flyout.ShowAt(actions);
+        var items = flyout.Items.OfType<MenuItem>().ToList();
+
+        foreach (var header in SecondaryActionHeaders)
+            Assert.Contains(items, item => Equals(item.Header, header));
+
+        var receive = items.Single(item => Equals(item.Header, "Receive and delete…"));
+        var purge = items.Single(item => Equals(item.Header, "Purge…"));
+        Assert.True(receive.IsEnabled);
+        Assert.True(purge.IsEnabled);
+        Assert.Same(viewModel.ReceiveCommand, receive.Command);
+        Assert.Same(viewModel.PurgeCommand, purge.Command);
+        Assert.Equal(deadLetter ? "Dead-letter queue" : "Active messages", viewModel.MessageSourceLabel);
+        flyout.Hide();
     }
 
     /// <summary>
@@ -142,15 +635,26 @@ public class UiSmokeTests
             Parent = folder
         };
 
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
         viewModel.Namespaces.Add(namespaceNode);
         viewModel.SelectedNode = hub;
 
+        viewModel.Messages.Add(BuildMessageRow(1));
+        window.GetControl<DataGrid>("MessageGrid").SelectedItems.Add(viewModel.Messages[0]);
+        Assert.True(window.GetControl<Button>("DeleteSelectedMessagesButton").IsVisible);
+        Assert.False(window.GetControl<Button>("DeleteSelectedMessagesButton").IsEnabled);
+        Assert.False(window.GetControl<Button>("ResubmitSelectedMessagesButton").IsEnabled);
         Assert.Equal("Events", viewModel.MessageSourceLabel);
         Assert.NotNull(window.GetControl<DataGrid>("MessageGrid"));
+        var actions = window.GetControl<Button>("ActionsButton");
+        var flyout = Assert.IsType<MenuFlyout>(actions.Flyout);
+        flyout.ShowAt(actions);
+        foreach (var label in new[] { "Receive and delete…", "Purge…", "Delete selected…", "Resubmit selected…" })
+            Assert.False(flyout.Items.OfType<MenuItem>().Single(item => Equals(item.Header, label)).IsEnabled);
+        flyout.Hide();
     }
 
     /// <summary>
@@ -158,9 +662,71 @@ public class UiSmokeTests
     /// the template is actually instantiated — so the panel is shown with entries in it.
     /// </summary>
     [AvaloniaFact]
+    public async Task PreferenceSaveFailureIsVisibleDuringActivity()
+    {
+        var dir = Directory.CreateTempSubdirectory("sbmac-save-status-");
+        try
+        {
+            var blocked = Path.Combine(dir.FullName, "blocked");
+            File.WriteAllText(blocked, "file");
+            var preferences = new AppPreferencesService(new JsonSettingsStore(Path.Combine(blocked, "settings.json")));
+            var vm = NewIsolatedViewModel(preferences);
+            var window = new MainWindow { DataContext = vm };
+            window.Show();
+            vm.Operations.Add(new OperationViewModel(OperationKind.Read, "Reading"));
+            Assert.False(await preferences.SetThemeAsync(AppTheme.Dark));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var status = window.GetControl<TextBlock>("PreferenceSaveStatus");
+            Assert.True(status.IsVisible);
+            Assert.Contains("not saved", status.Text);
+            Assert.True(vm.IsBusy);
+            window.Close();
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [AvaloniaFact]
+    public void EmptyMessageStateTracksOnlyTheSelectedRead()
+    {
+        var vm = NewIsolatedViewModel();
+        var first = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("first"), null));
+        var second = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("second"), null));
+        vm.SelectedNode = first;
+        var reading = new OperationViewModel(OperationKind.Read, "Reading first", first);
+        vm.Operations.Add(reading);
+        Assert.Contains("Loading", vm.EmptyMessagesHint);
+        vm.SelectedNode = second;
+        Assert.DoesNotContain("Loading", vm.EmptyMessagesHint);
+        var show = typeof(MainWindowViewModel).GetMethod("ShowMessagesFor", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        show.Invoke(vm, [first, Array.Empty<MessageRecord>(), "first"]);
+        Assert.DoesNotContain("No messages found", vm.EmptyMessagesHint);
+        show.Invoke(vm, [second, Array.Empty<MessageRecord>(), "second"]);
+        Assert.Contains("No messages found", vm.EmptyMessagesHint);
+    }
+
+    [AvaloniaFact]
+    public void EmptyWorkspaceAndConcurrentFailuresRemainVisible()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+        Assert.True(window.GetControl<Control>("FirstRunState").IsVisible);
+        Assert.Contains("Select", window.GetControl<TextBlock>("EmptyMessagesHint").Text);
+        var running = new OperationViewModel(OperationKind.Read, "Reading");
+        var failed = new OperationViewModel(OperationKind.Connect, "Connecting");
+        failed.Finish(OperationState.Failed, "Connection lost");
+        vm.Operations.Add(running);
+        vm.Operations.Add(failed);
+        Assert.True(window.GetControl<Control>("ActivityFailureIndicator").IsVisible);
+        Assert.True(window.GetControl<Control>("FirstRunState").IsVisible);
+        Assert.True(running.IsRunning);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void MainWindowRendersTheActivityPanel()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -176,6 +742,52 @@ public class UiSmokeTests
 
         Assert.True(viewModel.IsBusy);
         Assert.Equal("Purging orders…", viewModel.ActivitySummary);
+    }
+
+    [AvaloniaFact]
+    public void ActivityPanelRemainsIndependentOfInspector()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        var panel = window.GetControl<Control>("ActivityPanel");
+        var toggle = window.GetControl<Button>("ActivityToggle");
+        var tabs = window.GetControl<TabControl>("InspectorTabs");
+        Assert.False(panel.IsVisible);
+        Assert.Equal(2, tabs.ItemCount);
+        toggle.Command!.Execute(null);
+        Assert.True(panel.IsVisible);
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Assert.False(viewModel.IsInspectorVisible);
+        Assert.True(panel.IsVisible);
+        toggle.Command.Execute(null);
+        Assert.False(panel.IsVisible);
+        Assert.False(viewModel.IsInspectorVisible);
+    }
+
+    [AvaloniaFact]
+    public void ActivityPanelControlsCancelAndClearLog()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var first = new OperationViewModel(OperationKind.Read, "Reading");
+        var second = new OperationViewModel(OperationKind.Send, "Sending");
+        viewModel.Operations.Add(first);
+        viewModel.Operations.Add(second);
+        viewModel.Log.Add("fixture log");
+        viewModel.IsActivityExpanded = true;
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var panel = window.GetControl<Control>("ActivityPanel");
+        panel.GetControl<Button>("ClearLogButton").Command!.Execute(null);
+        Assert.Empty(viewModel.Log);
+        var cancel = panel.GetVisualDescendants().OfType<Button>()
+            .Single(button => button.Name == "CancelOperationButton" && ReferenceEquals(button.DataContext, first));
+        cancel.Command!.Execute(null);
+        Assert.True(first.Token.IsCancellationRequested);
+        Assert.False(second.Token.IsCancellationRequested);
+        panel.GetControl<Button>("CancelAllButton").Command!.Execute(null);
+        Assert.True(second.Token.IsCancellationRequested);
     }
 
     [AvaloniaFact]
@@ -197,6 +809,84 @@ public class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void QueueSaveRevealsAndFocusesInvalidOptionalDuration()
+    {
+        var vm = new QueueEditorViewModel(new QueueDefinition { Name = "orders" }, true)
+        { AutoDeleteOnIdle = "invalid" };
+        var window = new QueueEditorDialog { DataContext = vm, Height = 520 };
+        window.Show();
+        var save = window.FindControl<Button>("SaveButton")!;
+        Assert.True(save.Focus());
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(vm.IsOptionalExpanded);
+        var input = window.FindControl<TextBox>("AutoDeleteOnIdle")!;
+        Assert.True(input.IsFocused);
+        Assert.Equal("invalid", input.Text);
+        window.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, null);
+        window.KeyTextInput("00:05:00");
+        Assert.True(vm.CanSave);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void QueueCreationValidationFocusesAndScrollsToFieldWithActionsReachable()
+    {
+        var vm = new QueueEditorViewModel(new QueueDefinition { Name = "orders" }, true)
+        { DuplicateDetectionHistoryTimeWindow = "bad" };
+        var window = new QueueEditorDialog { DataContext = vm, Height = 400 };
+        window.Show();
+        var save = window.FindControl<Button>("SaveButton")!;
+        save.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(vm.IsCreationExpanded);
+        var input = window.FindControl<TextBox>("DuplicateDetectionHistoryTimeWindow")!;
+        Assert.True(input.IsFocused);
+        Assert.Equal("bad", input.Text);
+        var point = input.TranslatePoint(new Point(), window)!.Value;
+        Assert.InRange(point.Y, 0, window.ClientSize.Height - input.Bounds.Height);
+        foreach (var name in new[] { "SaveButton", "CancelButton" })
+        {
+            var button = window.FindControl<Button>(name)!;
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.InRange(origin.Y + button.Bounds.Height, 0, window.ClientSize.Height);
+        }
+        window.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, null);
+        window.KeyTextInput("00:10:00");
+        Assert.True(vm.CanSave);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void TopicSaveRevealsAndFocusesInvalidCreationDuration()
+    {
+        var vm = new TopicEditorViewModel(new TopicDefinition { Name = "events" }, true)
+        { DuplicateDetectionHistoryTimeWindow = "bad" };
+        var window = new TopicEditorDialog { DataContext = vm, Height = 400 };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(vm.IsCreationExpanded);
+        var input = window.FindControl<TextBox>("DuplicateDetectionHistoryTimeWindow")!;
+        Assert.True(input.IsFocused);
+        Assert.Equal("bad", input.Text);
+        var point = input.TranslatePoint(new Point(), window)!.Value;
+        Assert.InRange(point.Y, 0, window.ClientSize.Height - input.Bounds.Height);
+        foreach (var name in new[] { "SaveButton", "CancelButton" })
+        {
+            var button = window.FindControl<Button>(name)!;
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.InRange(origin.Y + button.Bounds.Height, 0, window.ClientSize.Height);
+        }
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void TopicEditorLoads()
     {
         var window = new TopicEditorDialog
@@ -206,6 +896,49 @@ public class UiSmokeTests
 
         window.Show();
         Assert.Contains("order-events", window.Title);
+    }
+
+    [AvaloniaFact]
+    public void SubscriptionSaveRevealsInvalidDurationAndKeepsActionsReachable()
+    {
+        var vm = new SubscriptionEditorViewModel("events", new SubscriptionDefinition { Name = "audit" }, true)
+        { AutoDeleteOnIdle = "invalid" };
+        var window = new SubscriptionEditorDialog { DataContext = vm, Height = 400 };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(vm.IsOptionalExpanded);
+        var input = window.FindControl<TextBox>("AutoDeleteOnIdle")!;
+        Assert.True(input.IsFocused);
+        Assert.Equal("invalid", input.Text);
+        var point = input.TranslatePoint(new Point(), window)!.Value;
+        Assert.InRange(point.Y, 0, window.ClientSize.Height - input.Bounds.Height);
+        foreach (var name in new[] { "SaveButton", "CancelButton" })
+        {
+            var button = window.FindControl<Button>(name)!;
+            var origin = button.TranslatePoint(new Point(), window)!.Value;
+            Assert.InRange(origin.Y + button.Bounds.Height, 0, window.ClientSize.Height);
+        }
+        window.KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, null);
+        window.KeyTextInput("00:05:00");
+        Assert.True(vm.CanSave);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SubscriptionEditLocksIdentityAndSessionAndHidesDefaultRule()
+    {
+        var vm = new SubscriptionEditorViewModel("events", new SubscriptionDefinition
+        { Name = "audit", RequiresSession = true }, false) { IsCreationExpanded = true };
+        var window = new SubscriptionEditorDialog { DataContext = vm };
+        window.Show();
+        Assert.False(window.FindControl<TextBox>("NameField")!.IsEnabled);
+        Assert.False(window.FindControl<CheckBox>("RequiresSessionField")!.IsEnabled);
+        Assert.False(window.FindControl<TextBox>("DefaultRuleFilterField")!.IsEffectivelyVisible);
+        Assert.True(vm.ToDefinition().RequiresSession);
+        window.Close();
     }
 
     [AvaloniaFact]
@@ -236,9 +969,24 @@ public class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void RuleValidationFocusesSqlAndKeepsFooterReachable()
+    {
+        var vm = new RuleEditorViewModel(new RuleDefinition { Name = "orders", SqlExpression = "" }, true);
+        var window = new RuleEditorDialog { DataContext = vm, Height = 400 };
+        window.Show();
+        window.FindControl<Button>("SaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(window.FindControl<TextBox>("SqlExpression")!.IsFocused);
+        Assert.NotNull(vm.ValidationError);
+        Assert.True(window.FindControl<Button>("CancelButton")!.IsVisible);
+        Assert.True(window.FindControl<Button>("SaveButton")!.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void MessageGridIsBoundToTheViewModelsMessages()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -251,7 +999,7 @@ public class UiSmokeTests
     public void ShowingMessageDetailsDoesNotImplicitlySelectItForBulkActions()
     {
         var first = BuildMessageRow(1);
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
         viewModel.Messages.Add(first);
@@ -263,6 +1011,8 @@ public class UiSmokeTests
         Assert.Same(first, viewModel.SelectedMessage);
         Assert.Empty(viewModel.SelectedMessages);
         Assert.False(first.IsSelected);
+        Assert.False(window.GetControl<Button>("DeleteSelectedMessagesButton").IsVisible);
+        Assert.False(window.GetControl<Button>("ResubmitSelectedMessagesButton").IsVisible);
     }
 
     [AvaloniaFact]
@@ -270,7 +1020,7 @@ public class UiSmokeTests
     {
         var first = BuildMessageRow(1);
         var second = BuildMessageRow(2);
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
         viewModel.Messages.Add(first);
@@ -283,9 +1033,221 @@ public class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void InspectorTogglePreservesDetailsSelectionAndHeight()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = viewModel };
+        window.Show();
+        var first = BuildMessageRow(1);
+        var second = BuildMessageRow(2);
+        viewModel.Messages.Add(first);
+        viewModel.Messages.Add(second);
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        grid.SelectedItems.Add(first);
+        grid.SelectedItems.Add(second);
+        var inspected = viewModel.SelectedMessage;
+        var body = viewModel.BodyText;
+        var properties = viewModel.PropertiesText;
+        var layout = window.GetControl<Grid>("MessageDetailLayout");
+        layout.RowDefinitions[3].Height = new GridLength(180);
+        window.UpdateLayout();
+        var visibleTableHeight = layout.RowDefinitions[1].ActualHeight;
+        viewModel.ToggleInspectorCommand.Execute(null);
+        window.UpdateLayout();
+        Assert.Equal(0, layout.RowDefinitions[3].ActualHeight);
+        Assert.Equal(0, layout.RowDefinitions[3].MinHeight);
+        Assert.True(layout.RowDefinitions[1].ActualHeight > visibleTableHeight);
+        Assert.False(viewModel.IsInspectorVisible);
+        Assert.False(window.GetControl<Border>("MessageInspector").IsVisible);
+        Assert.Same(inspected, viewModel.SelectedMessage);
+        Assert.Equal(body, viewModel.BodyText);
+        Assert.Equal(properties, viewModel.PropertiesText);
+        Assert.Equal(2, viewModel.SelectedMessages.Count);
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Assert.True(window.GetControl<Border>("MessageInspector").IsVisible);
+        Assert.Equal(new GridLength(180), layout.RowDefinitions[3].Height);
+        window.UpdateLayout();
+        Assert.Equal(90, layout.RowDefinitions[3].MinHeight);
+        Assert.True(layout.RowDefinitions[3].ActualHeight >= 90);
+        Assert.Same(inspected, viewModel.SelectedMessage);
+        Assert.Equal(2, viewModel.SelectedMessages.Count);
+    }
+
+    [AvaloniaFact]
+    public void InspectorToggleMovesFocusToUsableControl()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        Assert.True(grid.IsFocused || grid.IsKeyboardFocusWithin);
+        Assert.False(window.GetControl<TabControl>("InspectorTabs").IsEffectivelyVisible);
+        viewModel.ToggleInspectorCommand.Execute(null);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var tabs = window.GetControl<TabControl>("InspectorTabs");
+        Assert.True(tabs.IsEffectivelyVisible);
+        Assert.True(tabs.IsKeyboardFocusWithin);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("queue")]
+    [InlineData("subscription")]
+    [InlineData("eventhubs")]
+    public void MaximumSidebarKeepsHeaderActionsUsable(string context)
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = vm };
+        window.Show();
+        var ns = new NamespaceNodeViewModel(new NamespaceConnection { Name = "isolated" });
+        vm.SelectedNode = context switch
+        {
+            "queue" => new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("orders"), null))
+                { Parent = new QueueFolderNodeViewModel { Parent = ns } },
+            "subscription" => new SubscriptionNodeViewModel(new SubscriptionEntity(Model<SubscriptionProperties>("orders", "audit"), null))
+                { Parent = ns },
+            _ => new EventHubNodeViewModel(new EventHubEntity("telemetry", DateTimeOffset.UtcNow, ["0"], ["$Default"]))
+                { Parent = new EventHubFolderNodeViewModel { Parent = ns } }
+        };
+        var split = window.GetControl<Grid>("MainSplitLayout");
+        split.ColumnDefinitions[0].Width = new GridLength(540);
+        vm.Messages.Add(BuildMessageRow(1));
+        foreach (var selected in new[] { false, true })
+        {
+            if (selected) window.GetControl<DataGrid>("MessageGrid").SelectAll();
+            window.UpdateLayout();
+            var header = window.GetControl<DockPanel>("MessageHeader");
+            var buttons = new[] { "SelectAllMessagesButton", "ClearMessageSelectionButton", "MessageActionsButton", "ColumnsButton" }
+                .Select(window.GetControl<Button>).ToArray();
+            var bounds = buttons.Select(b => (Left: b.TranslatePoint(new Avalonia.Point(), header)!.Value.X, b.Bounds.Width)).OrderBy(b => b.Left).ToArray();
+            Assert.All(bounds, b => Assert.True(b.Width >= 45 && b.Left >= 0 && b.Left + b.Width <= header.Bounds.Width + 0.5));
+            for (var i = 1; i < bounds.Length; i++) Assert.True(bounds[i - 1].Left + bounds[i - 1].Width <= bounds[i].Left + 0.5);
+        }
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SelectionRemeasuresAfterBoundContentSettles()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 1700, Height = 600, DataContext = vm };
+        window.Show();
+        vm.Messages.Add(BuildMessageRow(1));
+        window.UpdateLayout();
+        Assert.False(window.HeaderCompact);
+        window.GetControl<DataGrid>("MessageGrid").SelectAll();
+        // Simulate a native font or bound label becoming wider after selection notification.
+        window.GetControl<Button>("InspectorButton").Width = 1400;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(window.HeaderCompact);
+        Assert.True(window.GetControl<Button>("MessageActionsButton").IsEffectivelyVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SelectionTransitionReevaluatesSettledHeaderWidth()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 1100, Height = 600, DataContext = vm };
+        window.Show();
+        vm.Messages.Add(BuildMessageRow(1));
+        window.UpdateLayout();
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        grid.SelectAll();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        var header = window.GetControl<DockPanel>("MessageHeader");
+        var visible = header.Children.OfType<Control>().Where(c => c.IsEffectivelyVisible).ToArray();
+        var bounds = visible.Select(c => (Left: c.TranslatePoint(new Avalonia.Point(), header)!.Value.X, c.Bounds.Width))
+            .OrderBy(b => b.Left).ToArray();
+        for (var i = 1; i < bounds.Length; i++)
+            Assert.True(bounds[i - 1].Left + bounds[i - 1].Width <= bounds[i].Left + 0.5);
+        grid.SelectedItems.Clear();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.Empty(vm.SelectedMessages);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void NarrowMessageHeaderKeepsSelectionControlsAndMovesActionsToMenu()
+    {
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        Assert.True(window.GetControl<Button>("SelectAllMessagesButton").IsEffectivelyVisible);
+        Assert.True(window.GetControl<Button>("MessageActionsButton").IsEffectivelyVisible);
+        Assert.False(window.GetControl<Button>("EditAndResendButton").IsEffectivelyVisible);
+        var menu = Assert.IsType<MenuFlyout>(window.GetControl<Button>("MessageActionsButton").Flyout);
+        Assert.Contains(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, "Edit and resend…"));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void OverflowMenuItemsShareCommandsAndGuardsWithInlineControls()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = vm };
+        window.Show();
+        window.UpdateLayout();
+        var button = window.GetControl<Button>("MessageActionsButton");
+        var menu = Assert.IsType<MenuFlyout>(button.Flyout);
+        menu.ShowAt(button);
+        window.UpdateLayout();
+        var items = menu.Items.OfType<MenuItem>().ToDictionary(i => (string)i.Header!);
+        Assert.Same(vm.ResubmitSelectedCommand, items["Resubmit selected…"].Command);
+        Assert.Same(vm.DeleteSelectedMessagesCommand, items["Delete selected…"].Command);
+        Assert.Same(vm.ResubmitCommand, items["Edit and resend…"].Command);
+        Assert.Same(vm.ToggleInspectorCommand, items["Inspector"].Command);
+        // No selection -> bulk commands stay guarded, exactly as the inline buttons are.
+        Assert.False(items["Resubmit selected…"].IsEffectivelyEnabled);
+        Assert.False(items["Delete selected…"].IsEffectivelyEnabled);
+        Assert.False(items["Edit and resend…"].IsEffectivelyEnabled);
+        Assert.Empty(vm.SelectedMessages);
+        menu.Hide();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void WideHeaderKeepsInlineActionsAndHidesOverflow()
+    {
+        var window = new MainWindow { Width = 1700, Height = 900, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        Assert.False(window.HeaderCompact);
+        Assert.True(window.GetControl<Button>("EditAndResendButton").IsEffectivelyVisible);
+        Assert.False(window.GetControl<Button>("MessageActionsButton").IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void MainToolbarFitsWithLabelsAtMinimumWindow()
+    {
+        var window = new MainWindow { Width = 960, Height = 600, DataContext = NewIsolatedViewModel() };
+        window.Show();
+        window.UpdateLayout();
+        var toolbar = window.GetControl<DockPanel>("MainToolbar");
+        Assert.False(window.ToolbarCompact);
+        Assert.All(toolbar.Children.OfType<Control>().Where(c => c.IsVisible),
+            c => Assert.True(c.Bounds.Right <= toolbar.Bounds.Width + 0.5));
+        window.Close();
+    }
+
+    [Fact]
+    public void AdaptiveWidthFlagsContentWiderThanAvailableSpace()
+    {
+        var wide = new Border { Width = 300 };
+        var other = new Border { Width = 200 };
+        Assert.True(SbMac.App.Views.AdaptiveWidth.NeedsCompaction([wide, other], 400));
+        Assert.False(SbMac.App.Views.AdaptiveWidth.NeedsCompaction([wide, other], 500));
+    }
+
+    [AvaloniaFact]
     public void BulkSelectionControlsSelectAndClearEveryLoadedMessage()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -320,7 +1282,7 @@ public class UiSmokeTests
     {
         var first = BuildMessageRow(1);
         var second = BuildMessageRow(2);
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -357,7 +1319,8 @@ public class UiSmokeTests
         };
 
         var row = BuildMessageRow(1);
-        var viewModel = new MainWindowViewModel { SelectedNode = queue };
+        var viewModel = NewIsolatedViewModel();
+        viewModel.SelectedNode = queue;
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
         viewModel.Messages.Add(row);
@@ -368,16 +1331,64 @@ public class UiSmokeTests
 
         Assert.False(resubmit.IsEnabled);
         Assert.False(delete.IsEnabled);
+        Assert.False(delete.IsVisible);
+        Assert.False(resubmit.IsVisible);
 
         grid.SelectedItems.Add(row);
 
         Assert.True(resubmit.IsEnabled);
         Assert.True(delete.IsEnabled);
+        Assert.True(delete.IsVisible);
+        Assert.True(resubmit.IsVisible);
 
         grid.SelectedItems.Clear();
 
         Assert.False(resubmit.IsEnabled);
         Assert.False(delete.IsEnabled);
+        Assert.False(delete.IsVisible);
+        Assert.False(resubmit.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task BulkDeleteAndResubmitConfirmSelectedCountAndTarget()
+    {
+        var ns = new NamespaceNodeViewModel(new NamespaceConnection
+        {
+            Name = "contoso", ConnectionString = EventHubFixtures.NamespaceConnectionString
+        });
+        var queue = new QueueNodeViewModel(new QueueEntity(Model<QueueProperties>("orders"), null))
+        { Parent = new QueueFolderNodeViewModel { Parent = ns } };
+        RecordingUi.AttachOfflineMessages(ns);
+        var vm = NewIsolatedViewModel();
+        vm.SelectedNode = queue;
+        var window = new MainWindow { DataContext = vm };
+        window.Show();
+        vm.ShowDeadLetter = true;
+        vm.Messages.Add(BuildMessageRow(1));
+        vm.Messages.Add(BuildMessageRow(2));
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        grid.SelectedItems.Add(vm.Messages[0]);
+        grid.SelectedItems.Add(vm.Messages[1]);
+
+        var delete = vm.DeleteSelectedMessagesCommand.ExecuteAsync(null);
+        var dialog = Assert.IsType<MessageDialog>(Assert.Single(window.OwnedWindows));
+        var root = Assert.IsType<StackPanel>(dialog.Content);
+        var body = Assert.IsType<TextBlock>(Assert.IsType<ScrollViewer>(root.Children[1]).Content);
+        Assert.Contains("2 selected message(s)", body.Text);
+        Assert.Contains("orders/$DeadLetterQueue", body.Text);
+        Assert.Contains("delivery count", body.Text);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        await delete;
+        Assert.Empty(vm.Operations);
+
+        var resubmit = vm.ResubmitSelectedCommand.ExecuteAsync(null);
+        var resubmitDialog = Assert.IsType<ResubmitDialog>(Assert.Single(window.OwnedWindows));
+        Assert.Contains("2", string.Join(" ", resubmitDialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)));
+        Assert.Contains("orders", string.Join(" ", resubmitDialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)));
+        resubmitDialog.Close();
+        await resubmit;
+        Assert.Empty(vm.Operations);
+        window.Close();
     }
 
     static MessageRowViewModel BuildMessageRow(long sequenceNumber) => new(new MessageRecord
@@ -405,7 +1416,7 @@ public class UiSmokeTests
     [AvaloniaFact]
     public void NamespaceTreeIsBoundToTheViewModelsNamespaces()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -415,9 +1426,39 @@ public class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void SidebarControlsHaveAccessibleNames()
+    {
+        var window = new MainWindow { DataContext = NewIsolatedViewModel() };
+        window.Show();
+
+        Assert.Equal("Search entities", Avalonia.Automation.AutomationProperties.GetName(window.GetControl<TextBox>("EntitySearchBox")));
+        Assert.Equal("Namespaces and entities", Avalonia.Automation.AutomationProperties.GetName(window.GetControl<TreeView>("EntityTree")));
+    }
+
+    [AvaloniaFact]
+    public void TreeKeyboardNavigationSelectsTheNextNamespace()
+    {
+        var viewModel = NewIsolatedViewModel();
+        var first = new NamespaceNodeViewModel(new NamespaceConnection { Name = "first-long-namespace-name" });
+        var second = new NamespaceNodeViewModel(new NamespaceConnection { Name = "second" });
+        viewModel.Namespaces.Add(first);
+        viewModel.Namespaces.Add(second);
+        var window = new MainWindow { DataContext = viewModel };
+        window.Show();
+        var tree = window.GetControl<TreeView>("EntityTree");
+        var item = Assert.IsType<TreeViewItem>(tree.ContainerFromIndex(0));
+        Assert.Equal(first.Title, Avalonia.Automation.AutomationProperties.GetName(item));
+        tree.SelectedItem = first;
+        Assert.True(item.Focus());
+        window.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, null);
+        Assert.Same(second, tree.SelectedItem);
+        Assert.Same(second, viewModel.SelectedNode);
+    }
+
+    [AvaloniaFact]
     public void EntitySearchBoxUpdatesTheTreeSearchTextAsTheUserTypes()
     {
-        var viewModel = new MainWindowViewModel();
+        var viewModel = NewIsolatedViewModel();
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
 
@@ -425,5 +1466,268 @@ public class UiSmokeTests
         searchBox.Text = "ordres";
 
         Assert.Equal("ordres", viewModel.EntitySearchText);
+    }
+
+    // ── S03 palette contrast: evaluates the actual resolved colour pairs in both themes ──
+
+    static readonly Avalonia.Styling.ThemeVariant[] BothThemes =
+        [Avalonia.Styling.ThemeVariant.Light, Avalonia.Styling.ThemeVariant.Dark];
+
+    /// <summary>Resolves a brush and flattens its opacity onto <paramref name="backdrop"/>.</summary>
+    static Avalonia.Media.Color Flatten(string key, Avalonia.Styling.ThemeVariant variant, Avalonia.Media.Color backdrop)
+    {
+        Assert.True(Application.Current!.Resources.TryGetResource(key, variant, out var resource), $"{key} missing in {variant}");
+        var brush = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(resource);
+        var a = brush.Opacity * brush.Color.A / 255.0;
+        byte Mix(byte f, byte b) => (byte)Math.Round(f * a + b * (1 - a));
+        return Avalonia.Media.Color.FromRgb(Mix(brush.Color.R, backdrop.R), Mix(brush.Color.G, backdrop.G), Mix(brush.Color.B, backdrop.B));
+    }
+
+    static double Luminance(Avalonia.Media.Color c)
+    {
+        static double Lin(byte v) { var x = v / 255.0; return x <= 0.03928 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4); }
+        return 0.2126 * Lin(c.R) + 0.7152 * Lin(c.G) + 0.0722 * Lin(c.B);
+    }
+
+    static double Contrast(Avalonia.Media.Color a, Avalonia.Media.Color b)
+    {
+        var (hi, lo) = (Math.Max(Luminance(a), Luminance(b)), Math.Min(Luminance(a), Luminance(b)));
+        return (hi + 0.05) / (lo + 0.05);
+    }
+
+    [AvaloniaFact]
+    public void TextAndStatusColorsMeetNormalTextContrastOnEverySurface()
+    {
+        string[] surfaces = ["CanvasBrush", "SidebarBrush", "SurfaceBrush", "ElevatedBrush", "ChromeBrush", "ControlBrush"];
+        string[] texts = ["TextPrimaryBrush", "TextSecondaryBrush", "TextTertiaryBrush", "AccentBrush", "DangerBrush", "WarningBrush", "SuccessBrush"];
+        var failures = new List<string>();
+        foreach (var theme in BothThemes)
+            foreach (var surfaceKey in surfaces)
+            {
+                var surface = Flatten(surfaceKey, theme, Avalonia.Media.Colors.White);
+                foreach (var textKey in texts)
+                {
+                    var ratio = Contrast(Flatten(textKey, theme, surface), surface);
+                    if (ratio < 4.5) failures.Add($"{theme} {textKey} on {surfaceKey}: {ratio:0.00}");
+                }
+            }
+        Assert.Empty(failures);
+    }
+
+    [AvaloniaFact]
+    public void SoftStatusFillsKeepTheirTextReadable()
+    {
+        var failures = new List<string>();
+        foreach (var theme in BothThemes)
+        {
+            // Real backdrops: chips sit on the canvas, badges on the sidebar (also under a selected row).
+            var canvas = Flatten("CanvasBrush", theme, Avalonia.Media.Colors.White);
+            var sidebar = Flatten("SidebarBrush", theme, Avalonia.Media.Colors.White);
+            var backdrops = new (string Name, Avalonia.Media.Color Color)[]
+            {
+                ("SurfaceBrush", Flatten("SurfaceBrush", theme, Avalonia.Media.Colors.White)),
+                ("CanvasBrush", canvas), ("SidebarBrush", sidebar),
+                ("selected SidebarBrush", Flatten("SelectionBrush", theme, sidebar)),
+            };
+            foreach (var (backdropName, backdrop) in backdrops)
+                foreach (var (fill, text) in new[] { ("DangerSoftBrush", "DangerBrush"), ("WarningSoftBrush", "WarningBrush"),
+                             ("SuccessSoftBrush", "SuccessBrush"), ("AccentSoftBrush", "AccentBrush") })
+                {
+                    var bg = Flatten(fill, theme, backdrop);
+                    var ratio = Contrast(Flatten(text, theme, bg), bg);
+                    if (ratio < 4.5) failures.Add($"{theme} {text} on {fill} over {backdropName}: {ratio:0.00}");
+                }
+            var selection = Flatten("SelectionBrush", theme, sidebar);
+            var selectionRatio = Contrast(Flatten("TextPrimaryBrush", theme, selection), selection);
+            if (selectionRatio < 4.5) failures.Add($"{theme} text on selected row: {selectionRatio:0.00}");
+        }
+        Assert.Empty(failures);
+    }
+
+    [AvaloniaFact]
+    public void CheckedGlyphAndSelectionIndicatorMeetControlContrast()
+    {
+        var failures = new List<string>();
+        foreach (var theme in BothThemes)
+        {
+            foreach (var state in new[] { "", "PointerOver", "Pressed" })
+            {
+                var fill = Flatten($"CheckBoxCheckBackgroundFillChecked{state}", theme, Avalonia.Media.Colors.White);
+                var glyph = Flatten($"CheckBoxCheckGlyphForegroundChecked{state}", theme, fill);
+                var ratio = Contrast(glyph, fill);
+                if (ratio < 3.0) failures.Add($"{theme} checked glyph{state}: {ratio:0.00}");
+            }
+            var accent = Flatten("AccentBrush", theme, Avalonia.Media.Colors.White);
+            foreach (var key in new[] { "CanvasBrush", "SidebarBrush", "SurfaceBrush" })
+            {
+                var bg = Flatten(key, theme, Avalonia.Media.Colors.White);
+                foreach (var (name, adjacent) in new[] { (key, bg), ("selected " + key, Flatten("SelectionBrush", theme, bg)) })
+                {
+                    var ratio = Contrast(accent, adjacent);
+                    if (ratio < 3.0) failures.Add($"{theme} selection bar vs {name}: {ratio:0.00}");
+                }
+            }
+        }
+        Assert.Empty(failures);
+    }
+
+    [AvaloniaFact]
+    public void AccentButtonTextAndFocusCuesMeetControlContrast()
+    {
+        var failures = new List<string>();
+        foreach (var theme in BothThemes)
+        {
+            var surface = Flatten("SurfaceBrush", theme, Avalonia.Media.Colors.White);
+            var accent = Flatten("AccentBrush", theme, surface);
+            var hover = Flatten("AccentHoverBrush", theme, surface);
+            if (Contrast(Flatten("TextOnAccentBrush", theme, accent), accent) < 4.5) failures.Add($"{theme} text on accent");
+            if (Contrast(Flatten("TextOnAccentBrush", theme, hover), hover) < 4.5) failures.Add($"{theme} text on accent hover");
+            Assert.True(Application.Current!.Resources.TryGetResource("SystemAccentColor", theme, out var ring));
+            foreach (var key in new[] { "CanvasBrush", "SurfaceBrush", "ControlBrush" })
+            {
+                var bg = Flatten(key, theme, Avalonia.Media.Colors.White);
+                var ratio = Contrast((Avalonia.Media.Color)ring!, bg);
+                if (ratio < 3.0) failures.Add($"{theme} focus ring on {key}: {ratio:0.00}");
+            }
+            var control = Flatten("ControlBrush", theme, surface);
+            var edge = Flatten("ControlBorderBrush", theme, control);
+            if (Contrast(edge, control) < 3.0) failures.Add($"{theme} control border: {Contrast(edge, control):0.00}");
+        }
+        Assert.Empty(failures);
+    }
+
+    [AvaloniaFact]
+    public void SharedTypographyResolvesSystemFontWithBundledInterFallback()
+    {
+        Assert.True(Application.Current!.Resources.TryGetResource("UiFont", null, out var font));
+        var family = Assert.IsType<Avalonia.Media.FontFamily>(font);
+        // "System Font" is the name macOS's native font manager resolves to SF; ".AppleSystemUIFont"
+        // inside a composite silently resolved to Inter. Real resolution: SbMac.Preview --font-check.
+        Assert.Equal("System Font", family.FamilyNames[0]);
+        Assert.Contains(family.FamilyNames, n => n.Contains("Inter"));
+        var window = new MainWindow { DataContext = NewIsolatedViewModel() };
+        window.Show();
+        Assert.Equal(family, window.FontFamily);
+    }
+
+    // ── S30 import policy dialog: policy/cancel outcomes and long-summary layout ──
+
+    const string ImportSummary = "The file contains 1 queue(s), 0 topic(s) and 0 subscription(s).";
+
+    static Task<ImportConflictPolicy?> OpenImportPolicy(Window owner, out ImportPolicyDialog dialog, string summary = ImportSummary)
+    {
+        var result = ImportPolicyDialog.ShowAsync(owner, summary);
+        dialog = Assert.IsType<ImportPolicyDialog>(Assert.Single(owner.OwnedWindows));
+        dialog.UpdateLayout();
+        return result;
+    }
+
+    static RadioButton PolicyChoice(ImportPolicyDialog dialog, string prefix) =>
+        dialog.GetVisualDescendants().OfType<RadioButton>().Single(r => ((string?)r.Content)?.StartsWith(prefix) == true);
+
+    static Button ImportPolicyButton(ImportPolicyDialog dialog, string label) =>
+        dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, label));
+
+    [AvaloniaFact]
+    public async Task ImportPolicyDefaultsToSkipAndImportReturnsSkip()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        Assert.True(PolicyChoice(dialog, "Skip").IsChecked == true);
+        Assert.True(PolicyChoice(dialog, "Update").IsChecked != true);
+        Assert.True(PolicyChoice(dialog, "Report").IsChecked != true);
+        var import = ImportPolicyButton(dialog, "Import");
+        Assert.True(import.IsDefault);
+        import.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ImportConflictPolicy.Skip, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyUpdateChoiceReturnsUpdate()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        PolicyChoice(dialog, "Update").IsChecked = true;
+        ImportPolicyButton(dialog, "Import").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ImportConflictPolicy.Update, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyReportChoiceReturnsFail()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        PolicyChoice(dialog, "Report").IsChecked = true;
+        ImportPolicyButton(dialog, "Import").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Equal(ImportConflictPolicy.Fail, await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyCancelButtonReturnsNullWithoutImporting()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        var cancel = ImportPolicyButton(dialog, "Cancel");
+        Assert.True(cancel.IsCancel);
+        PolicyChoice(dialog, "Update").IsChecked = true;
+        cancel.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyEscapeCancelsWithoutImporting()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task ImportPolicyWindowCloseCancelsWithoutImporting()
+    {
+        var owner = new Window();
+        owner.Show();
+        var result = OpenImportPolicy(owner, out var dialog);
+        dialog.Close();
+        Assert.Null(await result);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public void ImportPolicyLongSummaryKeepsScrollingAndActionsReachable()
+    {
+        var owner = new Window();
+        owner.Show();
+        var summary = string.Join("\n", Enumerable.Range(1, 80).Select(i => $"Exported from very-long-namespace-{i}.servicebus.windows.net"));
+        _ = OpenImportPolicy(owner, out var dialog, summary);
+        dialog.UpdateLayout();
+        var scroller = Assert.Single(dialog.GetVisualDescendants().OfType<ScrollViewer>());
+        Assert.True(double.IsFinite(scroller.MaxHeight));
+        Assert.True(scroller.MaxHeight <= 340);
+        foreach (var label in new[] { "Cancel", "Import" })
+        {
+            var button = ImportPolicyButton(dialog, label);
+            var origin = button.TranslatePoint(new Point(), dialog)!.Value;
+            Assert.True(origin.Y >= 0 && origin.Y + button.Bounds.Height <= dialog.ClientSize.Height);
+        }
+        foreach (var label in new[] { "Skip", "Update", "Report" })
+        {
+            var choice = PolicyChoice(dialog, label);
+            var origin = choice.TranslatePoint(new Point(), dialog)!.Value;
+            Assert.True(choice.Bounds.Height > 0 && origin.Y >= 0 && origin.Y + choice.Bounds.Height <= dialog.ClientSize.Height);
+        }
+        dialog.Close();
+        owner.Close();
     }
 }

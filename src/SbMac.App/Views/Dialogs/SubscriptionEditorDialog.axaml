@@ -7,10 +7,10 @@
         x:Class="SbMac.App.Views.Dialogs.SubscriptionEditorDialog"
         x:DataType="vm:SubscriptionEditorViewModel"
         Title="{Binding DialogTitle}"
-        Width="620" Height="600"
-        MinWidth="560" MinHeight="480"
+        Width="620" Height="640"
+        MinWidth="480" MinHeight="400" MaxHeight="700"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner" Opened="OnOpened">
 
   <Grid Margin="22" RowDefinitions="Auto,*,Auto">
 
@@ -19,49 +19,42 @@
 
     <ScrollViewer Grid.Row="1">
       <StackPanel Spacing="12">
+        <TextBlock Classes="caption" Text="ESSENTIAL" />
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
-          <TextBox Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
+          <TextBox AutomationProperties.Name="Name" Grid.Column="1" x:Name="NameField" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
                    PlaceholderText="audit" />
         </Grid>
 
-        <!-- Only offered on create: the default rule can't be replaced atomically later. -->
-        <StackPanel Spacing="5" IsVisible="{Binding IsNew}">
-          <Grid ColumnDefinitions="190,*">
-            <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default rule filter" />
-            <TextBox Grid.Column="1" Classes="mono" Text="{Binding DefaultRuleFilter}"
-                     PlaceholderText="1=1" />
-          </Grid>
-          <TextBlock Classes="tertiary" Margin="190,0,0,0"
-                     TextWrapping="Wrap"
-                     Text="A SQL filter applied to every message on the topic. 1=1 receives everything." />
-        </StackPanel>
-
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Max delivery count" />
-          <NumericUpDown Grid.Column="1" Minimum="1" Maximum="2000" Increment="1"
+          <NumericUpDown x:Name="MaxDeliveryCountField" AutomationProperties.Name="Max delivery count" Grid.Column="1" Minimum="1" Maximum="2000" Increment="1"
                          FormatString="0" Value="{Binding MaxDeliveryCount}" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Lock duration" />
-          <TextBox Grid.Column="1" Text="{Binding LockDuration}" PlaceholderText="00:00:30" />
+          <TextBox AutomationProperties.Name="Lock duration" Grid.Column="1" x:Name="LockDuration" Text="{Binding LockDuration}" PlaceholderText="00:00:30" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default time to live" />
-          <TextBox Grid.Column="1" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
+          <TextBox AutomationProperties.Name="Default time to live" Grid.Column="1" x:Name="DefaultMessageTimeToLive" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
         </Grid>
 
+        <TextBlock Classes="tertiary" TextWrapping="Wrap" Text="Durations accept hh:mm:ss, d.hh:mm:ss or ISO 8601 (PT30S)." />
+        <Rectangle Classes="divider" Margin="0,6" />
+        <Expander Header="Optional behaviour" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" IsExpanded="{Binding IsOptionalExpanded}">
+          <StackPanel Spacing="12" Margin="0,10,0,0">
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Auto-delete on idle" />
-          <TextBox Grid.Column="1" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
+          <TextBox AutomationProperties.Name="Auto-delete on idle" Grid.Column="1" x:Name="AutoDeleteOnIdle" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
         </Grid>
 
         <Rectangle Classes="divider" Margin="0,6" />
 
-        <TextBlock Classes="caption" Text="BEHAVIOUR" />
+
 
         <CheckBox Content="Dead-letter messages when they expire"
                   IsChecked="{Binding DeadLetteringOnMessageExpiration}" />
@@ -75,7 +68,45 @@
         <CheckBox Content="Subscription is active (uncheck to disable)"
                   IsChecked="{Binding IsActive}" />
 
-        <CheckBox Content="Requires sessions"
+          </StackPanel>
+        </Expander>
+        <Rectangle Classes="divider" Margin="0,6" />
+
+        <Expander Header="Forwarding and metadata" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" IsExpanded="{Binding IsForwardingExpanded}">
+          <StackPanel Spacing="12" Margin="0,10,0,0">
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward to" />
+          <TextBox AutomationProperties.Name="Forward to" Grid.Column="1" Text="{Binding ForwardTo}" PlaceholderText="another queue or topic" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward dead-letters to" />
+          <TextBox AutomationProperties.Name="Forward dead-letters to" Grid.Column="1" Text="{Binding ForwardDeadLetteredMessagesTo}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="190,*">
+          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="User metadata" />
+          <TextBox AutomationProperties.Name="User metadata" Grid.Column="1" Text="{Binding UserMetadata}" />
+        </Grid>
+
+          </StackPanel>
+        </Expander>
+        <Expander x:Name="CreationSection" Header="Fixed at creation" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" IsExpanded="{Binding IsCreationExpanded}">
+          <StackPanel Spacing="12" Margin="0,10,0,0">
+        <!-- Only offered on create: the default rule can't be replaced atomically later. -->
+        <StackPanel Spacing="5" IsVisible="{Binding IsNew}">
+          <Grid ColumnDefinitions="190,*">
+            <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default rule filter" />
+            <TextBox AutomationProperties.Name="Default rule filter" Grid.Column="1" x:Name="DefaultRuleFilterField" Classes="mono" Text="{Binding DefaultRuleFilter}"
+                     PlaceholderText="1=1" />
+          </Grid>
+          <TextBlock Classes="tertiary" Margin="190,0,0,0"
+                     TextWrapping="Wrap"
+                     Text="A SQL filter applied to every message on the topic. 1=1 receives everything." />
+        </StackPanel>
+
+        <CheckBox x:Name="RequiresSessionField" Content="Requires sessions"
                   IsChecked="{Binding RequiresSession}"
                   IsEnabled="{Binding CanEditCreateOnlySettings}" />
 
@@ -84,32 +115,18 @@
                    IsVisible="{Binding !CanEditCreateOnlySettings}"
                    Text="Session support is fixed when the subscription is created." />
 
-        <Rectangle Classes="divider" Margin="0,6" />
-
-        <TextBlock Classes="caption" Text="FORWARDING" />
-
-        <Grid ColumnDefinitions="190,*">
-          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward to" />
-          <TextBox Grid.Column="1" Text="{Binding ForwardTo}" PlaceholderText="another queue or topic" />
-        </Grid>
-
-        <Grid ColumnDefinitions="190,*">
-          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Forward dead-letters to" />
-          <TextBox Grid.Column="1" Text="{Binding ForwardDeadLetteredMessagesTo}" />
-        </Grid>
-
-        <Grid ColumnDefinitions="190,*">
-          <TextBlock Grid.Column="0" Classes="fieldLabel" Text="User metadata" />
-          <TextBox Grid.Column="1" Text="{Binding UserMetadata}" />
-        </Grid>
+          </StackPanel>
+        </Expander>
 
       </StackPanel>
     </ScrollViewer>
 
-    <StackPanel Grid.Row="2" Classes="dialogButtons" Orientation="Horizontal"
-                HorizontalAlignment="Right" Margin="0,16,0,0">
-      <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
-      <Button Classes="primary" Content="Save" IsDefault="True" Click="OnSave" IsEnabled="{Binding CanSave}" />
+    <StackPanel Grid.Row="2" Spacing="8" Margin="0,12,0,0">
+    <TextBlock Text="{Binding ValidationError}" TextWrapping="Wrap" />
+    <StackPanel Classes="dialogButtons" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="CancelButton" Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button x:Name="SaveButton" Classes="primary" Content="Save" IsDefault="True" Click="OnSave" />
+    </StackPanel>
     </StackPanel>
 
   </Grid>

@@ -68,6 +68,9 @@ public sealed class MessageRowViewModel : ViewModelBase
     /// <summary>The partition an event came from. Null for Service Bus messages.</summary>
     public string? PartitionId => Record.Event?.PartitionId;
 
+    /// <summary>The offset of an event within its partition. Null for Service Bus messages.</summary>
+    public string? Offset => Record.Event?.Offset;
+
     public string? Label => Record.Subject;
 
     public string? SessionId => Record.SessionId;

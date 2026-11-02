@@ -40,16 +40,16 @@ public sealed class MessageDialog : Window
             TextWrapping = TextWrapping.Wrap
         };
 
+        // Style classes rather than fixed brushes, so an open alert follows a theme change.
         if (kind == MessageDialogKind.Error)
         {
-            heading.Foreground = new SolidColorBrush(Color.Parse("#C0392B"));
+            heading.Classes.Add("error");
         }
 
         var body = new TextBlock
         {
             Text = message,
-            TextWrapping = TextWrapping.Wrap,
-            MaxHeight = 340
+            TextWrapping = TextWrapping.Wrap
         };
 
         var buttons = new StackPanel
@@ -63,24 +63,49 @@ public sealed class MessageDialog : Window
         if (confirmText is not null)
         {
             var cancel = new Button { Content = dismissText, MinWidth = 88, IsCancel = true };
+            cancel.Classes.Add("secondary");
             cancel.Click += (_, _) => Close(false);
             buttons.Children.Add(cancel);
 
             var confirm = new Button { Content = confirmText, MinWidth = 88, IsDefault = true };
             if (destructive)
             {
-                confirm.Foreground = new SolidColorBrush(Color.Parse("#C0392B"));
+                confirm.Classes.Add("destructive");
             }
 
+            if (!destructive) confirm.Classes.Add("primary");
             confirm.Click += (_, _) => Close(true);
             buttons.Children.Add(confirm);
         }
         else
         {
             var ok = new Button { Content = "OK", MinWidth = 88, IsDefault = true, IsCancel = true };
+            ok.Classes.Add("primary");
             ok.Click += (_, _) => Close(true);
             buttons.Children.Add(ok);
         }
+
+        var scroller = new ScrollViewer
+        {
+            Content = body,
+            MaxHeight = 340,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            // Destructive confirmations start on the message, not the confirm button, so a stray
+            // Space cannot delete; Return still confirms through IsDefault and Escape cancels.
+            Focusable = destructive
+        };
+        Avalonia.Automation.AutomationProperties.SetName(scroller, message);
+        Opened += (_, _) =>
+        {
+            Control initial = destructive ? scroller : (Button)buttons.Children[^1];
+            initial.Focus(Avalonia.Input.NavigationMethod.Tab);
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            if (screen is null) return;
+            var frame = FrameSize ?? ClientSize;
+            var available = screen.WorkingArea.Height / screen.Scaling - (frame.Height - ClientSize.Height);
+            scroller.MaxHeight = Math.Max(0, Math.Min(340, available - heading.Bounds.Height - buttons.Bounds.Height - 68));
+            MaxHeight = Math.Max(0, available);
+        };
 
         Content = new StackPanel
         {
@@ -89,12 +114,7 @@ public sealed class MessageDialog : Window
             Children =
             {
                 heading,
-                new ScrollViewer
-                {
-                    Content = body,
-                    MaxHeight = 340,
-                    HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
-                },
+                scroller,
                 buttons
             }
         };

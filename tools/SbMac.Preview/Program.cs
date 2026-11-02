@@ -5,12 +5,16 @@ using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 using Azure.Messaging.ServiceBus.Administration;
 
+using SbMac.App;
+using SbMac.App.Services;
+using SbMac.App.Models;
 using SbMac.App.ViewModels;
 using SbMac.App.ViewModels.Dialogs;
 using SbMac.App.ViewModels.Tree;
@@ -21,48 +25,224 @@ using SbMac.Core.Entities;
 using SbMac.Core.EventHubs;
 using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
+using SbMac.Preview;
 
-// First non-flag argument is the output directory.
-var outDir = Environment.GetCommandLineArgs()
-    .Skip(1)
-    .FirstOrDefault(argument => !argument.StartsWith('-'))
-    ?? Path.Combine(AppContext.BaseDirectory, "screenshots");
-
-Directory.CreateDirectory(outDir);
-
-AppBuilder.Configure<SbMac.App.App>()
-    .UseSkia()
-    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-    .WithInterFont()
-    .SetupWithoutStarting();
-
-foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "body-json", "body-xml", "body-long-wrapped", "body-long-unwrapped", "body-find-match", "body-find-none", "body-large", "body-large-find", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "settings-reset", "reset-layout", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
+string theme = "both", screen = "all";
+string? stateDir = null, nativeScreen = null;
+int? width = null, height = null;
+bool outputSet = false, native = false, themeSet = false, screenSet = false;
+try
 {
-    Application.Current!.RequestedThemeVariant = variant;
-    var tag = variant == ThemeVariant.Light ? "light" : "dark";
-
-    Shoot($"main-{tag}", BuildMainWindow(), 1360, 860);
-    Shoot($"activity-{tag}", BuildActivityWindow(), 1360, 860);
-    Shoot($"props-{tag}", BuildMainWindow(), 1360, 860, selectTab: 1);
-    Shoot($"eventhubs-{tag}", BuildEventHubsWindow(), 1360, 860);
-    Shoot($"eventhubs-props-{tag}", BuildEventHubsWindow(), 1360, 860, selectTab: 1);
-    Shoot($"connection-{tag}", new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
-    Shoot($"connection-eventhubs-{tag}",
-        new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel() }, 620, 800);
-    Shoot($"send-{tag}", new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
-    Shoot($"queue-{tag}", new QueueEditorDialog
+    for (var i = 0; i < args.Length; i++)
     {
-        DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false)
-    }, 620, 640);
+        var arg = args[i];
+        if (arg == "--help") { Usage(); return; }
+        if (arg == "--native") { native = true; continue; }
+        if (arg == "--font-check") { Environment.ExitCode = FontCheck(); return; }
+        if (arg is "--theme" or "--screen" or "--size" or "--state-dir" or "--native-screen")
+        {
+            if (++i == args.Length) throw new ArgumentException($"Missing value for {arg}.");
+            var value = args[i];
+            if (arg == "--theme") { theme = value; themeSet = true; }
+            else if (arg == "--screen") { screen = value; screenSet = true; }
+            else if (arg == "--state-dir") stateDir = value;
+            else if (arg == "--native-screen") nativeScreen = value;
+            else
+            {
+                var parts = value.Split('x');
+                if (parts.Length != 2 || !int.TryParse(parts[0], out var w) || !int.TryParse(parts[1], out var h) || w < 960 || h < 600 || w > 4096 || h > 4096)
+                    throw new ArgumentException("Size must be WIDTHxHEIGHT, from 960x600 to 4096x4096.");
+                width = w; height = h;
+            }
+        }
+        else if (arg.StartsWith('-') || outputSet) throw new ArgumentException($"Unexpected argument: {arg}");
+        else { outDir = arg; outputSet = true; }
+    }
+    if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
+    if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
+    if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
+    if (nativeScreen is not null && (!native || nativeScreen is not ("body-json" or "body-xml" or "body-long" or "body-large" or "body-longline" or "send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule" or "resubmit" or "resubmit-long" or "table-layout"))) throw new ArgumentException("--native-screen needs --native and a supported screen.");
+    if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
+    if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
+    if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
+}
+catch (ArgumentException e) { Console.Error.WriteLine(e.Message); Usage(); Environment.ExitCode = 2; return; }
+
+// The native fixture must start before anything initialises the headless platform below.
+if (native) { NativePreview.Run(stateDir!, width, height, nativeScreen); return; }
+
+// Native diagnostic: asks the real macOS font manager which face the shared UiFont resolves to.
+// Headless tests cannot answer this; it must run with the native backend on a Mac.
+static int FontCheck()
+{
+    AppBuilder.Configure<SbMac.App.App>().UseAvaloniaNative().UseSkia().UseHarfBuzz().WithInterFont().SetupWithoutStarting();
+    Application.Current!.TryGetResource("UiFont", null, out var font);
+    var ui = (Avalonia.Media.FontFamily)font!;
+    string Resolve(Avalonia.Media.FontFamily f) =>
+        Avalonia.Media.FontManager.Current.TryGetGlyphTypeface(new Avalonia.Media.Typeface(f), out var g) ? g.FamilyName : "<unresolved>";
+    var primary = Resolve(ui);
+    var fallback = Resolve(Avalonia.Media.FontFamily.Parse("NoSuchSystemFace, avares://Avalonia.Fonts.Inter/Assets#Inter"));
+    Console.WriteLine($"UiFont '{ui}' => {primary}");
+    Console.WriteLine($"unavailable primary + bundled Inter => {fallback}");
+    var ok = primary == "System Font" && fallback == "Inter";
+    Console.WriteLine(ok ? "font check OK" : "font check FAILED");
+    return ok ? 0 : 1;
 }
 
-Console.WriteLine("done -> " + outDir);
+void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen body-json|body-xml|body-large|body-longline|send|send-empty|send-delivery|topic|subscription|rule|resubmit|resubmit-long|table-layout]\n" +
+    "       SbMac.Preview --font-check   (macOS only: native system-font resolution)");
+Directory.CreateDirectory(outDir);
+var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
+var fixtureNow = new DateTimeOffset(2025, 3, 14, 9, 41, 20, TimeSpan.Zero);
+try
+{
+    AppBuilder.Configure<SbMac.App.App>()
+        .UseSkia()
+        .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+        .WithInterFont()
+        .SetupWithoutStarting();
+
+    foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+    {
+        var tag = variant == ThemeVariant.Light ? "light" : "dark";
+        if (theme != "both" && theme != tag) continue;
+        Application.Current!.RequestedThemeVariant = variant;
+        Render("adaptive-queue", () => BuildAdaptiveWindow("queue"), 1360, 860);
+        Render("adaptive-subscription", () => BuildAdaptiveWindow("subscription"), 1360, 860);
+        Render("adaptive-eventhubs", () => BuildAdaptiveWindow("eventhubs"), 1360, 860);
+        Render("main", () => BuildMainWindow(), 1360, 860);
+        Render("workspace-first-run", BuildFirstRunWindow, 1360, 860);
+        Render("workspace-loading", BuildLoadingWindow, 1360, 860);
+        Render("workspace-empty", BuildEmptyWindow, 1360, 860);
+        Render("columns", () => BuildMainWindow(), 1360, 860);
+        Render("table-layout", () => BuildMainWindow(tableLayout: true), 1360, 860);
+        Render("selection-none", () => BuildMainWindow(), 1360, 860);
+        Render("selection-selected", () => BuildMainWindow(), 1360, 860);
+        Render("inspector-collapsed", () => { var window = BuildMainWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
+        Render("restored-layout", BuildRestoredLayoutWindow, 1360, 860);
+        Render("sidebar-search", BuildSidebarSearchWindow, 1360, 860);
+        Render("deadletter", BuildDeadLetterWindow, 1360, 860);
+        Render("main-actions", () => BuildMainWindow(), 1360, 860);
+        Render("deadletter-actions", BuildDeadLetterWindow, 1360, 860);
+        Render("eventhubs-actions", BuildEventHubsWindow, 1360, 860);
+        Render("preference-failure", () => BuildMainWindow(true), 1360, 860);
+        Render("activity", BuildActivityWindow, 1360, 860);
+        Render("activity-inspector-hidden", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
+        Render("activity-collapsed", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsActivityExpanded = false; return window; }, 1360, 860);
+        Render("props", () => BuildMainWindow(), 1360, 860, 1);
+        Render("body-long-wrapped", () => BuildLongBodyWindow(true), 1360, 860);
+        Render("body-long-unwrapped", () => BuildLongBodyWindow(false), 1360, 860);
+        Render("body-json", () => BuildMainWindow(), 1360, 860);
+        Render("body-xml", () => BuildMainWindow(), 1360, 860);
+        Render("body-find-match", () => BuildMainWindow(), 1360, 860);
+        Render("body-find-none", () => BuildMainWindow(), 1360, 860);
+        Render("body-large", BuildLargeBodyFixtureWindow, 1360, 860);
+        Render("body-large-find", BuildLargeBodyFixtureWindow, 1360, 860);
+        Render("eventhubs", BuildEventHubsWindow, 1360, 860);
+        Render("eventhubs-props", BuildEventHubsWindow, 1360, 860, 1);
+        Render("connection", () => new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
+        Render("connection-eventhubs", () => new ConnectionDialog { DataContext = BuildEventHubsConnectionViewModel(), MaxHeight = 600 }, 620, 600);
+        Render("send", () => new SendMessageDialog { DataContext = BuildSendViewModel() }, 760, 700);
+        Render("send-empty", () => new SendMessageDialog { DataContext = new SendMessageViewModel(new SendMessageRequest("orders")) }, 760, 700);
+        Render("send-delivery", () => new SendMessageDialog { DataContext = BuildDeliveryViewModel() }, 760, 700);
+        Render("topic", () => new TopicEditorDialog { DataContext = new TopicEditorViewModel(new TopicDefinition { Name = "order-events" }, true) }, 620, 520);
+        Render("topic-edit", () => new TopicEditorDialog { DataContext = new TopicEditorViewModel(new TopicDefinition
+        { Name = "order-events", EnablePartitioning = true, RequiresDuplicateDetection = true, DuplicateDetectionHistoryTimeWindow = "PT10M" }, false)
+        { IsCreationExpanded = true } }, 620, 520);
+        Render("topic-invalid", () => new TopicEditorDialog { DataContext = new TopicEditorViewModel(new TopicDefinition
+        { Name = "order-events" }, true) { AutoDeleteOnIdle = "invalid", IsOptionalExpanded = true } }, 620, 520);
+        Render("queue", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition { Name = "orders", MaxDeliveryCount = 10 }, false) }, 620, 640);
+        Render("queue-edit", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(new QueueDefinition
+        {
+            Name = "orders", MaxSizeInMegabytes = 5120, MaxDeliveryCount = 25,
+            LockDuration = "PT1M", RequiresSession = true, EnablePartitioning = true,
+            RequiresDuplicateDetection = true, DuplicateDetectionHistoryTimeWindow = "PT10M"
+        }, false) { IsCreationExpanded = true } }, 620, 520);
+        Render("queue-optional-invalid", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(
+            new QueueDefinition { Name = "orders" }, true) { AutoDeleteOnIdle = "invalid" } }, 620, 520);
+        Render("queue-creation-invalid", () => new QueueEditorDialog { DataContext = new QueueEditorViewModel(
+            new QueueDefinition { Name = "orders" }, true) { DuplicateDetectionHistoryTimeWindow = "invalid" } }, 620, 520);
+        Render("subscription", () => new SubscriptionEditorDialog { DataContext = new SubscriptionEditorViewModel(
+            "order-events", new SubscriptionDefinition { Name = "audit", MaxDeliveryCount = 10 }, true) }, 620, 640);
+        Render("subscription-edit", () => new SubscriptionEditorDialog { DataContext = new SubscriptionEditorViewModel(
+            "order-events", new SubscriptionDefinition { Name = "audit", RequiresSession = true, MaxDeliveryCount = 10 }, false)
+            { IsCreationExpanded = true, IsForwardingExpanded = true } }, 620, 520);
+        Render("subscription-invalid", () => new SubscriptionEditorDialog { DataContext = new SubscriptionEditorViewModel(
+            "order-events", new SubscriptionDefinition { Name = "audit", MaxDeliveryCount = 10 }, true)
+            { AutoDeleteOnIdle = "invalid" } }, 620, 520);
+        Render("rule-sql", () => new RuleEditorDialog { DataContext = new RuleEditorViewModel(
+            new RuleDefinition { Name = "orders", FilterType = "Sql", SqlExpression = "region = 'emea'", SqlAction = "SET routed = 'yes'" }, false) }, 620, 600);
+        Render("rule-correlation", () => new RuleEditorDialog { DataContext = new RuleEditorViewModel(
+            new RuleDefinition { Name = "orders", FilterType = "Correlation", CorrelationId = "region", MessageId = "order-1", ContentType = "application/json" }, false) }, 620, 600);
+        Render("rule-invalid", () => new RuleEditorDialog { DataContext = new RuleEditorViewModel(
+            new RuleDefinition { Name = "orders", SqlExpression = "" }, true) }, 620, 600);
+        foreach (var name in new[] { "message-info", "message-error", "message-destructive", "message-update", "message-long" })
+            Render(name, () => BuildMessageDialog(name), null, null);
+        // Natural size unless --size is given, so a large canvas cannot hide clipping.
+        Render("settings", () => BuildSettingsDialog(tag), null, null);
+        Render("settings-reset", () => BuildSettingsDialog(tag), null, null);
+        Render("reset-layout", () => LayoutResetFixture.Build(stateRoot.FullName, tag, Pump), null, null);
+        Render("resubmit", () => BuildResubmitDialog(3, "orders"), null, null);
+        Render("resubmit-long", () => BuildResubmitDialog(12, string.Concat(Enumerable.Repeat("very-long-dead-letter-target-", 40))), null, null);
+        Render("import-policy", () => BuildImportPolicyDialog("The file contains 2 queue(s), 1 topic(s) and 3 subscription(s).\n\nExported from preview-namespace.servicebus.windows.net."), null, null);
+        Render("import-policy-long", () => BuildImportPolicyDialog(string.Join("\n", Enumerable.Range(1, 60).Select(i => $"Exported from very-long-namespace-{i}.servicebus.windows.net"))), null, null);
+        Render("states", BuildStatesWindow, 760, 560);
+        void Render(string name, Func<Window> build, int? defaultWidth, int? defaultHeight, int tab = -1)
+        {
+            if (screen == "all" || screen == name) Shoot($"{name}-{tag}", build(), width ?? defaultWidth, height ?? defaultHeight, tab);
+        }
+    }
+    Console.WriteLine("done -> " + outDir);
+}
+finally { stateRoot.Delete(recursive: true); }
 return;
 
-void Shoot(string name, Window window, int width, int height, int selectTab = -1)
+MainWindowViewModel IsolatedViewModel(NamespaceConnection connection, bool preferenceFailure = false, bool tableLayout = false)
 {
-    window.Width = width;
-    window.Height = height;
+    var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
+    var store = new ConnectionStore(Path.Combine(dir.FullName, "connections.json"), new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")));
+    Pump(store.SaveAsync([connection]));
+    AppPreferencesService? preferences = null;
+    if (preferenceFailure)
+    {
+        var blocked = Path.Combine(dir.FullName, "blocked");
+        File.WriteAllText(blocked, "not a directory");
+        preferences = new AppPreferencesService(new JsonSettingsStore(Path.Combine(blocked, "settings.json")));
+    }
+    if (tableLayout)
+    {
+        var file = Path.Combine(dir.FullName, "settings.json");
+        File.WriteAllText(file, """{"messageTables":{"serviceBus":{"columns":[{"id":"preview","visible":true,"displayIndex":1,"width":240},{"id":"label","visible":true,"displayIndex":2,"width":160},{"id":"sequence","visible":true,"displayIndex":3,"width":98},{"id":"enqueued","visible":true,"displayIndex":4,"width":140},{"id":"messageId","visible":false}]}}}""");
+        preferences = new AppPreferencesService(new JsonSettingsStore(file));
+        preferences.Load();
+    }
+    var vm = MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Preview cannot connect to Azure."), preferences);
+    if (preferenceFailure) Pump(preferences!.SetThemeAsync(AppTheme.Dark));
+    Pump(vm.InitializeAsync());
+    vm.StatusText = "Ready";
+    vm.Log.Clear();
+    return vm;
+}
+
+static void Pump(Task task)
+{
+    var deadline = DateTime.UtcNow.AddSeconds(10);
+    while (!task.IsCompleted)
+    {
+        Dispatcher.UIThread.RunJobs();
+        if (DateTime.UtcNow > deadline) throw new TimeoutException("Fixture initialization timed out.");
+        Thread.Sleep(1);
+    }
+    task.GetAwaiter().GetResult();
+}
+
+void Shoot(string name, Window window, int? width, int? height, int selectTab = -1)
+{
+    if (width is { } w) window.Width = w;
+    if (height is { } h) window.Height = h;
     window.Show();
 
     // Let bindings settle and the compositor produce a frame before capturing.
@@ -72,6 +252,21 @@ void Shoot(string name, Window window, int width, int height, int selectTab = -1
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
     }
 
+    if (name.StartsWith("settings-reset-"))
+    {
+        var vm = (SettingsDialogViewModel)window.DataContext!;
+        window.FindControl<Button>("ResetLayoutButton")!.Focus();
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Pump(vm.ResetLayoutCommand.ExecutionTask!);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+    }
+    if (name.StartsWith("reset-layout-"))
+    {
+        Pump(((AppPreferencesService)window.Tag!).ResetLayoutAsync());
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+    }
     if (selectTab >= 0)
     {
         var tabs = window.GetVisualDescendants().OfType<TabControl>().FirstOrDefault();
@@ -87,12 +282,85 @@ void Shoot(string name, Window window, int width, int height, int selectTab = -1
         }
     }
 
+    if (name.StartsWith("queue-edit-") || name.StartsWith("subscription-edit-"))
+    {
+        window.FindControl<Control>("CreationSection")!.BringIntoView();
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
+    if (name.StartsWith("rule-invalid-"))
+    {
+        window.FindControl<Button>("SaveButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+    }
+    if ((name.StartsWith("queue-") || name.StartsWith("subscription-")) && name.Contains("-invalid-"))
+    {
+        window.FindControl<Button>("SaveButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
+    if (name.StartsWith("body-"))
+    {
+        var grid = window.FindControl<DataGrid>("MessageGrid")!;
+        var vm = (MainWindowViewModel)window.DataContext!;
+        grid.SelectedItem = vm.Messages[name.StartsWith("body-xml") ? 3 : name.StartsWith("body-large") ? 1 : 0];
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+        if (name.StartsWith("body-find-") || name.StartsWith("body-large-find-"))
+        {
+            var viewer = window.FindControl<SbMac.App.Views.Controls.MessageBodyViewer>("BodyViewer")!;
+            viewer.FindControl<Button>("OpenFindButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            viewer.FindControl<TextBox>("FindQuery")!.Text = name.StartsWith("body-large-find-") ? "gamma" : name.StartsWith("body-find-match") ? "order" : "missing";
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            if (name.StartsWith("body-large-find-")) WaitForLargeFind(viewer);
+        }
+    }
+    if (name.StartsWith("selection-selected-") || name.StartsWith("adaptive-") || name.StartsWith("table-layout-"))
+    {
+        var grid = window.FindControl<DataGrid>("MessageGrid")!;
+        var vm = (MainWindowViewModel)window.DataContext!;
+        grid.SelectedItems.Add(vm.Messages[0]);
+        grid.SelectedItems.Add(vm.Messages[1]);
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+    }
+    if (name.StartsWith("columns-"))
+    {
+        var button = window.FindControl<Button>("ColumnsButton")!;
+        button.Flyout!.ShowAt(button);
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
+    if (name.Contains("-actions-"))
+    {
+        var button = window.FindControl<Button>("ActionsButton")!;
+        button.Flyout!.ShowAt(button);
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
     var frame = window.CaptureRenderedFrame();
     var path = Path.Combine(outDir, name + ".png");
 
     if (frame is null)
     {
-        Console.WriteLine($"!! {name}: no frame");
+        throw new InvalidOperationException($"{name}: no rendered frame");
     }
     else
     {
@@ -103,10 +371,143 @@ void Shoot(string name, Window window, int width, int height, int selectTab = -1
     window.Close();
 }
 
-MainWindow BuildMainWindow()
+void WaitForLargeFind(SbMac.App.Views.Controls.MessageBodyViewer viewer)
 {
-    var viewModel = new MainWindowViewModel { StatusText = "Ready" };
+    var timer = System.Diagnostics.Stopwatch.StartNew();
+    var status = viewer.FindControl<TextBlock>("FindStatus")!;
+    while (status.Text != "1 of 10000+" && timer.Elapsed < TimeSpan.FromSeconds(20))
+    {
+        Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Thread.Sleep(5);
+    }
+    if (status.Text != "1 of 10000+" || !viewer.FindControl<StackPanel>("FindBar")!.IsVisible ||
+        viewer.FindControl<TextBox>("FindQuery")!.Text != "gamma" ||
+        viewer.FindControl<AvaloniaEdit.TextEditor>("Editor")!.SelectedText != "gamma")
+        throw new InvalidOperationException($"Large find fixture did not settle: {status.Text}");
+    Dispatcher.UIThread.RunJobs();
+    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+}
 
+// Uses the actual dialog constructor; all fixture text is synthetic and isolated.
+static Window BuildMessageDialog(string name)
+{
+    var (title, message, kind, confirm, destructive, dismiss) = name switch
+    {
+        "message-error" => ("Unable to connect", "The connection could not be opened.", MessageDialogKind.Error, (string?)null, false, "OK"),
+        "message-destructive" => ("Delete messages", "Delete 123 messages from orders? This cannot be undone.", MessageDialogKind.Info, "Delete", true, "Cancel"),
+        "message-update" => ("Update available", "Version 1.4.0 is available. You are using 1.3.2.", MessageDialogKind.Info, "View Release", false, "Later"),
+        "message-long" => ("Long message", string.Concat(Enumerable.Repeat("A long warning with details for review. ", 100)), MessageDialogKind.Info, "Continue", false, "Cancel"),
+        _ => ("Information", "The operation completed successfully.", MessageDialogKind.Info, (string?)null, false, "OK")
+    };
+    return (Window)Activator.CreateInstance(typeof(MessageDialog), BindingFlags.Instance | BindingFlags.NonPublic,
+        null, [title, message, kind, confirm, destructive, dismiss], null)!;
+}
+
+// Uses the real resubmit dialog constructor with synthetic count and target; no Azure or store access.
+static Window BuildResubmitDialog(int count, string target) =>
+    (Window)Activator.CreateInstance(typeof(ResubmitDialog), BindingFlags.Instance | BindingFlags.NonPublic,
+        null, [count, target], null)!;
+
+// Uses the real import policy dialog constructor with a synthetic summary; no file, Azure or store access.
+static Window BuildImportPolicyDialog(string summary) =>
+    (Window)Activator.CreateInstance(typeof(ImportPolicyDialog), BindingFlags.Instance | BindingFlags.NonPublic,
+        null, [summary], null)!;
+
+// Representative control states on one canvas: normal, disabled, selected, destructive,
+// status and keyboard focus. Pure static content, so nothing touches Azure or preferences.
+static Window BuildStatesWindow()
+{
+    TextBlock Label(string text, string? cls = null)
+    {
+        var t = new TextBlock { Text = text };
+        if (cls is not null) t.Classes.Add(cls);
+        return t;
+    }
+    Button Btn(string text, string cls, bool enabled = true)
+    {
+        var b = new Button { Content = text, IsEnabled = enabled };
+        foreach (var c in cls.Split(' ')) b.Classes.Add(c);
+        return b;
+    }
+    static Avalonia.Media.IBrush Themed(string key) =>
+        Application.Current!.TryGetResource(key, Application.Current.ActualThemeVariant, out var r)
+            ? (Avalonia.Media.IBrush)r! : throw new InvalidOperationException(key + " missing");
+    Border Status(string text, string brush, string soft) => new()
+    {
+        Padding = new Thickness(8, 3), CornerRadius = new CornerRadius(99), Margin = new Thickness(0, 0, 8, 0),
+        Background = Themed(soft),
+        Child = new TextBlock { Text = text, FontSize = 12, Foreground = Themed(brush) },
+    };
+
+    var focused = Btn("Focused (keyboard)", "secondary");
+    var panel = new StackPanel { Margin = new Thickness(24), Spacing = 12 };
+    panel.Children.Add(Label("Control states", "display"));
+    panel.Children.Add(Label("TYPOGRAPHY", "caption"));
+    panel.Children.Add(Label("Title 15 semibold / body 13 primary text"));
+    panel.Children.Add(Label("Secondary and tertiary text"));
+    panel.Children.Add(new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8, Children =
+        { Btn("Primary", "primary"), Btn("Primary disabled", "primary", false), Btn("Secondary", "secondary"),
+          Btn("Disabled", "secondary", false), Btn("Delete", "toolbar destructive"), focused } });
+    panel.Children.Add(new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Children =
+        { Status("Danger", "DangerBrush", "DangerSoftBrush"), Status("Warning", "WarningBrush", "WarningSoftBrush"),
+          Status("Success", "SuccessBrush", "SuccessSoftBrush"), Status("Accent", "AccentBrush", "AccentSoftBrush") } });
+    panel.Children.Add(new TextBox { Text = "Text input", Width = 260, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left });
+    panel.Children.Add(new TextBox { Text = "Disabled input", Width = 260, IsEnabled = false, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left });
+    panel.Children.Add(new CheckBox { Content = "Checked option", IsChecked = true });
+    panel.Children.Add(new CheckBox { Content = "Disabled option", IsEnabled = false });
+    var list = new ListBox { Width = 260, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+        ItemsSource = new[] { "Unselected row", "Selected row", "Another row" }, SelectedIndex = 1 };
+    panel.Children.Add(list);
+    var window = new Window { Content = panel, SizeToContent = SizeToContent.Manual };
+    window.Opened += (_, _) => focused.Focus(Avalonia.Input.NavigationMethod.Tab);
+    return window;
+}
+
+// Each Settings fixture saves into its own temporary file, seeded with the shown theme.
+SettingsDialog BuildSettingsDialog(string tag)
+{
+    var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
+    var file = Path.Combine(dir.FullName, "settings.json");
+    File.WriteAllText(file, $"{{\"schemaVersion\":1,\"theme\":\"{tag}\"}}");
+    var preferences = new AppPreferencesService(new JsonSettingsStore(file));
+    preferences.Load();
+    return new SettingsDialog { DataContext = new SettingsDialogViewModel(preferences) };
+}
+
+MainWindow BuildFirstRunWindow()
+{
+    var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
+    var store = new ConnectionStore(Path.Combine(dir.FullName, "connections.json"), new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")));
+    var vm = MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Preview cannot connect to Azure."));
+    Pump(vm.InitializeAsync());
+    return new MainWindow { DataContext = vm };
+}
+
+MainWindow BuildLoadingWindow()
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.Messages.Clear();
+    vm.SelectedMessage = null;
+    vm.Operations.Add(new OperationViewModel(OperationKind.Read, "Peeking orders…", vm.SelectedNode));
+    var failed = new OperationViewModel(OperationKind.Connect, "Connecting to staging…");
+    failed.Finish(OperationState.Failed, "Connection failed");
+    vm.Operations.Add(failed);
+    return window;
+}
+
+MainWindow BuildEmptyWindow()
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    var show = typeof(MainWindowViewModel).GetMethod("ShowMessagesFor", BindingFlags.NonPublic | BindingFlags.Instance)!;
+    show.Invoke(vm, [vm.SelectedNode, Array.Empty<MessageRecord>(), "orders"]);
+    return window;
+}
+
+MainWindow BuildMainWindow(bool preferenceFailure = false, bool tableLayout = false)
+{
     var connection = new NamespaceConnection
     {
         Name = "contoso-prod",
@@ -114,7 +515,9 @@ MainWindow BuildMainWindow()
         FullyQualifiedNamespace = "contoso-prod.servicebus.windows.net"
     };
 
-    var ns = new NamespaceNodeViewModel(connection) { IsExpanded = true };
+    var viewModel = IsolatedViewModel(connection, preferenceFailure, tableLayout);
+    var ns = viewModel.Namespaces.Single();
+    ns.IsExpanded = true;
 
     var queues = new QueueFolderNodeViewModel { Parent = ns, IsExpanded = true, Detail = "4" };
     AddQueue(queues, "orders", 1284, 17, 0);
@@ -131,14 +534,13 @@ MainWindow BuildMainWindow()
 
     ns.Children.Add(queues);
     ns.Children.Add(topics);
-    viewModel.Namespaces.Add(ns);
 
     // Select a queue so the header, toolbar state and message list all show real content.
     var selected = (QueueNodeViewModel)queues.Children[0];
     selected.IsSelected = true;
     viewModel.SelectedNode = selected;
 
-    foreach (var record in SampleMessages())
+    foreach (var record in SampleMessages().Where(record => !record.IsDeadLetter))
     {
         viewModel.Messages.Add(new MessageRowViewModel(record));
     }
@@ -151,6 +553,89 @@ MainWindow BuildMainWindow()
     return new MainWindow { DataContext = viewModel };
 }
 
+// Restores a saved panel layout through the real preference path, from a temporary settings file.
+MainWindow BuildLongBodyWindow(bool wrap)
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.Messages.Clear();
+    vm.Messages.Add(new MessageRowViewModel(new MessageRecord {
+        Body = BinaryData.FromString(string.Concat(Enumerable.Repeat("A long message body with readable words and details. ", 30))),
+        SourceEntityPath = "orders", SequenceNumber = 1 }));
+    window.FindControl<SbMac.App.Views.Controls.MessageBodyViewer>("BodyViewer")!
+        .FindControl<CheckBox>("WrapToggle")!.IsChecked = wrap;
+    return window;
+}
+
+MainWindow BuildLargeBodyFixtureWindow()
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.Messages.Clear();
+    foreach (var row in LargeBodyFixture.Rows()) vm.Messages.Add(row);
+    return window;
+}
+
+MainWindow BuildRestoredLayoutWindow()
+{
+    var theme = Application.Current!.RequestedThemeVariant == ThemeVariant.Dark ? "dark" : "light";
+    var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
+    var settings = Path.Combine(dir.FullName, "settings.json");
+    File.WriteAllText(settings, """{"theme":"THEME","workspace":{"sidebarWidth":340,"detailsHeight":300,"detailsCollapsed":false,"activityCollapsed":true}}""".Replace("THEME", theme));
+    var window = BuildMainWindow();
+    var preferences = new AppPreferencesService(new JsonSettingsStore(settings));
+    return ((SbMac.App.App)Application.Current!).CreateMainWindow(new AppComposition(preferences, _ => window));
+}
+
+MainWindow BuildSidebarSearchWindow()
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    var topics = vm.Namespaces.Single().Children.OfType<TopicFolderNodeViewModel>().Single();
+    var topic = (TopicNodeViewModel)topics.Children[0];
+    AddSubscription(topic, "order-events", "audit-international-reconciliation-subscription", 123456, 78);
+    vm.EntitySearchText = "international-reconciliation";
+    return window;
+}
+
+MainWindow BuildDeadLetterWindow()
+{
+    var window = BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    vm.ShowDeadLetter = true;
+    vm.Messages.Clear();
+    foreach (var record in SampleMessages().Where(record => record.IsDeadLetter))
+        vm.Messages.Add(new MessageRowViewModel(record));
+    vm.SelectedMessage = vm.Messages.FirstOrDefault();
+    return window;
+}
+
+MainWindow BuildAdaptiveWindow(string context)
+{
+    var window = context == "eventhubs" ? BuildEventHubsWindow() : BuildMainWindow();
+    var vm = (MainWindowViewModel)window.DataContext!;
+    var ns = vm.Namespaces.Single();
+    const string longName = "international-reconciliation-processing-long-name";
+    if (context == "queue")
+    {
+        var folder = ns.Children.OfType<QueueFolderNodeViewModel>().Single();
+        AddQueue(folder, longName, 1284, 17, 0);
+        vm.SelectedNode = folder.Children.Last();
+    }
+    else if (context == "subscription")
+    {
+        var topic = (TopicNodeViewModel)ns.Children.OfType<TopicFolderNodeViewModel>().Single().Children[0];
+        AddSubscription(topic, "order-events", longName, 220, 0);
+        vm.SelectedNode = topic.Children.Last();
+    }
+    else
+        vm.SelectedNode = AddEventHub(ns.Children.OfType<EventHubFolderNodeViewModel>().Single(), longName, ["0"], ["$Default"]);
+    vm.IsActivityExpanded = true;
+    vm.Operations.Add(new OperationViewModel(OperationKind.Read, "Reading messages for layout verification"));
+    vm.Log.Add("Preview activity log entry");
+    return window;
+}
+
 // Several operations at once, which is the state the activity tray exists for.
 MainWindow BuildActivityWindow()
 {
@@ -158,6 +643,8 @@ MainWindow BuildActivityWindow()
     var viewModel = (MainWindowViewModel)window.DataContext!;
 
     viewModel.IsActivityExpanded = true;
+    viewModel.Log.Add("09:41:20  Connection failed: no such host.");
+    viewModel.Log.Add("09:41:18  Sent 3 messages to orders.");
 
     var purge = new OperationViewModel(OperationKind.Purge, "Purging orders-retry…");
     purge.Report("18,400 deleted", 18_400, 42_000);
@@ -183,16 +670,16 @@ MainWindow BuildActivityWindow()
 
 MainWindow BuildEventHubsWindow()
 {
-    var viewModel = new MainWindowViewModel { StatusText = "Ready" };
-
-    var ns = new NamespaceNodeViewModel(new NamespaceConnection
+    var connection = new NamespaceConnection
     {
         Name = "contoso-telemetry",
         Kind = NamespaceKind.EventHubs,
         AuthenticationMode = AuthenticationMode.EntraId,
         FullyQualifiedNamespace = "contoso-telemetry.servicebus.windows.net"
-    })
-    { IsExpanded = true };
+    };
+    var viewModel = IsolatedViewModel(connection);
+    var ns = viewModel.Namespaces.Single();
+    ns.IsExpanded = true;
 
     var folder = new EventHubFolderNodeViewModel { Parent = ns, IsExpanded = true, Detail = "2" };
 
@@ -205,7 +692,6 @@ MainWindow BuildEventHubsWindow()
     AddEventHub(folder, "audit-trail", ["0", "1"], ["$Default"]);
 
     ns.Children.Add(folder);
-    viewModel.Namespaces.Add(ns);
 
     var selected = (EventHubNodeViewModel)folder.Children[0];
     selected.IsSelected = true;
@@ -231,7 +717,7 @@ EventHubNodeViewModel AddEventHub(
     IReadOnlyList<string> consumerGroups)
 {
     var node = new EventHubNodeViewModel(
-        new EventHubEntity(name, DateTimeOffset.Now.AddMonths(-8), partitions, consumerGroups))
+        new EventHubEntity(name, fixtureNow.AddMonths(-8), partitions, consumerGroups))
     {
         Parent = parent,
         IsExpanded = true
@@ -244,7 +730,7 @@ EventHubNodeViewModel AddEventHub(
 void AddPartition(TreeNodeViewModel parent, string id, long beginning, long last, bool isEmpty = false)
 {
     parent.Children.Add(new PartitionNodeViewModel(
-        new PartitionEntity("device-telemetry", id, beginning, last, DateTimeOffset.Now.AddSeconds(-9), isEmpty))
+        new PartitionEntity("device-telemetry", id, beginning, last, fixtureNow.AddSeconds(-9), isEmpty))
     {
         Parent = parent
     });
@@ -252,7 +738,7 @@ void AddPartition(TreeNodeViewModel parent, string id, long beginning, long last
 
 IEnumerable<MessageRecord> SampleEvents()
 {
-    var now = DateTimeOffset.Now;
+    var now = fixtureNow;
 
     for (var index = 0; index < 6; index++)
     {
@@ -285,7 +771,8 @@ ConnectionDialogViewModel BuildEventHubsConnectionViewModel() =>
         Kind = NamespaceKind.EventHubs,
         AuthenticationMode = AuthenticationMode.EntraId,
         FullyQualifiedNamespace = "contoso-telemetry.servicebus.windows.net",
-        EntraCredentialKind = EntraCredentialKind.AzureCli,
+        EntraCredentialKind = EntraCredentialKind.ClientSecret,
+        TenantId = "fixture-tenant", ClientId = "fixture-client", ClientSecret = "fixture-secret",
         EventHubNames = ["device-telemetry", "audit-trail"],
         ConsumerGroup = "analytics"
     });
@@ -344,21 +831,24 @@ void AddSubscription(TreeNodeViewModel parent, string topic, string name, long a
 
 SendMessageViewModel BuildSendViewModel()
 {
-    var viewModel = new SendMessageViewModel(new SendMessageRequest("orders"))
+    var seed = new MessageRecord
     {
-        Body = "{\n  \"orderId\": 40921,\n  \"region\": \"emea\",\n  \"total\": 128.40\n}",
-        ContentType = "application/json",
-        Subject = "order-created"
+        Body = BinaryData.FromString("{\n  \"orderId\": 40921\n}"), SourceEntityPath = "orders",
+        Subject = "order-created", ContentType = "application/json",
+        ApplicationProperties = new Dictionary<string, object?> { ["region"] = "emea" }
     };
-
-    viewModel.Properties.Add(new PropertyRowViewModel { Key = "region", Value = "emea" });
-    viewModel.Properties.Add(new PropertyRowViewModel { Key = "priority", Value = "high" });
-    return viewModel;
+    return new SendMessageViewModel(new SendMessageRequest("orders", seed, "Editing a received message"));
 }
+
+SendMessageViewModel BuildDeliveryViewModel() => new(new SendMessageRequest("orders"))
+{
+    Body = "Order {n}", IsDeliveryExpanded = true, Copies = 3, Schedule = true,
+    ScheduledDate = fixtureNow.AddDays(1), ScheduledTime = TimeSpan.FromHours(12)
+};
 
 IEnumerable<MessageRecord> SampleMessages()
 {
-    var now = DateTimeOffset.Now;
+    var now = fixtureNow;
 
     yield return Record(40921, "{\n  \"orderId\": 40921,\n  \"region\": \"emea\",\n  \"total\": 128.40\n}",
         now.AddMinutes(-3), "order-created", 1, null);

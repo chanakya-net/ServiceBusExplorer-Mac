@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:SbMac.App.ViewModels"
+             x:Class="SbMac.App.Views.Controls.ActivityPanel"
+             x:DataType="vm:MainWindowViewModel">
+  <Border Classes="activityPanel">
+    <Grid RowDefinitions="Auto,*" MaxHeight="280">
+      <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,6">
+        <TextBlock DockPanel.Dock="Left" Classes="caption" Text="ACTIVITY" VerticalAlignment="Center" />
+        <Button DockPanel.Dock="Right" Classes="toolbar" x:Name="HideActivityButton" AutomationProperties.Name="Hide activity" Content="Hide" Padding="9,3" Command="{Binding ToggleActivityCommand}" />
+        <Button DockPanel.Dock="Right" Classes="toolbar" Content="Clear finished" Padding="9,3" IsEnabled="{Binding HasFinishedOperations}" Command="{Binding ClearFinishedOperationsCommand}" />
+        <Button DockPanel.Dock="Right" Classes="toolbar destructive" x:Name="CancelAllButton" Content="Cancel all" Padding="9,3" IsEnabled="{Binding IsBusy}" Command="{Binding CancelAllOperationsCommand}" />
+      </DockPanel>
+      <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="16">
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+        <ItemsControl  ItemsSource="{Binding Operations}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:OperationViewModel">
+              <!-- Finished rows recede as a whole rather than a part at a time. -->
+              <Grid ColumnDefinitions="*,Auto,88" RowDefinitions="Auto,Auto" Margin="0,5">
+
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="{Binding Title}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+
+                <TextBlock Grid.Row="0" Grid.Column="1"
+                           Classes="tertiary"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           MaxWidth="360"
+                           Text="{Binding Detail}" />
+
+                <Button Grid.Row="0" Grid.Column="2" Classes="toolbar"
+                        x:Name="CancelOperationButton" Content="Cancel" Padding="9,2" Margin="10,0,0,0"
+                        HorizontalAlignment="Right"
+                        IsVisible="{Binding IsRunning}"
+                        Command="{Binding CancelCommand}" />
+
+                <TextBlock Grid.Row="0" Grid.Column="2"
+                           Classes="secondary"
+                           VerticalAlignment="Center"
+                           Margin="10,0,4,0"
+                           HorizontalAlignment="Right"
+                           IsVisible="{Binding IsFinished}"
+                           Text="{Binding StateLabel}" />
+
+                <ProgressBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                             Height="3" Margin="0,6,0,0"
+                             Minimum="0" Maximum="100"
+                             Value="{Binding Progress}"
+                             IsIndeterminate="{Binding IsIndeterminate}">
+                  <ProgressBar.Foreground>
+                    <MultiBinding Converter="{StaticResource BrushLookup}">
+                      <Binding Path="AccentKey" />
+                      <Binding Path="$self.ActualThemeVariant" />
+                    </MultiBinding>
+                  </ProgressBar.Foreground>
+                </ProgressBar>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        </ScrollViewer>
+        <Grid Grid.Column="1" RowDefinitions="Auto,*">
+          <DockPanel LastChildFill="False">
+            <TextBlock DockPanel.Dock="Left" Classes="caption" Text="LOG · NEWEST FIRST" VerticalAlignment="Center" />
+            <Button DockPanel.Dock="Right" Classes="toolbar" x:Name="ClearLogButton" Content="Clear log" Command="{Binding ClearLogCommand}" />
+          </DockPanel>
+          <ListBox AutomationProperties.Name="Activity log" Grid.Row="1" ItemsSource="{Binding Log}" Padding="4,6">
+            <ListBox.ItemTemplate><DataTemplate x:DataType="x:String">
+              <TextBlock Classes="mono" Text="{Binding}" TextWrapping="Wrap" />
+            </DataTemplate></ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Grid>
+    </Grid>
+  </Border>
+</UserControl>

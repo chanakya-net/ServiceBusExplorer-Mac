@@ -8,18 +8,21 @@
         x:DataType="vm:ConnectionDialogViewModel"
         Title="{Binding DialogTitle}"
         Width="620" SizeToContent="Height"
-        MinHeight="360"
+        MinHeight="0"
+        Opened="OnOpened"
         CanResize="False"
         ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner">
 
-  <StackPanel Margin="22" Spacing="16">
+  <Grid Margin="22" RowDefinitions="*,Auto" RowSpacing="12">
+  <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+  <StackPanel Spacing="16">
 
     <TextBlock Text="{Binding DialogTitle}" Classes="title" />
 
     <Grid ColumnDefinitions="150,*" RowDefinitions="Auto">
       <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Display name" />
-      <TextBox Grid.Column="1" Text="{Binding Name}" PlaceholderText="contoso-prod" />
+      <TextBox AutomationProperties.Name="Display name" x:Name="NameField" Grid.Column="1" Text="{Binding Name}" PlaceholderText="contoso-prod" />
     </Grid>
 
     <!--
@@ -52,7 +55,7 @@
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Connection string"
                    VerticalAlignment="Top" Margin="0,6,10,0" />
-        <TextBox Grid.Column="1"
+        <TextBox AutomationProperties.Name="Connection string" x:Name="ConnectionStringField" Grid.Column="1"
                  Text="{Binding ConnectionString}"
                  AcceptsReturn="True"
                  TextWrapping="Wrap"
@@ -69,13 +72,13 @@
     <StackPanel Spacing="12" IsVisible="{Binding ShowEntraFields}">
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Namespace" />
-        <TextBox Grid.Column="1" Text="{Binding FullyQualifiedNamespace}"
+        <TextBox AutomationProperties.Name="Namespace" x:Name="FullyQualifiedNamespaceField" Grid.Column="1" Text="{Binding FullyQualifiedNamespace}"
                  PlaceholderText="contoso.servicebus.windows.net" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Credential" />
-        <ComboBox Grid.Column="1"
+        <ComboBox AutomationProperties.Name="Credential" Grid.Column="1"
                   HorizontalAlignment="Stretch"
                   ItemsSource="{Binding CredentialKindLabels}"
                   SelectedIndex="{Binding SelectedCredentialIndex}" />
@@ -83,17 +86,17 @@
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Tenant ID" />
-        <TextBox Grid.Column="1" Text="{Binding TenantId}" PlaceholderText="optional" />
+        <TextBox AutomationProperties.Name="Tenant ID" x:Name="TenantIdField" Grid.Column="1" Text="{Binding TenantId}" PlaceholderText="optional" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Client ID" />
-        <TextBox Grid.Column="1" Text="{Binding ClientId}" PlaceholderText="optional" />
+        <TextBox AutomationProperties.Name="Client ID" x:Name="ClientIdField" Grid.Column="1" Text="{Binding ClientId}" PlaceholderText="optional" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowClientSecretFields}">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Client secret" />
-        <TextBox Grid.Column="1" Text="{Binding ClientSecret}" PasswordChar="•" />
+        <TextBox AutomationProperties.Name="Client secret" x:Name="ClientSecretField" Grid.Column="1" Text="{Binding ClientSecret}" PasswordChar="•" />
       </Grid>
 
       <TextBlock Classes="tertiary" Margin="150,0,0,0"
@@ -101,12 +104,14 @@
                  Text="{Binding RoleHint}" />
     </StackPanel>
 
-    <!-- ───────────────── Event Hubs ───────────────── -->
+    <Expander Header="Advanced connection options" IsExpanded="{Binding IsAdvancedExpanded}">
+    <StackPanel Spacing="12" Margin="0,12,0,0">
+    <!-- Event Hubs -->
     <StackPanel Spacing="12" IsVisible="{Binding ShowEventHubFields}">
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Event hubs"
                    VerticalAlignment="Top" Margin="0,6,10,0" />
-        <TextBox Grid.Column="1"
+        <TextBox AutomationProperties.Name="Event hubs" Grid.Column="1"
                  Text="{Binding EventHubNames}"
                  AcceptsReturn="True"
                  Height="66"
@@ -119,12 +124,12 @@
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Consumer group" />
-        <TextBox Grid.Column="1" Text="{Binding ConsumerGroup}" PlaceholderText="$Default" />
+        <TextBox AutomationProperties.Name="Consumer group" Grid.Column="1" Text="{Binding ConsumerGroup}" PlaceholderText="$Default" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*" IsVisible="{Binding ShowSubscriptionField}">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Subscription ID" />
-        <TextBox Grid.Column="1" Text="{Binding SubscriptionId}"
+        <TextBox AutomationProperties.Name="Subscription ID" Grid.Column="1" Text="{Binding SubscriptionId}"
                  PlaceholderText="optional — defaults to your first subscription" />
       </Grid>
     </StackPanel>
@@ -135,13 +140,18 @@
                 IsChecked="{Binding UseWebSockets}" />
     </Grid>
 
+    </StackPanel>
+    </Expander>
+
     <TextBlock Classes="error" Text="{Binding ValidationError}"
                IsVisible="{Binding ValidationError, Converter={x:Static ObjectConverters.IsNotNull}}" />
 
-    <StackPanel Classes="dialogButtons" Orientation="Horizontal" HorizontalAlignment="Right">
-      <Button Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
-      <Button Classes="primary" Content="Save" IsDefault="True" Click="OnSave" IsEnabled="{Binding CanSave}" />
+  </StackPanel>
+  </ScrollViewer>
+    <StackPanel Grid.Row="1" Classes="dialogButtons" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="CancelButton" Classes="secondary" Content="Cancel" IsCancel="True" Click="OnCancel" />
+      <Button x:Name="SaveButton" Classes="primary" Content="Save" IsDefault="True" Click="OnSave" />
     </StackPanel>
 
-  </StackPanel>
+  </Grid>
 </Window>

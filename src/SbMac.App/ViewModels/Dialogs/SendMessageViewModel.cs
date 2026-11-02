@@ -38,6 +38,8 @@ public sealed partial class PropertyRowViewModel : ViewModelBase
     string value = string.Empty;
 }
 
+public enum SendValidationField { Body, Copies, Schedule }
+
 /// <summary>Backs the compose/send dialog, also used for resubmitting a dead-lettered message.</summary>
 public sealed partial class SendMessageViewModel : ViewModelBase
 {
@@ -59,6 +61,9 @@ public sealed partial class SendMessageViewModel : ViewModelBase
             partitionKey = seed.PartitionKey ?? string.Empty;
             replyTo = seed.ReplyTo ?? string.Empty;
             to = seed.To ?? string.Empty;
+
+            isMetadataExpanded = new[] { subject, correlationId, sessionId, partitionKey, replyTo, to }.Any(value => !string.IsNullOrWhiteSpace(value));
+            isPropertiesExpanded = seed.ApplicationProperties.Count > 0;
 
             foreach (var pair in seed.ApplicationProperties)
             {
@@ -85,6 +90,18 @@ public sealed partial class SendMessageViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSend))]
     string body = string.Empty;
+
+    [ObservableProperty]
+    bool isMetadataExpanded;
+
+    [ObservableProperty]
+    bool isPropertiesExpanded;
+
+    [ObservableProperty]
+    bool isDeliveryExpanded;
+
+    [ObservableProperty]
+    SendValidationField? invalidField;
 
     [ObservableProperty]
     string contentType = string.Empty;
@@ -151,9 +168,19 @@ public sealed partial class SendMessageViewModel : ViewModelBase
     public SendMessageResult? Build()
     {
         ValidationError = null;
+        InvalidField = null;
+
+        if (string.IsNullOrEmpty(Body))
+        {
+            ValidationError = "A message body is required.";
+            InvalidField = SendValidationField.Body;
+            return null;
+        }
 
         if (Copies < 1)
         {
+            IsDeliveryExpanded = true;
+            InvalidField = SendValidationField.Copies;
             ValidationError = "Number of copies must be at least 1.";
             return null;
         }
@@ -164,6 +191,8 @@ public sealed partial class SendMessageViewModel : ViewModelBase
             var when = new DateTimeOffset(ScheduledDate.Date + ScheduledTime, ScheduledDate.Offset);
             if (when <= DateTimeOffset.Now)
             {
+                IsDeliveryExpanded = true;
+                InvalidField = SendValidationField.Schedule;
                 ValidationError = "The scheduled time must be in the future.";
                 return null;
             }
