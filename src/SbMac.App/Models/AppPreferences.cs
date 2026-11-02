@@ -16,7 +16,7 @@ public enum AppTheme
 public sealed record AppPreferences(AppTheme Theme)
 {
     /// <summary>Settings schema written alongside these preferences.</summary>
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
 
     public WorkspacePreferences Workspace { get; init; } = new(null, WorkspaceWindowState.Normal);
 
@@ -96,4 +96,15 @@ public sealed record WorkspacePreferences(
     }
 }
 
-public sealed record MessageColumnState(string Id, bool Visible);
+public sealed record MessageColumnState(string Id, bool Visible, int? DisplayIndex = null, double? Width = null)
+{
+    // Logical pixels; grid-specific minimum/maximum constraints apply afterwards.
+    public static double? NormalizeWidth(double? width) => width is { } value && double.IsFinite(value) && value > 0
+        ? Math.Clamp(value, 20, 10000) : null;
+
+    public MessageColumnState Normalize() => this with
+    {
+        DisplayIndex = DisplayIndex is >= 0 ? DisplayIndex : null,
+        Width = NormalizeWidth(Width)
+    };
+}

@@ -384,6 +384,7 @@
                         SelectionMode="Extended"
                         FrozenColumnCount="1"
                         IsReadOnly="True"
+                        CanUserReorderColumns="True"
                         CanUserResizeColumns="True"
                         CanUserSortColumns="True"
                         HeadersVisibility="Column">
@@ -394,7 +395,7 @@
                   </Style>
                 </DataGrid.Styles>
                 <DataGrid.Columns>
-                  <DataGridTemplateColumn Header="✓" Width="48" CanUserSort="False">
+                  <DataGridTemplateColumn Header="✓" Width="48" CanUserSort="False" CanUserReorder="False">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate x:DataType="vm:MessageRowViewModel">
                         <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"

@@ -7,7 +7,7 @@ using Xunit;
 
 namespace SbMac.Tests;
 
-public sealed class AppPreferencesTests : IDisposable
+public sealed partial class AppPreferencesTests : IDisposable
 {
     static readonly DateTimeOffset Timestamp = new(2026, 8, 14, 4, 30, 0, TimeSpan.Zero);
 

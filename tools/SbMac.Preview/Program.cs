@@ -26,7 +26,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -62,7 +62,7 @@ try
     if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
     if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
     if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
-    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule" or "resubmit" or "resubmit-long"))) throw new ArgumentException("--native-screen needs --native and a supported screen.");
+    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule" or "resubmit" or "resubmit-long" or "table-layout"))) throw new ArgumentException("--native-screen needs --native and a supported screen.");
     if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
     if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
     if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
@@ -91,7 +91,7 @@ static int FontCheck()
 }
 
 void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
-    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen send|send-empty|send-delivery|topic|subscription|rule|resubmit|resubmit-long]\n" +
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen send|send-empty|send-delivery|topic|subscription|rule|resubmit|resubmit-long|table-layout]\n" +
     "       SbMac.Preview --font-check   (macOS only: native system-font resolution)");
 Directory.CreateDirectory(outDir);
 var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
@@ -117,6 +117,7 @@ try
         Render("workspace-loading", BuildLoadingWindow, 1360, 860);
         Render("workspace-empty", BuildEmptyWindow, 1360, 860);
         Render("columns", () => BuildMainWindow(), 1360, 860);
+        Render("table-layout", () => BuildMainWindow(tableLayout: true), 1360, 860);
         Render("selection-none", () => BuildMainWindow(), 1360, 860);
         Render("selection-selected", () => BuildMainWindow(), 1360, 860);
         Render("inspector-collapsed", () => { var window = BuildMainWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
@@ -188,7 +189,7 @@ try
 finally { stateRoot.Delete(recursive: true); }
 return;
 
-MainWindowViewModel IsolatedViewModel(NamespaceConnection connection, bool preferenceFailure = false)
+MainWindowViewModel IsolatedViewModel(NamespaceConnection connection, bool preferenceFailure = false, bool tableLayout = false)
 {
     var dir = Directory.CreateDirectory(Path.Combine(stateRoot.FullName, Guid.NewGuid().ToString("N")));
     var store = new ConnectionStore(Path.Combine(dir.FullName, "connections.json"), new FileSecretStore(Path.Combine(dir.FullName, "secrets.json")));
@@ -200,8 +201,15 @@ MainWindowViewModel IsolatedViewModel(NamespaceConnection connection, bool prefe
         File.WriteAllText(blocked, "not a directory");
         preferences = new AppPreferencesService(new JsonSettingsStore(Path.Combine(blocked, "settings.json")));
     }
+    if (tableLayout)
+    {
+        var file = Path.Combine(dir.FullName, "settings.json");
+        File.WriteAllText(file, """{"messageTables":{"serviceBus":{"columns":[{"id":"preview","visible":true,"displayIndex":1,"width":240},{"id":"label","visible":true,"displayIndex":2,"width":160},{"id":"sequence","visible":true,"displayIndex":3,"width":98},{"id":"enqueued","visible":true,"displayIndex":4,"width":140},{"id":"messageId","visible":false}]}}}""");
+        preferences = new AppPreferencesService(new JsonSettingsStore(file));
+        preferences.Load();
+    }
     var vm = MainWindowViewModel.CreateIsolated(store, (_, _) => throw new InvalidOperationException("Preview cannot connect to Azure."), preferences);
-    if (preferences is not null) Pump(preferences.SetThemeAsync(AppTheme.Dark));
+    if (preferenceFailure) Pump(preferences!.SetThemeAsync(AppTheme.Dark));
     Pump(vm.InitializeAsync());
     vm.StatusText = "Ready";
     vm.Log.Clear();
@@ -272,7 +280,7 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         }
     }
-    if (name.StartsWith("selection-selected-") || name.StartsWith("adaptive-"))
+    if (name.StartsWith("selection-selected-") || name.StartsWith("adaptive-") || name.StartsWith("table-layout-"))
     {
         var grid = window.FindControl<DataGrid>("MessageGrid")!;
         var vm = (MainWindowViewModel)window.DataContext!;
@@ -434,7 +442,7 @@ MainWindow BuildEmptyWindow()
     return window;
 }
 
-MainWindow BuildMainWindow(bool preferenceFailure = false)
+MainWindow BuildMainWindow(bool preferenceFailure = false, bool tableLayout = false)
 {
     var connection = new NamespaceConnection
     {
@@ -443,7 +451,7 @@ MainWindow BuildMainWindow(bool preferenceFailure = false)
         FullyQualifiedNamespace = "contoso-prod.servicebus.windows.net"
     };
 
-    var viewModel = IsolatedViewModel(connection, preferenceFailure);
+    var viewModel = IsolatedViewModel(connection, preferenceFailure, tableLayout);
     var ns = viewModel.Namespaces.Single();
     ns.IsExpanded = true;
 
