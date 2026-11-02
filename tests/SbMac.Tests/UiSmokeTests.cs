@@ -1064,6 +1064,50 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void SelectionRemeasuresAfterBoundContentSettles()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 1700, Height = 600, DataContext = vm };
+        window.Show();
+        vm.Messages.Add(BuildMessageRow(1));
+        window.UpdateLayout();
+        Assert.False(window.HeaderCompact);
+        window.GetControl<DataGrid>("MessageGrid").SelectAll();
+        // Simulate a native font or bound label becoming wider after selection notification.
+        window.GetControl<Button>("InspectorButton").Width = 1400;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.True(window.HeaderCompact);
+        Assert.True(window.GetControl<Button>("MessageActionsButton").IsEffectivelyVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SelectionTransitionReevaluatesSettledHeaderWidth()
+    {
+        var vm = NewIsolatedViewModel();
+        var window = new MainWindow { Width = 1100, Height = 600, DataContext = vm };
+        window.Show();
+        vm.Messages.Add(BuildMessageRow(1));
+        window.UpdateLayout();
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        grid.SelectAll();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        var header = window.GetControl<DockPanel>("MessageHeader");
+        var visible = header.Children.OfType<Control>().Where(c => c.IsEffectivelyVisible).ToArray();
+        var bounds = visible.Select(c => (Left: c.TranslatePoint(new Avalonia.Point(), header)!.Value.X, c.Bounds.Width))
+            .OrderBy(b => b.Left).ToArray();
+        for (var i = 1; i < bounds.Length; i++)
+            Assert.True(bounds[i - 1].Left + bounds[i - 1].Width <= bounds[i].Left + 0.5);
+        grid.SelectedItems.Clear();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Assert.Empty(vm.SelectedMessages);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void NarrowMessageHeaderKeepsSelectionControlsAndMovesActionsToMenu()
     {
         var window = new MainWindow { Width = 960, Height = 600, DataContext = NewIsolatedViewModel() };

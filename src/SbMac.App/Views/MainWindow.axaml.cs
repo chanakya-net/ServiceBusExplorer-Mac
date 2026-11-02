@@ -104,7 +104,8 @@ public partial class MainWindow : Window, IUiServices
     void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(MainWindowViewModel.MessageTableContext) or nameof(MainWindowViewModel.MessageColumns)) ApplyMessageLayout();
-        if (e.PropertyName == nameof(MainWindowViewModel.HasSelectedMessages)) UpdateHeaderLayout();
+        if (e.PropertyName == nameof(MainWindowViewModel.MessageSelectionSummary))
+            Avalonia.Threading.Dispatcher.UIThread.Post(UpdateHeaderLayout, Avalonia.Threading.DispatcherPriority.Loaded);
         if (e.PropertyName == nameof(MainWindowViewModel.IsInspectorVisible) && ViewModel is { } vm)
             UpdateInspectorVisibility(vm.IsInspectorVisible, moveFocus: !applyingSavedPanels);
         if (e.PropertyName is nameof(MainWindowViewModel.IsInspectorVisible) or nameof(MainWindowViewModel.IsActivityExpanded))
