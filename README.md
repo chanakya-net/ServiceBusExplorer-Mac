@@ -602,12 +602,12 @@ workspace defaults were 1360×860. Rendering success is separate from visual app
   validation-only slice.
 - The `settings-reset` frame uses programmatic focus and shows no distinct keyboard
   outline. `topic-invalid` seeds an invalid value without pressing Save, so that frame
-  does not establish submitted validation. Supplemental native checks remain pending.
+  does not establish submitted validation. Supplemental native checks remained pending in the first attempt; see the resume record below.
 
 | Self-contained package | Version | Host/runtime architecture | Signature | Native evidence |
 |---|---|---|---|---|
 | `./build/make-app.sh osx-arm64` | 0.0.0 | arm64 | Ad-hoc | Startup, menu/Settings, Light/Dark and isolated restart observed |
-| `./build/make-app.sh osx-x64` | 0.0.0 | x86_64 | Ad-hoc | Static inspection only; physical Intel check pending |
+| `./build/make-app.sh osx-x64` | 0.0.0 | x86_64 | Ad-hoc | Static inspection only; physical Intel checks waived/unverified |
 
 The native arm64 package stayed running for at least 20 seconds. Its menu included
 File/Entity/Messages/View and Settings; menu activation and Cmd+, opened Settings with
@@ -625,13 +625,29 @@ personal-store nonaccess/nonmutation cannot be certified for the unintended star
 The existing full test suite separately creates and removes disposable Keychain fixture
 records with unique account/connection keys.
 
+**Resume record (2026-11-02):** the user explicitly waived physical Intel checks;
+these remain unverified and were never passed. At preserved documentation revision
+`fa9562b6c7d682dfe073149f880a395bf9f12ba8`, the first isolated Preview relaunch
+again aborted with RenderTimer `-6661` (SIGABRT, subprocess return code -6).
+A transient display-wake assertion allowed another process to start, but the subsequent
+capture showed the login screen and the OS reported `CGSSessionScreenIsLocked=true`.
+Cmd+, did not establish Settings activation; the Settings AX query failed with `-1728`.
+The owned process was stopped by exact PID with SIGTERM; clean interactive Quit was
+not verified in this resume. Process liveness is not a successful restart/interactions
+check. Settings Reset keyboard
+focus and submitted Topic validation in Light and Dark remain unverified. All launches
+specified temporary HOME and fixture state; no closed app was queried through the UI tool.
+The 529-test Release suite and both release-script checks passed again before this
+README-only follow-up; exact post-commit checks are stored in the resume evidence.
+
 **Unverified / assistance required:**
 
-- **[HITL] Physical Intel/osx-x64 startup, menus, Light/Dark and restart.** No Intel Mac
-  was available; `arch -x86_64 /usr/bin/true` failed with “Bad CPU type in executable”.
-  Cross-building or Rosetta would not establish physical Intel verification.
-- **[HITL] Unlock the Mac and repeat Native Preview restart**, then check the Settings
-  Reset keyboard cue and submitted Topic validation in both themes.
+- **Waived by user: physical Intel/osx-x64 startup, menus, Light/Dark and restart.** No
+  Intel hardware was exercised. The historical Rosetta probe failed with “Bad CPU type
+  in executable”; cross-building or Rosetta would not establish physical Intel verification.
+- **[HITL] Keep the Mac unlocked for Native Preview restart**, Settings Reset keyboard
+  focus and submitted Topic validation in both themes. The resume capture and session
+  flag showed that the desktop had relocked; required native checks remain blocked.
 - VoiceOver, multi-monitor recovery/secondary-screen placement, and Developer ID
   signing/notarization remain unverified; the existing release/signing behavior is unchanged.
 
@@ -643,6 +659,11 @@ Durable local evidence is under
 and the Intel ZIP; `native/native-checks.md` records native observations and the
 isolation exception; `hitl.md` gives the remaining human checks. These are local run
 artifacts, not committed release assets or evidence of complete platform verification.
+The preserved evidence above is reused because the runtime tree is unchanged. Resume
+commands, failures, isolation/revision proof and final regression logs are under
+`.run-with-it/issues/44/evidence/impl-f9905751/`; `native/native-checks.md` records the
+remaining checks and `summary.json` records the exact follow-up commit. The original
+`impl-d9c47956` evidence and historical failures are retained without relabelling.
 
 ## Implementation notes
 
