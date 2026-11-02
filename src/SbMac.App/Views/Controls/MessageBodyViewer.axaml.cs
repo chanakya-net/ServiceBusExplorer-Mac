@@ -1,3 +1,4 @@
+using System.Text;
 using System.Xml;
 
 using Avalonia;
@@ -6,6 +7,7 @@ using Avalonia.Platform;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Styling;
+using Avalonia.Threading;
 
 using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
@@ -29,13 +31,33 @@ public partial class MessageBodyViewer : UserControl
     static readonly Dictionary<string, IHighlightingDefinition> Definitions = [];
 
     bool themeSubscribed;
-    readonly List<int> matches = [];
+    /// <summary>Displayed UTF-8 size above which syntax highlighting is switched off.</summary>
+    internal const int HighlightByteLimit = 1024 * 1024;
+    /// <summary>Bodies longer than this load on a later dispatcher turn so rapid selection supersedes them.</summary>
+    internal const int DeferredLoadChars = 64 * 1024;
+    internal const int MaxMatches = 10_000;
+    /// <summary>A single line longer than this is not soft-wrapped: wrapping one huge line costs minutes of layout.</summary>
+    internal const int WrapLineLimit = 200_000;
+
+    const string PlainTextNotice = "This body is larger than 1 MiB, so syntax highlighting is off and it is shown as plain text.";
+    const string NoWrapNotice = "A line in this body is extremely long, so word wrap is not applied to it.";
+    const string FullTextNotice = "The full text is still here: scroll, search, select or copy it.";
+    bool hasHugeLine;
+
+    List<int> matches = [];
+    bool matchesCapped;
     int matchIndex = -1;
+    int loadVersion;
+    CancellationTokenSource? searchCts;
+
+    /// <summary>Number of times the editor document was actually replaced (test/diagnostic aid).</summary>
+    internal int DocumentLoads { get; private set; }
+    internal bool IsSearching { get; private set; }
 
     public MessageBodyViewer()
     {
         InitializeComponent();
-        WrapToggle.IsCheckedChanged += (_, _) => Editor.WordWrap = WrapToggle.IsChecked == true;
+        WrapToggle.IsCheckedChanged += (_, _) => ApplyWrap();
         OpenFindButton.Click += (_, _) => OpenFind();
         FindQuery.TextChanged += (_, _) => RefreshMatches();
         PreviousButton.Click += (_, _) => FindPrevious();
@@ -90,16 +112,52 @@ public partial class MessageBodyViewer : UserControl
 
     void Refresh()
     {
-        var editor = Editor;
         var text = Text ?? string.Empty;
-        if (!string.Equals(editor.Text, text, StringComparison.Ordinal))
+        var version = ++loadVersion;
+        if (text.Length > DeferredLoadChars && !string.Equals(Editor.Text, text, StringComparison.Ordinal))
         {
-            editor.Text = text;
-            RefreshMatches();
+            searchCts?.Cancel();
+            Dispatcher.UIThread.Post(() => { if (version == loadVersion) Apply(text); }, DispatcherPriority.Background);
+            return;
         }
 
-        editor.SyntaxHighlighting = DefinitionFor(Format, ActualThemeVariant);
+        Apply(text);
     }
+
+    void Apply(string text)
+    {
+        var editor = Editor;
+        var plainOnly = ExceedsHighlightLimit(text);
+        hasHugeLine = HasLineLongerThan(text, WrapLineLimit);
+        HighlightNotice.Text = string.Join(" ", new[] { plainOnly ? PlainTextNotice : null, hasHugeLine ? NoWrapNotice : null, FullTextNotice }.OfType<string>());
+        HighlightNotice.IsVisible = plainOnly || hasHugeLine;
+        ApplyWrap();
+        editor.SyntaxHighlighting = plainOnly ? null : DefinitionFor(Format, ActualThemeVariant);
+        if (string.Equals(editor.Text, text, StringComparison.Ordinal)) return;
+        editor.Text = text;
+        DocumentLoads++;
+        RefreshMatches();
+    }
+
+    void ApplyWrap() => Editor.WordWrap = WrapToggle.IsChecked == true && !hasHugeLine;
+
+    static bool HasLineLongerThan(string text, int limit)
+    {
+        if (text.Length <= limit) return false;
+        for (var start = 0; start < text.Length;)
+        {
+            var end = text.IndexOf('\n', start);
+            if (end < 0) end = text.Length;
+            if (end - start > limit) return true;
+            start = end + 1;
+        }
+
+        return false;
+    }
+
+    static bool ExceedsHighlightLimit(string text) =>
+        text.Length > HighlightByteLimit
+        || (text.Length * 3L > HighlightByteLimit && Encoding.UTF8.GetByteCount(text) > HighlightByteLimit);
 
     internal void OpenFind()
     {
@@ -139,22 +197,60 @@ public partial class MessageBodyViewer : UserControl
 
     void RefreshMatches()
     {
-        matches.Clear();
+        searchCts?.Cancel();
+        searchCts = null;
+        IsSearching = false;
+        matches = [];
+        matchesCapped = false;
         matchIndex = -1;
         var query = FindQuery.Text ?? string.Empty;
         var text = Editor.Text ?? string.Empty;
-        if (query.Length > 0)
+        if (query.Length == 0 || text.Length <= DeferredLoadChars)
         {
-            for (var start = 0; start <= text.Length - query.Length;)
-            {
-                var offset = text.IndexOf(query, start, StringComparison.OrdinalIgnoreCase);
-                if (offset < 0) break;
-                matches.Add(offset);
-                start = offset + query.Length;
-            }
+            (matches, matchesCapped) = Scan(text, query, CancellationToken.None);
+            FinishSearch();
+            return;
         }
+
+        StartBackgroundSearch(text, query);
+    }
+
+    void StartBackgroundSearch(string text, string query)
+    {
+        var cts = searchCts = new CancellationTokenSource();
+        IsSearching = true;
+        FindStatus.Text = "Searching…";
+        Editor.Select(0, 0);
+        _ = Task.Run(() => Scan(text, query, cts.Token), cts.Token).ContinueWith(task =>
+        {
+            if (cts.IsCancellationRequested || !task.IsCompletedSuccessfully) return;
+            (matches, matchesCapped) = task.Result;
+            IsSearching = false;
+            FinishSearch();
+        }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    void FinishSearch()
+    {
         if (matches.Count > 0) matchIndex = 0;
         ShowMatch();
+    }
+
+    static (List<int> Matches, bool Capped) Scan(string text, string query, CancellationToken token)
+    {
+        var found = new List<int>();
+        if (query.Length == 0) return (found, false);
+        for (var start = 0; start <= text.Length - query.Length;)
+        {
+            token.ThrowIfCancellationRequested();
+            var offset = text.IndexOf(query, start, StringComparison.OrdinalIgnoreCase);
+            if (offset < 0) break;
+            if (found.Count == MaxMatches) return (found, true);
+            found.Add(offset);
+            start = offset + query.Length;
+        }
+
+        return (found, false);
     }
 
     internal void FindNext() => Navigate(1);
@@ -162,7 +258,7 @@ public partial class MessageBodyViewer : UserControl
 
     void Navigate(int direction)
     {
-        if (matches.Count == 0) return;
+        if (matches.Count == 0 || IsSearching) return;
         matchIndex = (matchIndex + direction + matches.Count) % matches.Count;
         ShowMatch();
     }
@@ -179,7 +275,7 @@ public partial class MessageBodyViewer : UserControl
         Editor.Select(offset, FindQuery.Text!.Length);
         var location = Editor.Document.GetLocation(offset);
         Editor.ScrollTo(location.Line, location.Column);
-        FindStatus.Text = $"{matchIndex + 1} of {matches.Count}";
+        FindStatus.Text = $"{matchIndex + 1} of {matches.Count}{(matchesCapped ? "+" : "")}";
     }
 
     static IHighlightingDefinition? DefinitionFor(string? format, ThemeVariant theme)

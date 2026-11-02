@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -248,4 +250,186 @@ public partial class UiSmokeTests
         window.Close();
     }
 
+    const int Limit = MessageBodyViewer.HighlightByteLimit;
+
+    /// <summary>
+    /// Multi-line JSON (one 40-char string per line once pretty-printed) whose displayed text is
+    /// exactly <paramref name="bytes"/> UTF-8 bytes; <paramref name="variant"/> makes distinct documents.
+    /// </summary>
+    static string JsonOfBytes(int bytes, int variant = 0)
+    {
+        string Build(int pad) => "[" + string.Join(",", Enumerable.Range(0, (bytes - 2) / 50)
+            .Select(i => "\"" + variant.ToString("D4") + i.ToString("D6") + new string('x', 30) + "\"")) + ",\"" + new string('p', pad) + "\"]";
+        var shown = Encoding.UTF8.GetByteCount(MessageBodyDecoder.Decode(BinaryData.FromString(Build(0))).Text);
+        return Build(bytes - shown);
+    }
+
+    /// <summary>Single-line JSON string value of the given size: the pathological long-line case.</summary>
+    static string LongLineJson(int bytes) => "{\"k\": \"" + new string('x', bytes - 12) + "\"}";
+
+    [AvaloniaFact]
+    public void BodyOverOneMiBShowsFullPlainTextWithExplanation()
+    {
+        var body = JsonOfBytes(Limit + 1);
+        var (window, vm, viewer, recorder) = OpenBody(BodyRow(body));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("JSON", vm.BodyFormatLabel);
+        Assert.Null(viewer.Editor.SyntaxHighlighting);
+        Assert.True(viewer.HighlightNotice.IsVisible);
+        Assert.Contains("plain text", viewer.HighlightNotice.Text);
+        Assert.Equal(vm.BodyText, viewer.Editor.Text);
+        Assert.True(Encoding.UTF8.GetByteCount(vm.BodyText) > Limit);
+        vm.CopyBodyCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal([vm.BodyText], recorder.ClipboardTexts);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void BodyAtExactlyOneMiBStaysHighlightedWithoutNotice()
+    {
+        var (window, vm, viewer, _) = OpenBody(BodyRow(JsonOfBytes(Limit)));
+        Assert.Equal(Limit, Encoding.UTF8.GetByteCount(vm.BodyText));
+        Dispatcher.UIThread.RunJobs();
+        Assert.NotNull(viewer.Editor.SyntaxHighlighting);
+        Assert.False(viewer.HighlightNotice.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void ThresholdCountsUtf8BytesNotCharacters()
+    {
+        var body = "\"" + new string('é', Limit / 2) + "\"";
+        Assert.True(Encoding.UTF8.GetByteCount(body) > Limit && body.Length < Limit);
+        var (window, _, viewer, _) = OpenBody(BodyRow(body));
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(viewer.HighlightNotice.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void RapidSelectionLoadsOnlyTheLatestLargeBody()
+    {
+        var (window, vm, viewer, _) = OpenBody(BodyRow("small"));
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        var loadsBefore = viewer.DocumentLoads;
+        MessageRowViewModel last = null!;
+        for (var i = 0; i < 5; i++)
+        {
+            last = BodyRow(JsonOfBytes(Limit + 10 + i));
+            vm.Messages.Add(last);
+            grid.SelectedItem = last;
+        }
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(last.BodyText, viewer.Editor.Text);
+        Assert.Equal(1, viewer.DocumentLoads - loadsBefore);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SelectingSmallBodyAfterLargeDiscardsPendingLargeLoad()
+    {
+        var (window, vm, viewer, _) = OpenBody(BodyRow("small"));
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        var big = BodyRow(JsonOfBytes(Limit + 10));
+        var tiny = BodyRow("tiny");
+        vm.Messages.Add(big); vm.Messages.Add(tiny);
+        grid.SelectedItem = big;
+        grid.SelectedItem = tiny;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("tiny", viewer.Editor.Text);
+        Assert.False(viewer.HighlightNotice.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void LargeBodyFindIsBoundedAndStaleSearchIsDiscarded()
+    {
+        var body = string.Concat(Enumerable.Repeat("alpha beta ", 60_000));
+        var (window, _, viewer, _) = OpenBody(BodyRow(body));
+        Dispatcher.UIThread.RunJobs();
+        viewer.OpenFind();
+        viewer.FindQuery.Text = "alpha";
+        viewer.FindQuery.Text = "beta";
+        WaitForSearch(viewer);
+
+        Assert.Equal("1 of 10000+", viewer.FindStatus.Text);
+        Assert.Equal("beta", viewer.SelectedText);
+        viewer.FindQuery.Text = "zzz";
+        WaitForSearch(viewer);
+        Assert.Equal("No matches", viewer.FindStatus.Text);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void SelectionChangeCancelsInFlightLargeSearch()
+    {
+        var body = string.Concat(Enumerable.Repeat("alpha ", 120_000));
+        var (window, vm, viewer, _) = OpenBody(BodyRow(body));
+        Dispatcher.UIThread.RunJobs();
+        viewer.OpenFind();
+        viewer.FindQuery.Text = "alpha";
+        var next = BodyRow("nothing");
+        vm.Messages.Add(next);
+        window.GetControl<DataGrid>("MessageGrid").SelectedItem = next;
+        WaitForSearch(viewer);
+        Assert.Equal("No matches", viewer.FindStatus.Text);
+        Assert.Equal("", viewer.SelectedText);
+        window.Close();
+    }
+
+    static void WaitForSearch(MessageBodyViewer viewer)
+    {
+        var timer = Stopwatch.StartNew();
+        do { Dispatcher.UIThread.RunJobs(); Thread.Sleep(5); }
+        while (viewer.IsSearching && timer.Elapsed < TimeSpan.FromSeconds(20));
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(viewer.IsSearching);
+    }
+
+    /// <summary>Records timings for local investigation; asserts only correctness, never wall-clock.</summary>
+    [AvaloniaFact]
+    public void TenThousandRowsShareFewLargeBodiesAndRecordSelectionTimings()
+    {
+        var shared = Enumerable.Range(0, 4).Select(v => BinaryData.FromString(JsonOfBytes(Limit + 1, v))).ToArray();
+        var (window, vm, viewer, _) = OpenBody(BodyRow("seed"));
+        for (var i = 0; i < 10_000; i++)
+            vm.Messages.Add(new MessageRowViewModel(new MessageRecord { Body = shared[i % 4], SourceEntityPath = "orders", SequenceNumber = i + 2 }));
+        var grid = window.GetControl<DataGrid>("MessageGrid");
+        var timings = new List<string>();
+        for (var i = 1; i <= 12; i++)
+        {
+            var row = vm.Messages[i * 700 + 1];
+            var watch = Stopwatch.StartNew();
+            grid.SelectedItem = row;
+            Dispatcher.UIThread.RunJobs();
+            timings.Add($"selection {i}{(i == 1 ? " (first load)" : " (warm)")}: {watch.Elapsed.TotalMilliseconds:F1} ms");
+            Assert.Equal(row.BodyText, viewer.Editor.Text);
+        }
+        Assert.Equal(10_001, vm.Messages.Count);
+        Assert.True(viewer.HighlightNotice.IsVisible);
+        var path = Environment.GetEnvironmentVariable("SBMAC_TIMINGS_FILE");
+        if (path is not null) File.WriteAllLines(path, timings);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void VeryLongLineDisablesWrapRenderingWithNoticeButKeepsToggleAndText()
+    {
+        var body = new string('w', MessageBodyViewer.WrapLineLimit + 1);
+        var (window, vm, viewer, _) = OpenBody(BodyRow(body));
+        viewer.WrapToggle.IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(viewer.WrapToggle.IsChecked);
+        Assert.False(viewer.Editor.WordWrap);
+        Assert.Contains("wrap", viewer.HighlightNotice.Text);
+        Assert.Equal(vm.BodyText, viewer.Editor.Text);
+        var (shortWindow, _, shortViewer, _) = OpenBody(BodyRow(new string('w', 500) + "\n" + new string('w', 500)));
+        shortViewer.WrapToggle.IsChecked = true;
+        Assert.True(shortViewer.Editor.WordWrap);
+        Assert.False(shortViewer.HighlightNotice.IsVisible);
+        window.Close(); shortWindow.Close();
+    }
 }

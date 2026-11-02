@@ -7,6 +7,10 @@
       <CheckBox x:Name="WrapToggle" Content="Word wrap" VerticalAlignment="Center" />
       <Button x:Name="OpenFindButton" Content="Find" />
     </StackPanel>
+    <TextBlock x:Name="HighlightNotice" DockPanel.Dock="Top" IsVisible="False" TextWrapping="Wrap" Margin="10,4"
+               Foreground="{DynamicResource TextSecondaryBrush}"
+               AutomationProperties.Name="Highlighting disabled for large body"
+               />
     <StackPanel x:Name="FindBar" DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="8,6" IsVisible="False">
       <TextBox x:Name="FindQuery" Width="200" PlaceholderText="Find in body" AutomationProperties.Name="Find in body" />
       <TextBlock x:Name="FindStatus" VerticalAlignment="Center" MinWidth="80" />
