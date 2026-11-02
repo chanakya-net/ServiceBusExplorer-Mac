@@ -574,6 +574,76 @@ Rendering the UI (rather than only compiling it) caught two more:
 
 ---
 
+### S35 validation record (2026-11-02)
+
+**Platform verification remains incomplete.** Runtime evidence was collected at
+`d6ca126ae3cf6074a9b2fedb3f3d3121f1829e51` on macOS 27.2 (26B123), Apple M5 Max
+(arm64), .NET SDK 10.0.403. The S35 check-in changes only this README; post-commit
+regression results and the exact documentation commit SHA are recorded outside the
+source tree to avoid a self-referencing commit.
+
+| Required check at the runtime revision | Observed result |
+|---|---|
+| `dotnet build SB-Mac.slnx --configuration Release` | Passed |
+| `dotnet test tests/SbMac.Tests/SbMac.Tests.csproj --configuration Release --no-build` | 529 passed, 0 failed, 0 skipped; 1 m 18 s |
+| `bash tests/next-release-version.sh` | Passed |
+| `bash tests/release-workflow.sh` | Passed |
+| Release Preview build and full render matrix | Passed: 64 supported screens × Light/Dark = 128 PNGs, plus 33 workspace screens × Light/Dark at 960×600 = 66 PNGs |
+
+All **194 images** were inspected for clipping, overlap, focus cues and readable theme
+surfaces, with one observation per image. Dialogs retained their fixture/natural sizes;
+workspace defaults were 1360×860. Rendering success is separate from visual approval:
+
+- Import Policy's focused “Skip entities that already exist” label clips at its right
+  edge in both themes, including the long-summary fixture.
+- At 960×600, expanded Activity leaves the inspector's Wrap/Find controls clipped and
+  its body hidden. Find and large-body notices can also consume the inspector viewport,
+  clipping the large-body Find controls. These findings remain unfixed in this
+  validation-only slice.
+- The `settings-reset` frame uses programmatic focus and shows no distinct keyboard
+  outline. `topic-invalid` seeds an invalid value without pressing Save, so that frame
+  does not establish submitted validation. Supplemental native checks remain pending.
+
+| Self-contained package | Version | Host/runtime architecture | Signature | Native evidence |
+|---|---|---|---|---|
+| `./build/make-app.sh osx-arm64` | 0.0.0 | arm64 | Ad-hoc | Startup, menu/Settings, Light/Dark and isolated restart observed |
+| `./build/make-app.sh osx-x64` | 0.0.0 | x86_64 | Ad-hoc | Static inspection only; physical Intel check pending |
+
+The native arm64 package stayed running for at least 20 seconds. Its menu included
+File/Entity/Messages/View and Settings; menu activation and Cmd+, opened Settings with
+Appearance focused. Light then Dark were saved to temporary HOME state, and a subsequent
+isolated restart restored Dark. Native Preview likewise exercised its real menus,
+Cmd+,, both live themes and clean Quit against `contoso-fixture` temporary state, with
+Azure connections refused. Its supplemental restart attempts failed twice with native
+RenderTimer error `-6661`; the UI tool then confirmed the Mac was locked. These failed
+commands remain recorded as failures, not inapplicable checks.
+
+Isolation exception: after Quit, a UI-tool state query automatically reopened the owned
+package with the default HOME. That exact process was stopped; subsequent launches used
+explicit temporary HOME. No personal configuration was inspected by the worker, but
+personal-store nonaccess/nonmutation cannot be certified for the unintended startup.
+The existing full test suite separately creates and removes disposable Keychain fixture
+records with unique account/connection keys.
+
+**Unverified / assistance required:**
+
+- **[HITL] Physical Intel/osx-x64 startup, menus, Light/Dark and restart.** No Intel Mac
+  was available; `arch -x86_64 /usr/bin/true` failed with “Bad CPU type in executable”.
+  Cross-building or Rosetta would not establish physical Intel verification.
+- **[HITL] Unlock the Mac and repeat Native Preview restart**, then check the Settings
+  Reset keyboard cue and submitted Topic validation in both themes.
+- VoiceOver, multi-monitor recovery/secondary-screen placement, and Developer ID
+  signing/notarization remain unverified; the existing release/signing behavior is unchanged.
+
+Durable local evidence is under
+`.run-with-it/issues/44/evidence/impl-d9c47956/` in the run's parent repository,
+**outside this worktree**: `commands.jsonl` records applicability before execution;
+`results.jsonl` records exact commands, revisions and exit codes; `inspection.md` and
+`images.tsv` cover every image; `packages/` preserves both bundles, file/hash manifests
+and the Intel ZIP; `native/native-checks.md` records native observations and the
+isolation exception; `hitl.md` gives the remaining human checks. These are local run
+artifacts, not committed release assets or evidence of complete platform verification.
+
 ## Implementation notes
 
 Things that are non-obvious, and why they are the way they are.
