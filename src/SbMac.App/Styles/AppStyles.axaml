@@ -285,7 +285,7 @@
     <Setter Property="Background" Value="{DynamicResource ChromeBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
     <Setter Property="BorderThickness" Value="0,0,0,1" />
-    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Padding" Value="12,6" />
   </Style>
 
   <Style Selector="Border.toolbar">
@@ -385,7 +385,8 @@
     <Setter Property="RowBackground" Value="Transparent" />
     <Setter Property="GridLinesVisibility" Value="Horizontal" />
     <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource DividerBrush}" />
-    <Setter Property="RowHeight" Value="30" />
+    <Setter Property="RowHeight" Value="28" />
+    <Setter Property="MinHeight" Value="96" />
   </Style>
 
   <Style Selector="DataGridColumnHeader">
@@ -393,7 +394,7 @@
     <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
     <Setter Property="FontSize" Value="{StaticResource FontCaption}" />
     <Setter Property="FontWeight" Value="SemiBold" />
-    <Setter Property="Padding" Value="10,7" />
+    <Setter Property="Padding" Value="10,5" />
     <Setter Property="SeparatorBrush" Value="Transparent" />
   </Style>
 

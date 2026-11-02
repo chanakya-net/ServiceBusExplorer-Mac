@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 // Avalonia 12 moved SetTextAsync off IClipboard onto ClipboardExtensions in this namespace.
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
@@ -40,6 +41,46 @@ public partial class MainWindow : Window, IUiServices
         DetailsSplitter.DragCompleted += (_, _) => CapturePanelLayout();
         MainSplitLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
         MessageDetailLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
+        MessageHeader.SizeChanged += (_, _) => UpdateHeaderLayout();
+        MainToolbar.SizeChanged += (_, _) => UpdateToolbarLayout();
+        SizeChanged += (_, _) => ActivityPanel.MaxHeight = Math.Max(120, Math.Min(280, Bounds.Height * 0.25));
+    }
+
+    // Selection summary, Select all/Clear and Columns always stay; the rest overflow into "More".
+    internal bool HeaderCompact { get; private set; }
+
+    void UpdateHeaderLayout()
+    {
+        SetHeaderCompact(false);
+        var available = MessageHeader.Bounds.Width;
+        var compact = AdaptiveWidth.NeedsCompaction(MessageHeader.Children.OfType<Control>().Where(c => !ReferenceEquals(c, MessageActionsButton)), available);
+        SetHeaderCompact(compact);
+    }
+
+    void SetHeaderCompact(bool compact)
+    {
+        HeaderCompact = compact;
+        InspectorButton.IsVisible = !compact;
+        BulkButtons.IsVisible = !compact;
+        EditAndResendButton.IsVisible = !compact;
+        MessageActionsButton.IsVisible = compact;
+    }
+
+    // Labels collapse to icons (tooltip + automation name keep the words) before controls clip.
+    internal bool ToolbarCompact { get; private set; }
+
+    void UpdateToolbarLayout()
+    {
+        SetToolbarCompact(false);
+        var compact = AdaptiveWidth.NeedsCompaction(MainToolbar.Children.OfType<Control>(), MainToolbar.Bounds.Width);
+        SetToolbarCompact(compact);
+    }
+
+    void SetToolbarCompact(bool compact)
+    {
+        ToolbarCompact = compact;
+        foreach (var label in MainToolbar.GetVisualDescendants().OfType<TextBlock>().Where(t => t.Classes.Contains("toolbarLabel")))
+            label.IsVisible = !compact;
     }
 
     MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
@@ -63,6 +104,8 @@ public partial class MainWindow : Window, IUiServices
     void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(MainWindowViewModel.MessageTableContext) or nameof(MainWindowViewModel.MessageColumns)) ApplyMessageLayout();
+        if (e.PropertyName == nameof(MainWindowViewModel.MessageSelectionSummary))
+            Avalonia.Threading.Dispatcher.UIThread.Post(UpdateHeaderLayout, Avalonia.Threading.DispatcherPriority.Loaded);
         if (e.PropertyName == nameof(MainWindowViewModel.IsInspectorVisible) && ViewModel is { } vm)
             UpdateInspectorVisibility(vm.IsInspectorVisible, moveFocus: !applyingSavedPanels);
         if (e.PropertyName is nameof(MainWindowViewModel.IsInspectorVisible) or nameof(MainWindowViewModel.IsActivityExpanded))
@@ -72,6 +115,7 @@ public partial class MainWindow : Window, IUiServices
     void UpdateInspectorVisibility(bool visible, bool moveFocus)
     {
         var rows = MessageDetailLayout.RowDefinitions;
+        rows[3].MinHeight = visible ? 90 : 0;
         if (visible)
         {
             rows[1].Height = tableHeight;

@@ -76,25 +76,27 @@
 
     <!-- ══════════════════════════════ toolbar ══════════════════════════════ -->
     <Border Grid.Row="0" Classes="toolbar">
-      <DockPanel LastChildFill="False">
+      <DockPanel x:Name="MainToolbar" LastChildFill="False">
 
         <Button DockPanel.Dock="Left" Classes="toolbar"
+                AutomationProperties.Name="Peek"
                 Command="{Binding PeekCommand}"
                 IsEnabled="{Binding HasMessageEntity}"
                 ToolTip.Tip="Read messages without removing them  (⌘R)">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconPeek}" />
-            <TextBlock Text="Peek" VerticalAlignment="Center" />
+            <TextBlock Classes="toolbarLabel" Text="Peek" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
 
         <Button DockPanel.Dock="Left" Classes="toolbar"
+                AutomationProperties.Name="Send"
                 Command="{Binding SendCommand}"
                 IsEnabled="{Binding CanSend}"
                 ToolTip.Tip="Compose and send a message or event  (⌘D)">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconSend}" />
-            <TextBlock Text="Send" VerticalAlignment="Center" />
+            <TextBlock Classes="toolbarLabel" Text="Send" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
 
@@ -102,13 +104,14 @@
 
         <ToggleButton DockPanel.Dock="Left"
                       Classes="toolbarToggle"
+                      AutomationProperties.Name="Dead-letter"
                       IsChecked="{Binding ShowDeadLetter}"
                       IsEnabled="{Binding CanUseBrokerActions}"
                       ToolTip.Tip="Read from the dead-letter sub-queue instead of the entity. Event Hubs has no dead-letter queue.">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconDeadLetter}"
                   Stroke="{Binding $parent[ToggleButton].Foreground}" />
-            <TextBlock Text="Dead-letter" VerticalAlignment="Center" />
+            <TextBlock Classes="toolbarLabel" Text="Dead-letter" VerticalAlignment="Center" />
           </StackPanel>
         </ToggleButton>
 
@@ -142,11 +145,12 @@
         </Button>
 
         <Button DockPanel.Dock="Right" Classes="toolbar"
+                AutomationProperties.Name="Refresh"
                 Command="{Binding RefreshCommand}"
                 ToolTip.Tip="Reload the selection from Azure  (⌘⇧R)">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Classes="icon" Data="{StaticResource IconRefresh}" />
-            <TextBlock Text="Refresh" VerticalAlignment="Center" />
+            <TextBlock Classes="toolbarLabel" Text="Refresh" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
 
@@ -154,7 +158,12 @@
     </Border>
 
     <!-- ══════════════════════════ main split view ══════════════════════════ -->
-    <Grid x:Name="MainSplitLayout" Grid.Row="1" ColumnDefinitions="280,Auto,*">
+    <Grid x:Name="MainSplitLayout" Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="280" MinWidth="200" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" MinWidth="560" />
+      </Grid.ColumnDefinitions>
 
       <!-- ─────────────── sidebar ─────────────── -->
       <Border Grid.Column="0" Classes="sidebar">
@@ -285,13 +294,20 @@
 
       <!-- ─────────────── entity detail + messages ─────────────── -->
       <!-- The list carries the scanning work, so it gets the larger share by default. -->
-      <Grid x:Name="MessageDetailLayout" Grid.Column="2" RowDefinitions="Auto,1.5*,Auto,*" Margin="18,0,18,0">
+      <Grid x:Name="MessageDetailLayout" Grid.Column="2" Margin="18,0,18,0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="1.5*" MinHeight="150" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" MinHeight="90" />
+        </Grid.RowDefinitions>
 
         <!-- entity header -->
-        <StackPanel Grid.Row="0" Margin="2,16,2,12" Spacing="4">
-          <TextBlock Text="{Binding EntityHeader}" Classes="display"
+        <StackPanel Grid.Row="0" Margin="2,12,2,8" Spacing="2">
+          <TextBlock Text="{Binding EntityHeader}" ToolTip.Tip="{Binding EntityHeader}" Classes="display"
                      TextTrimming="CharacterEllipsis" />
-          <TextBlock Text="{Binding EntitySummary}" Classes="secondary" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding EntitySummary}" ToolTip.Tip="{Binding EntitySummary}" Classes="secondary"
+                     TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
         </StackPanel>
 
         <!-- message list -->
@@ -299,9 +315,10 @@
           <Grid RowDefinitions="Auto,*">
 
             <Border Grid.Row="0" Classes="cardHeader">
-              <DockPanel LastChildFill="False">
+              <DockPanel x:Name="MessageHeader" LastChildFill="False">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6">
-                  <TextBlock Classes="caption"
+                  <TextBlock Classes="caption" MaxWidth="110" TextTrimming="CharacterEllipsis"
+                             ToolTip.Tip="{Binding MessageSourceLabel}"
                              VerticalAlignment="Center"
                              Text="{Binding MessageSourceLabel}" />
                   <TextBlock x:Name="MessageSelectionSummary"
@@ -319,13 +336,22 @@
                           Click="OnClearMessageSelection" />
                 </StackPanel>
 
+                <Button x:Name="MessageActionsButton" DockPanel.Dock="Right" Classes="toolbar" Content="More ▾">
+                  <Button.Flyout><MenuFlyout>
+                    <MenuItem Header="Inspector" Command="{Binding ToggleInspectorCommand}" />
+                    <MenuItem Header="Resubmit selected…" Command="{Binding ResubmitSelectedCommand}" IsEnabled="{Binding CanUseSelectedBrokerActions}" />
+                    <MenuItem Header="Delete selected…" Command="{Binding DeleteSelectedMessagesCommand}" IsEnabled="{Binding CanUseSelectedBrokerActions}" />
+                    <MenuItem Header="Edit and resend…" Command="{Binding ResubmitCommand}" IsEnabled="{Binding CanEditAndResend}" />
+                  </MenuFlyout></Button.Flyout>
+                </Button>
                 <Button x:Name="ColumnsButton" DockPanel.Dock="Right" Classes="toolbar" Content="Columns ▾">
                   <Button.Flyout><MenuFlyout /></Button.Flyout>
                 </Button>
-                <Button DockPanel.Dock="Right" Classes="toolbar" Content="Inspector"
+                <Button x:Name="InspectorButton" DockPanel.Dock="Right" Classes="toolbar" Content="Inspector"
                         Command="{Binding ToggleInspectorCommand}"
                         ToolTip.Tip="Show or hide message inspector (⌘⇧I)" />
 
+                <StackPanel x:Name="BulkButtons" DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button x:Name="DeleteSelectedMessagesButton"
                         DockPanel.Dock="Right" Classes="toolbar destructive"
                         Content="Delete selected"
@@ -344,7 +370,8 @@
                   </StackPanel>
                 </Button>
 
-                <Button DockPanel.Dock="Right" Classes="toolbar"
+                </StackPanel>
+                <Button x:Name="EditAndResendButton" DockPanel.Dock="Right" Classes="toolbar"
                         Content="Edit and resend"
                         Command="{Binding ResubmitCommand}"
                         IsEnabled="{Binding CanEditAndResend}" />
