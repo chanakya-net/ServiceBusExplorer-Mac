@@ -574,6 +574,119 @@ Rendering the UI (rather than only compiling it) caught two more:
 
 ---
 
+### S35 validation record (2026-11-02)
+
+**Platform verification remains incomplete.** Runtime evidence was collected at
+`d6ca126ae3cf6074a9b2fedb3f3d3121f1829e51` on macOS 27.2 (26B123), Apple M5 Max
+(arm64), .NET SDK 10.0.403. The S35 check-in changes only this README; post-commit
+regression results and the exact documentation commit SHA are recorded outside the
+source tree to avoid a self-referencing commit.
+
+| Required check at the runtime revision | Observed result |
+|---|---|
+| `dotnet build SB-Mac.slnx --configuration Release` | Passed |
+| `dotnet test tests/SbMac.Tests/SbMac.Tests.csproj --configuration Release --no-build` | 529 passed, 0 failed, 0 skipped; 1 m 18 s |
+| `bash tests/next-release-version.sh` | Passed |
+| `bash tests/release-workflow.sh` | Passed |
+| Release Preview build and full render matrix | Passed: 64 supported screens × Light/Dark = 128 PNGs, plus 33 workspace screens × Light/Dark at 960×600 = 66 PNGs |
+
+All **194 images** were inspected for clipping, overlap, focus cues and readable theme
+surfaces, with one observation per image. Dialogs retained their fixture/natural sizes;
+workspace defaults were 1360×860. Rendering success is separate from visual approval:
+
+- Import Policy's focused “Skip entities that already exist” label clips at its right
+  edge in both themes, including the long-summary fixture.
+- At 960×600, expanded Activity leaves the inspector's Wrap/Find controls clipped and
+  its body hidden. Find and large-body notices can also consume the inspector viewport,
+  clipping the large-body Find controls. These findings remain unfixed in this
+  validation-only slice.
+- The `settings-reset` frame uses programmatic focus and shows no distinct keyboard
+  outline. `topic-invalid` seeds an invalid value without pressing Save, so that frame
+  does not establish submitted validation. Supplemental native checks remained pending in the first attempt; see the resume record below.
+
+| Self-contained package | Version | Host/runtime architecture | Signature | Native evidence |
+|---|---|---|---|---|
+| `./build/make-app.sh osx-arm64` | 0.0.0 | arm64 | Ad-hoc | Startup, menu/Settings, Light/Dark and isolated restart observed |
+| `./build/make-app.sh osx-x64` | 0.0.0 | x86_64 | Ad-hoc | Static inspection only; physical Intel checks waived/unverified |
+
+The native arm64 package stayed running for at least 20 seconds. Its menu included
+File/Entity/Messages/View and Settings; menu activation and Cmd+, opened Settings with
+Appearance focused. Light then Dark were saved to temporary HOME state, and a subsequent
+isolated restart restored Dark. Native Preview likewise exercised its real menus,
+Cmd+,, both live themes and clean Quit against `contoso-fixture` temporary state, with
+Azure connections refused. Its supplemental restart attempts failed twice with native
+RenderTimer error `-6661`; the UI tool then confirmed the Mac was locked. These failed
+commands remain recorded as failures, not inapplicable checks.
+
+Isolation exception: after Quit, a UI-tool state query automatically reopened the owned
+package with the default HOME. That exact process was stopped; subsequent launches used
+explicit temporary HOME. No personal configuration was inspected by the worker, but
+personal-store nonaccess/nonmutation cannot be certified for the unintended startup.
+The existing full test suite separately creates and removes disposable Keychain fixture
+records with unique account/connection keys.
+
+**First resume record (2026-11-02):** the user explicitly waived physical Intel checks;
+these remain unverified and were never passed. At preserved documentation revision
+`fa9562b6c7d682dfe073149f880a395bf9f12ba8`, the first isolated Preview relaunch
+again aborted with RenderTimer `-6661` (SIGABRT, subprocess return code -6).
+A transient display-wake assertion allowed another process to start, but the subsequent
+capture showed the login screen and the OS reported `CGSSessionScreenIsLocked=true`.
+Cmd+, did not establish Settings activation; the Settings AX query failed with `-1728`.
+The owned process was stopped by exact PID with SIGTERM; clean interactive Quit was
+not verified in this resume. Process liveness is not a successful restart/interactions
+check. Settings Reset keyboard
+focus and submitted Topic validation in Light and Dark were not verified in that attempt.
+All launches specified temporary HOME and fixture state; no closed app was queried through the UI tool.
+The 529-test Release suite and both release-script checks passed again before this
+README-only follow-up; exact post-commit checks are stored in the resume evidence.
+
+**Second native retry (2026-11-02):** the desktop was visibly unlocked at preserved
+revision `a9aeef5eb91e79c05351daea7294e0b1459aa605`, whose runtime tree matches
+`d6ca126`. Fresh fixture state and an explicit temporary HOME were used for all three
+native Preview sessions; each quit/restart reused that same HOME/state. Both Dark and
+Light persisted through Cmd+Q and explicit relaunch, with Settings showing the saved
+appearance. In both themes, Tab gave Reset Layout a distinct keyboard outline and Space
+produced “Layout reset.” without changing appearance. In a fresh 400px-high Topic
+fixture per theme, Return invoked Save, expanded Optional behaviour, scrolled to and
+focused the invalid Auto-delete on idle field, and displayed the duration error with
+Save/Cancel still visible. Screenshots and accessibility observations establish these
+native interactions; headless frames alone did not. Three owned Preview PIDs exited
+after Cmd+Q, and the temporary owned caffeinate process was stopped. No security setting
+changed. All launches specified isolated HOME/state; no closed app was queried through
+the UI tool. The earlier failures and isolation exception remain historical disclosures.
+F1–F3 remain unfixed visual findings; this is a validation record, not full visual approval.
+Release build, the 529-test suite and both release scripts are required again at the final
+README-only commit, with exact revision/results stored outside the source tree.
+
+**Unverified / standing limitations:**
+
+- **Waived by user: physical Intel/osx-x64 startup, menus, Light/Dark and restart.** No
+  Intel hardware was exercised. The historical Rosetta probe failed with “Bad CPU type
+  in executable”; cross-building or Rosetta would not establish physical Intel verification.
+- VoiceOver, multi-monitor recovery/secondary-screen placement, and Developer ID
+  signing/notarization remain unverified; the existing release/signing behavior is unchanged.
+
+Durable local evidence is under
+`.run-with-it/issues/44/evidence/impl-d9c47956/` in the run's parent repository,
+**outside this worktree**: `commands.jsonl` records applicability before execution;
+`results.jsonl` records exact commands, revisions and exit codes; `inspection.md` and
+`images.tsv` cover every image; `packages/` preserves both bundles, file/hash manifests
+and the Intel ZIP; `native/native-checks.md` records native observations and the
+isolation exception; `hitl.md` gives the remaining human checks. These are local run
+artifacts, not committed release assets or evidence of complete platform verification.
+The preserved evidence above is reused because the runtime tree is unchanged. Resume
+commands, failures, isolation/revision proof and final regression logs are under
+`.run-with-it/issues/44/evidence/impl-f9905751/`; `native/native-checks.md` records the
+then-blocked checks and `summary.json` records the exact first follow-up commit. The
+original `impl-d9c47956` evidence and historical failures are retained without relabelling.
+Second-retry evidence is under `.run-with-it/issues/44/evidence/impl-2e118cf8/`:
+`native/native-checks.md` records completed native checks, process ownership, screenshot
+observations and corrected observation-script errors; `native/actions.jsonl` preserves
+PID-targeted actions; `revision-proof.json` records runtime equivalence; `final/` and
+`summary.json` record required checks at the final documentation SHA. The adjusted native
+scope is complete; physical Intel remains waived/unverified and full platform verification
+remains incomplete.
+
 ## Implementation notes
 
 Things that are non-obvious, and why they are the way they are.
