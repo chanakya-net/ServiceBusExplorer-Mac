@@ -1155,6 +1155,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         StatusText = "Body copied to the clipboard.";
     }
 
+    /// <summary>Supplies the body viewer's current selection; set by the view.</summary>
+    public Func<string>? BodySelectionProvider { get; set; }
+
+    /// <summary>Cmd+C: copies the selected body text when there is one, otherwise the full body.</summary>
+    [RelayCommand]
+    async Task CopySelectionOrBodyAsync()
+    {
+        var selection = BodySelectionProvider?.Invoke();
+        if (string.IsNullOrEmpty(selection) || Ui is null)
+        {
+            await CopyBodyAsync().ConfigureAwait(true);
+            return;
+        }
+
+        await Ui.SetClipboardTextAsync(selection).ConfigureAwait(true);
+        StatusText = "Selection copied to the clipboard.";
+    }
+
     [RelayCommand]
     async Task SaveMessagesAsync()
     {

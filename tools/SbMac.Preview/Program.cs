@@ -27,7 +27,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "settings-reset", "reset-layout", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "body-json", "body-xml", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "settings-reset", "reset-layout", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -63,7 +63,7 @@ try
     if (theme is not ("light" or "dark" or "both")) throw new ArgumentException("Invalid theme.");
     if (screen != "all" && !screens.Contains(screen)) throw new ArgumentException("Invalid screen.");
     if (native && (themeSet || screenSet || outputSet)) throw new ArgumentException("--native accepts only --state-dir and --size.");
-    if (nativeScreen is not null && (!native || nativeScreen is not ("send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule" or "resubmit" or "resubmit-long" or "table-layout"))) throw new ArgumentException("--native-screen needs --native and a supported screen.");
+    if (nativeScreen is not null && (!native || nativeScreen is not ("body-json" or "body-xml" or "send" or "send-empty" or "send-delivery" or "topic" or "subscription" or "rule" or "resubmit" or "resubmit-long" or "table-layout"))) throw new ArgumentException("--native-screen needs --native and a supported screen.");
     if (native && stateDir is null) throw new ArgumentException("--native requires --state-dir.");
     if (!native && stateDir is not null) throw new ArgumentException("--state-dir requires --native.");
     if (native) stateDir = NativePreview.ValidateStateDirectory(stateDir!);
@@ -92,7 +92,7 @@ static int FontCheck()
 }
 
 void Usage() => Console.WriteLine("Usage: SbMac.Preview [output-dir] [--theme light|dark|both] [--size WIDTHxHEIGHT] [--screen all|" + string.Join('|', screens) + "] [--help]\n" +
-    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen send|send-empty|send-delivery|topic|subscription|rule|resubmit|resubmit-long|table-layout]\n" +
+    "       SbMac.Preview --native --state-dir <temporary-directory> [--size WIDTHxHEIGHT] [--native-screen body-json|body-xml|send|send-empty|send-delivery|topic|subscription|rule|resubmit|resubmit-long|table-layout]\n" +
     "       SbMac.Preview --font-check   (macOS only: native system-font resolution)");
 Directory.CreateDirectory(outDir);
 var stateRoot = Directory.CreateTempSubdirectory("sbmac-preview-");
@@ -133,6 +133,8 @@ try
         Render("activity-inspector-hidden", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsInspectorVisible = false; return window; }, 1360, 860);
         Render("activity-collapsed", () => { var window = BuildActivityWindow(); ((MainWindowViewModel)window.DataContext!).IsActivityExpanded = false; return window; }, 1360, 860);
         Render("props", () => BuildMainWindow(), 1360, 860, 1);
+        Render("body-json", () => BuildMainWindow(), 1360, 860);
+        Render("body-xml", () => BuildMainWindow(), 1360, 860);
         Render("eventhubs", BuildEventHubsWindow, 1360, 860);
         Render("eventhubs-props", BuildEventHubsWindow, 1360, 860, 1);
         Render("connection", () => new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
@@ -292,6 +294,17 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
     if ((name.StartsWith("queue-") || name.StartsWith("subscription-")) && name.Contains("-invalid-"))
     {
         window.FindControl<Button>("SaveButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        for (var i = 0; i < 12; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+    }
+    if (name.StartsWith("body-"))
+    {
+        var grid = window.FindControl<DataGrid>("MessageGrid")!;
+        var vm = (MainWindowViewModel)window.DataContext!;
+        grid.SelectedItem = vm.Messages[name.StartsWith("body-xml") ? 3 : 0];
         for (var i = 0; i < 12; i++)
         {
             Dispatcher.UIThread.RunJobs();

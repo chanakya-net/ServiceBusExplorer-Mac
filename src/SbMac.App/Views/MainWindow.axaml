@@ -57,7 +57,7 @@
           <NativeMenuItem Header="Delete Selected…" Command="{Binding DeleteSelectedMessagesCommand}"
                           IsEnabled="{Binding CanUseSelectedBrokerActions}" />
           <NativeMenuItemSeparator />
-          <NativeMenuItem Header="Copy Body" Command="{Binding CopyBodyCommand}" Gesture="Cmd+C" />
+          <NativeMenuItem Header="Copy Body" Command="{Binding CopySelectionOrBodyCommand}" Gesture="Cmd+C" />
           <NativeMenuItem Header="Purge…" Command="{Binding PurgeCommand}" IsEnabled="{Binding CanUseBrokerActions}" />
         </NativeMenu>
       </NativeMenuItem>
@@ -465,12 +465,10 @@
                   </DockPanel>
                 </Border>
 
-                <TextBox Grid.Row="1" Classes="mono plain"
-                         Text="{Binding BodyText, Mode=OneWay}"
-                         IsReadOnly="True"
-                         AcceptsReturn="True"
-                         TextWrapping="NoWrap"
-                         VerticalContentAlignment="Top" />
+                <controls:MessageBodyViewer x:Name="BodyViewer" Grid.Row="1"
+                                            Text="{Binding BodyText}"
+                                            Format="{Binding BodyFormatLabel}"
+                                            AutomationProperties.Name="Message body" />
               </Grid>
             </TabItem>
 
