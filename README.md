@@ -625,7 +625,7 @@ personal-store nonaccess/nonmutation cannot be certified for the unintended star
 The existing full test suite separately creates and removes disposable Keychain fixture
 records with unique account/connection keys.
 
-**Resume record (2026-11-02):** the user explicitly waived physical Intel checks;
+**First resume record (2026-11-02):** the user explicitly waived physical Intel checks;
 these remain unverified and were never passed. At preserved documentation revision
 `fa9562b6c7d682dfe073149f880a395bf9f12ba8`, the first isolated Preview relaunch
 again aborted with RenderTimer `-6661` (SIGABRT, subprocess return code -6).
@@ -635,19 +635,34 @@ Cmd+, did not establish Settings activation; the Settings AX query failed with `
 The owned process was stopped by exact PID with SIGTERM; clean interactive Quit was
 not verified in this resume. Process liveness is not a successful restart/interactions
 check. Settings Reset keyboard
-focus and submitted Topic validation in Light and Dark remain unverified. All launches
-specified temporary HOME and fixture state; no closed app was queried through the UI tool.
+focus and submitted Topic validation in Light and Dark were not verified in that attempt.
+All launches specified temporary HOME and fixture state; no closed app was queried through the UI tool.
 The 529-test Release suite and both release-script checks passed again before this
 README-only follow-up; exact post-commit checks are stored in the resume evidence.
 
-**Unverified / assistance required:**
+**Second native retry (2026-11-02):** the desktop was visibly unlocked at preserved
+revision `a9aeef5eb91e79c05351daea7294e0b1459aa605`, whose runtime tree matches
+`d6ca126`. Fresh fixture state and an explicit temporary HOME were used for all three
+native Preview sessions; each quit/restart reused that same HOME/state. Both Dark and
+Light persisted through Cmd+Q and explicit relaunch, with Settings showing the saved
+appearance. In both themes, Tab gave Reset Layout a distinct keyboard outline and Space
+produced “Layout reset.” without changing appearance. In a fresh 400px-high Topic
+fixture per theme, Return invoked Save, expanded Optional behaviour, scrolled to and
+focused the invalid Auto-delete on idle field, and displayed the duration error with
+Save/Cancel still visible. Screenshots and accessibility observations establish these
+native interactions; headless frames alone did not. Three owned Preview PIDs exited
+after Cmd+Q, and the temporary owned caffeinate process was stopped. No security setting
+changed. All launches specified isolated HOME/state; no closed app was queried through
+the UI tool. The earlier failures and isolation exception remain historical disclosures.
+F1–F3 remain unfixed visual findings; this is a validation record, not full visual approval.
+Release build, the 529-test suite and both release scripts are required again at the final
+README-only commit, with exact revision/results stored outside the source tree.
+
+**Unverified / standing limitations:**
 
 - **Waived by user: physical Intel/osx-x64 startup, menus, Light/Dark and restart.** No
   Intel hardware was exercised. The historical Rosetta probe failed with “Bad CPU type
   in executable”; cross-building or Rosetta would not establish physical Intel verification.
-- **[HITL] Keep the Mac unlocked for Native Preview restart**, Settings Reset keyboard
-  focus and submitted Topic validation in both themes. The resume capture and session
-  flag showed that the desktop had relocked; required native checks remain blocked.
 - VoiceOver, multi-monitor recovery/secondary-screen placement, and Developer ID
   signing/notarization remain unverified; the existing release/signing behavior is unchanged.
 
@@ -662,8 +677,15 @@ artifacts, not committed release assets or evidence of complete platform verific
 The preserved evidence above is reused because the runtime tree is unchanged. Resume
 commands, failures, isolation/revision proof and final regression logs are under
 `.run-with-it/issues/44/evidence/impl-f9905751/`; `native/native-checks.md` records the
-remaining checks and `summary.json` records the exact follow-up commit. The original
-`impl-d9c47956` evidence and historical failures are retained without relabelling.
+then-blocked checks and `summary.json` records the exact first follow-up commit. The
+original `impl-d9c47956` evidence and historical failures are retained without relabelling.
+Second-retry evidence is under `.run-with-it/issues/44/evidence/impl-2e118cf8/`:
+`native/native-checks.md` records completed native checks, process ownership, screenshot
+observations and corrected observation-script errors; `native/actions.jsonl` preserves
+PID-targeted actions; `revision-proof.json` records runtime equivalence; `final/` and
+`summary.json` record required checks at the final documentation SHA. The adjusted native
+scope is complete; physical Intel remains waived/unverified and full platform verification
+remains incomplete.
 
 ## Implementation notes
 
