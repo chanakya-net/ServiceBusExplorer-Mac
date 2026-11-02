@@ -161,4 +161,43 @@ public partial class UiSmokeTests
         Assert.False(viewer.IsThemeSubscribed);
         window.Close();
     }
+    [AvaloniaFact]
+    public void FindNavigatesLiteralMatchesAndRefreshesWhenBodyChanges()
+    {
+        var (window, vm, viewer, _) = OpenBody(BodyRow("Alpha aLPHa [alpha]"));
+        viewer.OpenFind();
+        viewer.FindQuery.Text = "alpha";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("1 of 3", viewer.FindStatus.Text);
+        Assert.Equal("Alpha", viewer.SelectedText);
+        viewer.FindNext();
+        Assert.Equal("aLPHa", viewer.SelectedText);
+        viewer.FindPrevious();
+        Assert.Equal("Alpha", viewer.SelectedText);
+        viewer.FindQuery.Text = "[alpha]";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("1 of 1", viewer.FindStatus.Text);
+        var next = BodyRow("nothing here");
+        vm.Messages.Add(next);
+        window.GetControl<DataGrid>("MessageGrid").SelectedItem = next;
+        Assert.Equal("No matches", viewer.FindStatus.Text);
+        Assert.Equal("", viewer.SelectedText);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void EscapeDismissesFindAndRestoresEditorFocus()
+    {
+        var (window, _, viewer, _) = OpenBody(BodyRow("sample"));
+        viewer.OpenFind();
+        viewer.FindQuery.RaiseEvent(new Avalonia.Input.KeyEventArgs
+        {
+            RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent,
+            Key = Avalonia.Input.Key.Escape
+        });
+        Assert.False(viewer.FindBar.IsVisible);
+        Assert.True(viewer.Editor.TextArea.IsKeyboardFocusWithin);
+        window.Close();
+    }
+
 }

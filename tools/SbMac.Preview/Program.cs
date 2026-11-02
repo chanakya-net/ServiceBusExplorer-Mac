@@ -27,7 +27,7 @@ using SbMac.Core.ImportExport;
 using SbMac.Core.Messaging;
 using SbMac.Preview;
 
-var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "body-json", "body-xml", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "settings-reset", "reset-layout", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
+var screens = new[] { "adaptive-queue", "adaptive-subscription", "adaptive-eventhubs", "main", "workspace-first-run", "workspace-empty", "workspace-loading", "columns", "table-layout", "selection-none", "selection-selected", "inspector-collapsed", "restored-layout", "sidebar-search", "deadletter", "main-actions", "deadletter-actions", "eventhubs-actions", "activity", "activity-inspector-hidden", "activity-collapsed", "props", "body-json", "body-xml", "body-find-match", "body-find-none", "eventhubs", "eventhubs-props", "connection", "connection-eventhubs", "send", "send-empty", "send-delivery", "topic", "topic-edit", "topic-invalid", "queue", "queue-edit", "queue-optional-invalid", "queue-creation-invalid", "subscription", "subscription-edit", "subscription-invalid", "rule-sql", "rule-correlation", "rule-invalid", "settings", "settings-reset", "reset-layout", "preference-failure", "states", "message-info", "message-error", "message-destructive", "message-update", "message-long", "resubmit", "resubmit-long", "import-policy", "import-policy-long" };
 string outDir = Path.Combine(AppContext.BaseDirectory, "screenshots");
 string theme = "both", screen = "all";
 string? stateDir = null, nativeScreen = null;
@@ -135,6 +135,8 @@ try
         Render("props", () => BuildMainWindow(), 1360, 860, 1);
         Render("body-json", () => BuildMainWindow(), 1360, 860);
         Render("body-xml", () => BuildMainWindow(), 1360, 860);
+        Render("body-find-match", () => BuildMainWindow(), 1360, 860);
+        Render("body-find-none", () => BuildMainWindow(), 1360, 860);
         Render("eventhubs", BuildEventHubsWindow, 1360, 860);
         Render("eventhubs-props", BuildEventHubsWindow, 1360, 860, 1);
         Render("connection", () => new ConnectionDialog { DataContext = new ConnectionDialogViewModel(null) }, 620, 470);
@@ -307,6 +309,14 @@ void Shoot(string name, Window window, int? width, int? height, int selectTab = 
         grid.SelectedItem = vm.Messages[name.StartsWith("body-xml") ? 3 : 0];
         for (var i = 0; i < 12; i++)
         {
+            Dispatcher.UIThread.RunJobs();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        }
+        if (name.StartsWith("body-find-"))
+        {
+            var viewer = window.FindControl<SbMac.App.Views.Controls.MessageBodyViewer>("BodyViewer")!;
+            viewer.FindControl<Button>("OpenFindButton")!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            viewer.FindControl<TextBox>("FindQuery")!.Text = name.StartsWith("body-find-match") ? "order" : "missing";
             Dispatcher.UIThread.RunJobs();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         }

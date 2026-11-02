@@ -3,6 +3,8 @@ using System.Xml;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Styling;
 
 using AvaloniaEdit;
@@ -27,10 +29,19 @@ public partial class MessageBodyViewer : UserControl
     static readonly Dictionary<string, IHighlightingDefinition> Definitions = [];
 
     bool themeSubscribed;
+    readonly List<int> matches = [];
+    int matchIndex = -1;
 
     public MessageBodyViewer()
     {
         InitializeComponent();
+        OpenFindButton.Click += (_, _) => OpenFind();
+        FindQuery.TextChanged += (_, _) => RefreshMatches();
+        PreviousButton.Click += (_, _) => FindPrevious();
+        NextButton.Click += (_, _) => FindNext();
+        CloseFindButton.Click += (_, _) => CloseFind();
+        AddHandler(KeyDownEvent, HandleFindKey, RoutingStrategies.Tunnel);
+
     }
 
     public string? Text { get => GetValue(TextProperty); set => SetValue(TextProperty, value); }
@@ -83,9 +94,91 @@ public partial class MessageBodyViewer : UserControl
         if (!string.Equals(editor.Text, text, StringComparison.Ordinal))
         {
             editor.Text = text;
+            RefreshMatches();
         }
 
         editor.SyntaxHighlighting = DefinitionFor(Format, ActualThemeVariant);
+    }
+
+    internal void OpenFind()
+    {
+        FindBar.IsVisible = true;
+        FindQuery.Focus();
+        FindQuery.SelectAll();
+        RefreshMatches();
+    }
+
+    void CloseFind()
+    {
+        FindBar.IsVisible = false;
+        FindQuery.Text = string.Empty;
+        Editor.Select(0, 0);
+        Editor.TextArea.Focus();
+    }
+
+    void HandleFindKey(object? sender, KeyEventArgs e)
+    {
+        if (!IsKeyboardFocusWithin) return;
+        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Meta)
+        {
+            OpenFind();
+            e.Handled = true;
+        }
+        else if (FindBar.IsVisible && e.Key == Key.Escape)
+        {
+            CloseFind();
+            e.Handled = true;
+        }
+        else if (FindBar.IsVisible && e.Key == Key.Enter && FindQuery.IsKeyboardFocusWithin)
+        {
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) FindPrevious(); else FindNext();
+            e.Handled = true;
+        }
+    }
+
+    void RefreshMatches()
+    {
+        matches.Clear();
+        matchIndex = -1;
+        var query = FindQuery.Text ?? string.Empty;
+        var text = Editor.Text ?? string.Empty;
+        if (query.Length > 0)
+        {
+            for (var start = 0; start <= text.Length - query.Length;)
+            {
+                var offset = text.IndexOf(query, start, StringComparison.OrdinalIgnoreCase);
+                if (offset < 0) break;
+                matches.Add(offset);
+                start = offset + query.Length;
+            }
+        }
+        if (matches.Count > 0) matchIndex = 0;
+        ShowMatch();
+    }
+
+    internal void FindNext() => Navigate(1);
+    internal void FindPrevious() => Navigate(-1);
+
+    void Navigate(int direction)
+    {
+        if (matches.Count == 0) return;
+        matchIndex = (matchIndex + direction + matches.Count) % matches.Count;
+        ShowMatch();
+    }
+
+    void ShowMatch()
+    {
+        if (matchIndex < 0)
+        {
+            Editor.Select(0, 0);
+            FindStatus.Text = string.IsNullOrEmpty(FindQuery.Text) ? "" : "No matches";
+            return;
+        }
+        var offset = matches[matchIndex];
+        Editor.Select(offset, FindQuery.Text!.Length);
+        var location = Editor.Document.GetLocation(offset);
+        Editor.ScrollTo(location.Line, location.Column);
+        FindStatus.Text = $"{matchIndex + 1} of {matches.Count}";
     }
 
     static IHighlightingDefinition? DefinitionFor(string? format, ThemeVariant theme)

@@ -2,6 +2,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ae="using:AvaloniaEdit"
              x:Class="SbMac.App.Views.Controls.MessageBodyViewer">
+  <DockPanel>
+    <Button x:Name="OpenFindButton" DockPanel.Dock="Top" Content="Find" HorizontalAlignment="Right" Margin="8,4" />
+    <StackPanel x:Name="FindBar" DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="8,6" IsVisible="False">
+      <TextBox x:Name="FindQuery" Width="200" PlaceholderText="Find in body" AutomationProperties.Name="Find in body" />
+      <TextBlock x:Name="FindStatus" VerticalAlignment="Center" MinWidth="80" />
+      <Button x:Name="PreviousButton" Content="Previous" />
+      <Button x:Name="NextButton" Content="Next" />
+      <Button x:Name="CloseFindButton" Content="Close" />
+    </StackPanel>
   <ae:TextEditor x:Name="Editor"
                  IsReadOnly="True"
                  ShowLineNumbers="False"
@@ -13,4 +22,5 @@
                  Padding="10,8"
                  HorizontalScrollBarVisibility="Auto"
                  VerticalScrollBarVisibility="Auto" />
+  </DockPanel>
 </UserControl>
