@@ -50,11 +50,20 @@ static class NativePreview
             var viewModel = MainWindowViewModel.CreateIsolated(connections, RejectAzure, loaded);
             var window = new MainWindow { DataContext = viewModel };
             if (screen == "table-layout")
+            {
+                loaded.LayoutReset += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    Console.WriteLine("WORKSPACE_RESET=" + System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        width = window.Width, height = window.Height, state = window.WindowState.ToString(),
+                        sidebar = window.FindControl<Grid>("MainSplitLayout")!.ColumnDefinitions[0].Width.Value,
+                        inspector = viewModel.IsInspectorVisible, activity = viewModel.IsActivityExpanded
+                    })), Avalonia.Threading.DispatcherPriority.Background);
                 window.Opened += async (_, _) =>
                 {
                     await viewModel.InitializeAsync();
                     NativeTableLayoutFixture.Seed(window, viewModel);
                 };
+            }
             else if (screen is "resubmit" or "resubmit-long")
                 window.Opened += async (_, _) => await ShowResubmitFixture(window, screen);
             else if (screen is not null) window.Opened += (_, _) => (screen == "rule" ? (Window)BuildRuleFixture() : screen == "topic" ? BuildTopicFixture() : screen == "subscription" ? BuildSubscriptionFixture() : BuildSendFixture(screen)).Show();

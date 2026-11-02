@@ -27,9 +27,15 @@ public sealed partial class AppPreferencesService
     static void WriteMessageTables(JsonObject root, Dictionary<string, IReadOnlyList<MessageColumnState>> values)
     {
         WriteSchema(root);
-        if (root["messageTables"] is not JsonObject tables) root["messageTables"] = tables = [];
+        var tables = root["messageTables"] as JsonObject;
         foreach (var (key, columns) in values)
         {
+            if (columns.Count == 0)
+            {
+                (tables?[key] as JsonObject)?.Remove("columns");
+                continue;
+            }
+            if (tables is null) root["messageTables"] = tables = [];
             if (tables[key] is not JsonObject table) tables[key] = table = [];
             table["columns"] = MergeColumns(table["columns"] as JsonArray, columns);
         }

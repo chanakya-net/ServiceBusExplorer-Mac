@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 using SbMac.App.Models;
 using SbMac.App.Services;
@@ -42,6 +43,21 @@ public sealed partial class SettingsDialogViewModel : ViewModelBase
     /// <summary>Shown under the selector when the latest choice could not be written.</summary>
     [ObservableProperty]
     string? saveError;
+
+    [ObservableProperty]
+    string? layoutStatus;
+
+    [ObservableProperty]
+    bool layoutResetFailed;
+
+    [RelayCommand]
+    async Task ResetLayoutAsync()
+    {
+        LayoutResetFailed = !await preferences.ResetLayoutAsync();
+        LayoutStatus = LayoutResetFailed
+            ? "Couldn't save the layout reset. Defaults still apply until SB-Mac quits."
+            : "Layout reset.";
+    }
 
     public bool HasPendingSaves => preferences.HasPendingSaves;
 

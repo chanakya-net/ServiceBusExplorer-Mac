@@ -63,6 +63,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         this.preferences = preferences;
         if (preferences is not null)
         {
+            preferences.LayoutReset += OnLayoutReset;
             preferences.SaveCompleted += (_, _) => Dispatcher.UIThread.Post(UpdatePreferenceSaveStatus);
             UpdatePreferenceSaveStatus();
         }

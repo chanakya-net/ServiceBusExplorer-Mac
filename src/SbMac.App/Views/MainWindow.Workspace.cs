@@ -10,12 +10,16 @@ public partial class MainWindow
 {
     AppPreferencesService? workspacePreferences;
     bool workspaceOpened;
+    bool resettingWorkspace;
+    Size defaultClientSize;
     bool captureScheduled;
     WorkspacePreferences? lastWorkspace;
 
     internal void AttachWorkspacePreferences(AppPreferencesService preferences)
     {
+        defaultClientSize = new Size(Width, Height);
         workspacePreferences = preferences;
+        preferences.LayoutReset += OnLayoutReset;
         lastWorkspace = preferences.Current.Workspace;
         if (lastWorkspace.WindowBounds is { } saved)
         {
@@ -48,7 +52,7 @@ public partial class MainWindow
 
     void OnWorkspacePropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
-        if (e.Property == WindowStateProperty && workspaceOpened && WindowState == WindowState.Maximized)
+        if (!resettingWorkspace && e.Property == WindowStateProperty && workspaceOpened && WindowState == WindowState.Maximized)
             SaveWorkspace(lastWorkspace! with { WindowState = WorkspaceWindowState.Maximized });
         if (e.Property == ClientSizeProperty || e.Property == WindowStateProperty)
             ScheduleWorkspaceCapture();
@@ -67,7 +71,7 @@ public partial class MainWindow
 
     internal void CaptureWorkspace()
     {
-        if (!workspaceOpened || workspacePreferences is null || WindowState != WindowState.Normal) return;
+        if (resettingWorkspace || !workspaceOpened || workspacePreferences is null || WindowState != WindowState.Normal) return;
         SaveWorkspace(Snapshot(DesktopBounds(Position, ClientSize, DesktopScaling), WorkspaceWindowState.Normal));
     }
 
@@ -90,6 +94,7 @@ public partial class MainWindow
     void OnWorkspaceClosed(object? sender, EventArgs e)
     {
         workspaceOpened = false;
+        if (workspacePreferences is not null) workspacePreferences.LayoutReset -= OnLayoutReset;
         Opened -= OnWorkspaceOpened;
         PositionChanged -= OnWorkspacePositionChanged;
         PropertyChanged -= OnWorkspacePropertyChanged;
