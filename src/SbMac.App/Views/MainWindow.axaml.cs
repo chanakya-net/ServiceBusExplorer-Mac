@@ -22,6 +22,7 @@ public partial class MainWindow : Window, IUiServices
     GridLength tableHeight = new(1.5, GridUnitType.Star);
     GridLength inspectorHeight = new(1, GridUnitType.Star);
     MainWindowViewModel? subscribedViewModel;
+    readonly MessageTableLayoutBehavior messageLayout;
 
     public MainWindow() : this(new SystemUriLauncher())
     {
@@ -31,6 +32,7 @@ public partial class MainWindow : Window, IUiServices
     {
         this.uriLauncher = uriLauncher;
         InitializeComponent();
+        messageLayout = new(MessageGrid, ColumnsButton);
 
         // The grid's SelectedItems isn't a bindable property in Avalonia's DataGrid, so
         // the multi-selection is mirrored into the view model by hand.
@@ -47,6 +49,7 @@ public partial class MainWindow : Window, IUiServices
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
+        messageLayout?.ClearContext();
 
         if (subscribedViewModel is not null)
             subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
@@ -58,6 +61,14 @@ public partial class MainWindow : Window, IUiServices
             UpdateInspectorVisibility(viewModel.IsInspectorVisible, moveFocus: false);
             ApplyMessageLayout();
         }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        messageLayout.Dispose();
+        if (subscribedViewModel is not null)
+            subscribedViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        base.OnClosed(e);
     }
 
     void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -92,7 +103,7 @@ public partial class MainWindow : Window, IUiServices
     void ApplyMessageLayout()
     {
         if (subscribedViewModel is null) return;
-        MessageTableLayoutBehavior.Apply(MessageGrid, ColumnsButton, subscribedViewModel);
+        messageLayout.Apply(subscribedViewModel);
     }
 
     protected override async void OnLoaded(RoutedEventArgs e)

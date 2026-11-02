@@ -9,7 +9,7 @@ namespace SbMac.App.Services;
 /// immediately; persistence follows in the background, one save at a time and in the
 /// order the changes were made, so the last choice is always the one left on disk.
 /// </summary>
-public sealed class AppPreferencesService
+public sealed partial class AppPreferencesService
 {
     const string ThemeKey = "theme";
     const string SchemaVersionKey = "schemaVersion";
@@ -109,7 +109,7 @@ public sealed class AppPreferencesService
         lock (saveLock)
         {
             var tables = new Dictionary<string, IReadOnlyList<MessageColumnState>>(Current.MessageTables)
-                { [context] = columns.ToArray() };
+                { [context] = columns.Select(c => c.Normalize()).ToArray() };
             Current = updated = Current with { MessageTables = tables };
             tablesDirty = true;
         }
@@ -219,35 +219,6 @@ public sealed class AppPreferencesService
             if (workspaceDirty) WriteWorkspace(root, Current.Workspace);
             if (tablesDirty) WriteMessageTables(root, Current.MessageTables);
             return (Current, themeDirty, workspaceDirty, tablesDirty);
-        }
-    }
-
-    static Dictionary<string, IReadOnlyList<MessageColumnState>> ParseMessageTables(JsonNode? node)
-    {
-        var result = new Dictionary<string, IReadOnlyList<MessageColumnState>>();
-        if (node is not JsonObject tables) return AppPreferences.Default.MessageTables;
-        foreach (var key in new[] { "serviceBus", "deadLetter", "eventHubs" })
-        {
-            if (tables[key] is not JsonObject table || table["columns"] is not JsonArray columns) continue;
-            var states = new List<MessageColumnState>();
-            foreach (var item in columns.OfType<JsonObject>())
-                if (item["id"] is JsonValue id && id.TryGetValue<string>(out var name) &&
-                    item["visible"] is JsonValue visible && visible.TryGetValue<bool>(out var value))
-                    states.Add(new(name, value));
-            result[key] = states;
-        }
-        return result.Count == 0 ? AppPreferences.Default.MessageTables : result;
-    }
-
-    static void WriteMessageTables(JsonObject root, Dictionary<string, IReadOnlyList<MessageColumnState>> values)
-    {
-        WriteSchema(root);
-        if (root["messageTables"] is not JsonObject tables) root["messageTables"] = tables = [];
-        foreach (var (key, columns) in values)
-        {
-            if (tables[key] is not JsonObject table) tables[key] = table = [];
-            table["columns"] = new JsonArray(columns.Select(c => (JsonNode)new JsonObject
-                { ["id"] = c.Id, ["visible"] = c.Visible }).ToArray());
         }
     }
 
