@@ -18,6 +18,7 @@ here on cross-platform foundations:
     Azure.Identity                  MIT License
     Azure.ResourceManager.ServiceBus  MIT License
     CommunityToolkit.Mvvm           MIT License
+    AvaloniaEdit                    MIT License
 
 Naming, terminology and the overall shape of the tool follow the original so that
 people already familiar with it can find their way around.

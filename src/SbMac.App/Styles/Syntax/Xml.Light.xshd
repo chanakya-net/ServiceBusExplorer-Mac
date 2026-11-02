@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!-- Read-only XML highlighting for the message body viewer (light theme). -->
+<SyntaxDefinition name="SbXml.Light" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#008000" />
+  <Color name="CData" foreground="#795E26" />
+  <Color name="Tag" foreground="#800000" />
+  <Color name="Attribute" foreground="#E50000" />
+  <Color name="Value" foreground="#0000FF" />
+  <Color name="Entity" foreground="#EE0000" />
+  <RuleSet>
+    <Span color="Comment" multiline="true">
+      <Begin>&lt;!--</Begin>
+      <End>--&gt;</End>
+    </Span>
+    <Span color="CData" multiline="true">
+      <Begin>&lt;!\[CDATA\[</Begin>
+      <End>\]\]&gt;</End>
+    </Span>
+    <Span color="Tag" multiline="true">
+      <Begin>&lt;[?/!]?</Begin>
+      <End>[?/]?&gt;</End>
+      <RuleSet>
+        <Span color="Value" multiline="true">
+          <Begin>"</Begin>
+          <End>"</End>
+        </Span>
+        <Span color="Value" multiline="true">
+          <Begin>'</Begin>
+          <End>'</End>
+        </Span>
+        <Rule color="Attribute">[\w:.\-]+(?=\s*=)</Rule>
+      </RuleSet>
+    </Span>
+    <Rule color="Entity">&amp;[\w#]+;</Rule>
+  </RuleSet>
+</SyntaxDefinition>

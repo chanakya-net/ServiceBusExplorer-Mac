@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ae="using:AvaloniaEdit"
+             x:Class="SbMac.App.Views.Controls.MessageBodyViewer">
+  <ae:TextEditor x:Name="Editor"
+                 IsReadOnly="True"
+                 ShowLineNumbers="False"
+                 WordWrap="False"
+                 Background="Transparent"
+                 Foreground="{DynamicResource TextPrimaryBrush}"
+                 FontFamily="{StaticResource MonoFont}"
+                 FontSize="12.5"
+                 Padding="10,8"
+                 HorizontalScrollBarVisibility="Auto"
+                 VerticalScrollBarVisibility="Auto" />
+</UserControl>

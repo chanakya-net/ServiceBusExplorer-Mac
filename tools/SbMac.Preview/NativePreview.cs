@@ -64,6 +64,8 @@ static class NativePreview
                     NativeTableLayoutFixture.Seed(window, viewModel);
                 };
             }
+            else if (screen is "body-json" or "body-xml")
+                SeedBodyFixture(viewModel, window, screen);
             else if (screen is "resubmit" or "resubmit-long")
                 window.Opened += async (_, _) => await ShowResubmitFixture(window, screen);
             else if (screen is not null) window.Opened += (_, _) => (screen == "rule" ? (Window)BuildRuleFixture() : screen == "topic" ? BuildTopicFixture() : screen == "subscription" ? BuildSubscriptionFixture() : BuildSendFixture(screen)).Show();
@@ -80,6 +82,19 @@ static class NativePreview
             .UseHarfBuzz()
             .WithInterFont()
             .StartWithClassicDesktopLifetime([]);
+    }
+
+    static void SeedBodyFixture(MainWindowViewModel viewModel, MainWindow window, string screen)
+    {
+        var body = screen == "body-json"
+            ? "{\n  \"name\": \"orders\",\n  \"count\": 42,\n  \"ok\": true\n}"
+            : "<order id=\"7\">\n  <name>orders</name>\n</order>";
+        var row = new MessageRowViewModel(new MessageRecord
+        {
+            Body = BinaryData.FromString(body), SourceEntityPath = "orders", SequenceNumber = 1
+        });
+        viewModel.Messages.Add(row);
+        window.Opened += (_, _) => window.FindControl<DataGrid>("MessageGrid")!.SelectedItem = row;
     }
 
     // Uses only synthetic data; when available, the secondary screen tests real screen bounds.
