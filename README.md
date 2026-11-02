@@ -353,8 +353,8 @@ its own, the table says when.
 |---|---|---|---|
 | Connection | Advanced connection options | Transport (AMQP over WebSockets), Event hubs, consumer group, subscription ID | When any of them already has a value |
 | Send message | Message metadata · Application properties · Copies and scheduling | Metadata fields · custom properties · copy count and scheduled time | Copies and scheduling, when its validation fails |
-| Queue / topic | Optional behaviour · Fixed at creation | Optional settings · settings Azure fixes at creation (locked once the entity exists) | Optional behaviour when auto-delete-on-idle is changed; Fixed at creation when the duplicate-detection history window is changed |
-| Subscription | Optional behaviour · Forwarding and metadata · Fixed at creation | As above, plus forwarding targets | As above |
+| Queue / topic | Optional behaviour · Fixed at creation | Optional settings · settings Azure fixes at creation (locked once the entity exists) | Optional behaviour when save finds auto-delete-on-idle invalid; Fixed at creation when save finds the duplicate-detection history window invalid |
+| Subscription | Optional behaviour · Forwarding and metadata · Fixed at creation | As above, plus forwarding targets | Optional behaviour only, when save finds auto-delete-on-idle invalid; Forwarding and metadata and Fixed at creation never open on their own |
 | Rule | Optional SQL action · Advanced correlation fields | SQL action · correlation fields | When the rule already has a SQL action, or any correlation field is set |
 
 ### Seeing the UI
@@ -423,7 +423,8 @@ The S33 integration checks use real Tab/Shift+Tab, arrows, Enter, Escape and nat
 exporter dispatch. Existing slice tests remain in place. The native menu's Copy action
 uses the focused input or property selection; a password or empty input selection never
 falls back to a stale body selection. Grid copy and the explicit Copy body action copy
-the full body. Cmd+F stays inside the body viewer. Shift+F10 (or Menu) opens the tree
+the full body, except a binary body over 1 MiB, which copies only the displayed hex dump
+(see the large-body table above). Cmd+F stays inside the body viewer. Shift+F10 (or Menu) opens the tree
 context menu. Plain Tab leaves the multiline composer without changing the draft.
 
 Observed on macOS 27.2 (26B123), Avalonia Native/Skia, using isolated fixture state on
