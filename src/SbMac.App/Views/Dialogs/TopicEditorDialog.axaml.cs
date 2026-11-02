@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
 using Avalonia.Threading;
 
 using SbMac.App.ViewModels.Dialogs;
@@ -23,6 +24,7 @@ public partial class TopicEditorDialog : Window
     {
         isOpen = true;
         FitWorkArea();
+        (NameField.IsEnabled ? (Control)NameField : MaxSizeField).Focus(NavigationMethod.Tab);
     }
 
     void FitWorkArea()
@@ -54,7 +56,7 @@ public partial class TopicEditorDialog : Window
         Dispatcher.UIThread.Post(() =>
         {
             var target = this.FindControl<Control>(field == nameof(TopicEditorViewModel.Name) ? "NameField" : field);
-            target?.Focus();
+            target?.Focus(NavigationMethod.Tab);
             target?.BringIntoView();
         }, DispatcherPriority.Loaded);
     }

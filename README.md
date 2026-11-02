@@ -353,6 +353,51 @@ directory (seeding one Entra ID fixture namespace), has no update checker, and r
 connect to Azure. Quitting and relaunching with the same `--state-dir` shows the saved
 appearance being restored. Delete the directory when you are done.
 
+### Keyboard verification
+
+Use fresh temporary state for each native size (saved window bounds override the initial
+`--size`). Add `--native-screen table-layout`, `body-json`, or `send` to the native
+command above. These fixtures refuse Azure access. The send fixture is standalone;
+owned dialog restoration is covered through the real `IUiServices` paths in UI tests.
+
+The S33 integration checks use real Tab/Shift+Tab, arrows, Enter, Escape and native menu
+exporter dispatch. Existing slice tests remain in place. The native menu's Copy action
+uses the focused input or property selection; a password or empty input selection never
+falls back to a stale body selection. Grid copy and the explicit Copy body action copy
+the full body. Cmd+F stays inside the body viewer. Shift+F10 (or Menu) opens the tree
+context menu. Plain Tab leaves the multiline composer without changing the draft.
+
+Observed on macOS 27.2 (26B123), Avalonia Native/Skia, using isolated fixture state on
+2026-11-02, on the issue-42 changes based on `41459774`:
+
+| Check | Native observation | Automated evidence |
+|---|---|---|
+| Cmd+, | One Settings window; Appearance, Reset Layout and Close reachable in both directions; visible focus in Light/Dark; Escape restores owner focus; theme saved to fixture settings | Existing Appearance tests and dialog keyboard round trips |
+| Cmd+F | Body Tab path opens Find; Enter/Shift+Enter navigate; Escape returns to the editor; entity search does not open body Find | `BodyFindKeyboardPathRemainsScopedAndEscapable` |
+| Cmd+C | Body copied as `Synthetic message 1`; search, Find query, property (`fixture-1`) and owned Connection name copy their own text; empty search selection preserves clipboard | `NativeCopy*` tests additionally cover password and hidden-inspector cases |
+| Columns | Tab reaches Columns; Enter/Down/Enter changes ENQUEUED visibility; popup closes and focus returns; reopening/Escape works | `WorkspaceMenusSupportKeyboardActivationAndReturnFocus` and existing layout tests |
+| Panes | Tab from inspector splitter reaches Body with a visible cue; body Tab exits to Activity; Activity opens at Hide; inspector shortcut hides to grid and shows to selected tab | Workspace visibility and inspector traversal tests |
+| Composer | Body Tab reaches Content type; reverse Tab returns; Enter adds a newline; traversal reaches Send and Cancel; Escape cancels without sending | `ComposerKeyboardPathLeavesBodyWithoutSubmitting` |
+
+Native screenshots were inspected in the worker session (Settings in Light/Dark, dark
+Body tab/Activity focus and composer Content type focus). Headless Light/Dark renders
+cover the workspace, chooser, activity, body find and dialog variants. Native popup
+windows are not included in the owner-window screenshot capture; chooser activation is
+verified through the resulting column visibility and restored focus. VoiceOver end-to-end
+validation remains explicitly deferred.
+
+Review revisions after those native observations are verified by headless tests and
+Light/Dark renders only; a native recheck of them is still outstanding:
+
+| Behaviour | Automated evidence |
+|---|---|
+| Toolbar and message-header Tab/Shift+Tab follow on-screen left-to-right order at 1360x860 and 960x600 (More last when compact) | `ToolbarAndHeaderTabOrderFollowsVisualOrder` |
+| Populated workspace traverses toolbar, sidebar, header, grid, inspector and status bar in both directions without changing the explicit selection; Shift+Tab leaves the inspector content through its tab header | `MainWorkspaceKeyboardTraversalReachesNamedRegions` |
+| Arrow keys move the grid row and inspector; Space on a row checkbox toggles only that row | `MessageGridArrowKeysMoveRowAndSpaceTogglesOnlyFocusedCheckbox` |
+| Enter activates Actions › Copy body, Columns and More › Inspector items | `WorkspaceMenusSupportKeyboardActivationAndReturnFocus` |
+| Destructive confirmations open focused on the message, so Space does nothing; Return confirms and Escape cancels | `DestructiveConfirmationIgnoresSpaceAtOpen` |
+| Editor field names match their visible labels | `DialogKeyboardRoundTripsPreserveDefaultsAndOwnerFocus` |
+
 ## Building
 
 Requires the .NET 10 SDK.

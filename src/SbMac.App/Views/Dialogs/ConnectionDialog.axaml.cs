@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
 
 using SbMac.App.ViewModels.Dialogs;
 
@@ -22,6 +23,7 @@ public partial class ConnectionDialog : Window
     {
         isOpen = true;
         FitWorkArea();
+        NameField.Focus(NavigationMethod.Tab);
     }
 
     void FitWorkArea()
@@ -53,7 +55,7 @@ public partial class ConnectionDialog : Window
 
         viewModel.ValidationError = "Complete the required field before saving.";
         var field = this.FindControl<Control>(invalid + "Field");
-        field?.Focus();
+        field?.Focus(NavigationMethod.Tab);
         field?.BringIntoView();
     }
 }

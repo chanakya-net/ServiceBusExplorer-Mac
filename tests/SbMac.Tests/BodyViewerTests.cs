@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -246,6 +247,40 @@ public partial class UiSmokeTests
         Assert.False(viewer.FindBar.IsVisible);
         Assert.True(viewer.Editor.TextArea.IsKeyboardFocusWithin);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task NativeCopyUsesActiveFocusedControl()
+    {
+        var (window, vm, viewer, recorder) = OpenBody(BodyRow(JsonBody));
+        try
+        {
+            var menu = NativeMenu.GetMenu(window)!;
+            var messages = menu.Items.OfType<NativeMenuItem>().Single(i => i.Header == "Messages");
+            var copy = messages.Menu!.Items.OfType<NativeMenuItem>().Single(i => i.Gesture?.Key == Avalonia.Input.Key.C);
+            viewer.Editor.Select(2, 4);
+            var search = window.GetControl<TextBox>("EntitySearchBox");
+            search.Text = "fixture search";
+            search.Focus(Avalonia.Input.NavigationMethod.Tab);
+            search.SelectionStart = 0;
+            search.SelectionEnd = 7;
+            await window.Clipboard!.SetTextAsync("sentinel");
+            ((INativeMenuItemExporterEventsImplBridge)copy).RaiseClicked();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("fixture", await window.Clipboard!.TryGetTextAsync());
+            Assert.Empty(recorder.ClipboardTexts);
+            search.SelectionEnd = search.SelectionStart;
+            ((INativeMenuItemExporterEventsImplBridge)copy).RaiseClicked();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("fixture", await window.Clipboard!.TryGetTextAsync());
+            Assert.Empty(recorder.ClipboardTexts);
+            viewer.Editor.TextArea.Focus();
+            viewer.Editor.Select(0, 0);
+            ((INativeMenuItemExporterEventsImplBridge)copy).RaiseClicked();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal([vm.BodyText], recorder.ClipboardTexts);
+        }
+        finally { window.Close(); }
     }
 
 }

@@ -14,7 +14,7 @@
       <Button x:Name="NextButton" Content="Next" />
       <Button x:Name="CloseFindButton" Content="Close" />
     </StackPanel>
-  <ae:TextEditor x:Name="Editor"
+  <ae:TextEditor x:Name="Editor" Focusable="False"
                  IsReadOnly="True"
                  ShowLineNumbers="False"
                  WordWrap="False"

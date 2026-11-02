@@ -89,10 +89,16 @@ public sealed class MessageDialog : Window
         {
             Content = body,
             MaxHeight = 340,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            // Destructive confirmations start on the message, not the confirm button, so a stray
+            // Space cannot delete; Return still confirms through IsDefault and Escape cancels.
+            Focusable = destructive
         };
+        Avalonia.Automation.AutomationProperties.SetName(scroller, message);
         Opened += (_, _) =>
         {
+            Control initial = destructive ? scroller : (Button)buttons.Children[^1];
+            initial.Focus(Avalonia.Input.NavigationMethod.Tab);
             var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
             if (screen is null) return;
             var frame = FrameSize ?? ClientSize;

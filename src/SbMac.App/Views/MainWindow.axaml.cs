@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 // Avalonia 12 moved SetTextAsync off IClipboard onto ClipboardExtensions in this namespace.
 using Avalonia.Input.Platform;
@@ -40,6 +41,9 @@ public partial class MainWindow : Window, IUiServices
         MessageGrid.SelectionChanged += OnMessageSelectionChanged;
 
         SidebarSplitter.DragCompleted += (_, _) => CapturePanelLayout();
+        EntityTree.KeyDown += OnEntityTreeKeyDown;
+        DetailsSplitter.KeyDown += OnInspectorSplitterKeyDown;
+        InspectorTabs.KeyDown += OnInspectorTabsKeyDown;
         DetailsSplitter.DragCompleted += (_, _) => CapturePanelLayout();
         MainSplitLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
         MessageDetailLayout.SizeChanged += (_, _) => ClampPanelsToLayout();
@@ -53,19 +57,25 @@ public partial class MainWindow : Window, IUiServices
 
     void UpdateHeaderLayout()
     {
+        var moreHadFocus = MessageActionsButton.IsKeyboardFocusWithin;
         SetHeaderCompact(false);
         var available = MessageHeader.Bounds.Width;
         var compact = AdaptiveWidth.NeedsCompaction(MessageHeader.Children.OfType<Control>().Where(c => !ReferenceEquals(c, MessageActionsButton)), available);
         SetHeaderCompact(compact);
+        if (moreHadFocus)
+            (compact ? MessageActionsButton : InspectorButton).Focus(NavigationMethod.Tab);
     }
 
     void SetHeaderCompact(bool compact)
     {
+        var restoreFocus = compact && (InspectorButton.IsKeyboardFocusWithin ||
+            BulkButtons.IsKeyboardFocusWithin || EditAndResendButton.IsKeyboardFocusWithin);
         HeaderCompact = compact;
         InspectorButton.IsVisible = !compact;
         BulkButtons.IsVisible = !compact;
         EditAndResendButton.IsVisible = !compact;
         MessageActionsButton.IsVisible = compact;
+        if (restoreFocus) MessageActionsButton.Focus(NavigationMethod.Tab);
     }
 
     // Labels collapse to icons (tooltip + automation name keep the words) before controls clip.
@@ -123,6 +133,8 @@ public partial class MainWindow : Window, IUiServices
             Avalonia.Threading.Dispatcher.UIThread.Post(UpdateHeaderLayout, Avalonia.Threading.DispatcherPriority.Loaded);
         if (e.PropertyName == nameof(MainWindowViewModel.IsInspectorVisible) && ViewModel is { } vm)
             UpdateInspectorVisibility(vm.IsInspectorVisible, moveFocus: !applyingSavedPanels);
+        if (e.PropertyName == nameof(MainWindowViewModel.IsActivityExpanded) && !applyingSavedPanels)
+            MoveActivityFocus();
         if (e.PropertyName is nameof(MainWindowViewModel.IsInspectorVisible) or nameof(MainWindowViewModel.IsActivityExpanded))
             CapturePanelVisibility();
     }
@@ -136,7 +148,7 @@ public partial class MainWindow : Window, IUiServices
             rows[1].Height = tableHeight;
             rows[3].Height = inspectorHeight;
             ClampPanelsToLayout();
-            if (moveFocus) Avalonia.Threading.Dispatcher.UIThread.Post(() => InspectorTabs.ContainerFromIndex(Math.Max(0, InspectorTabs.SelectedIndex))?.Focus());
+            if (moveFocus) Avalonia.Threading.Dispatcher.UIThread.Post(() => InspectorTabs.ContainerFromIndex(Math.Max(0, InspectorTabs.SelectedIndex))?.Focus(NavigationMethod.Tab));
         }
         else
         {
@@ -144,7 +156,7 @@ public partial class MainWindow : Window, IUiServices
             inspectorHeight = rows[3].Height;
             rows[1].Height = new GridLength(1, GridUnitType.Star);
             rows[3].Height = new GridLength(0);
-            if (moveFocus) MessageGrid.Focus();
+            if (moveFocus) MessageGrid.Focus(NavigationMethod.Tab);
         }
     }
 

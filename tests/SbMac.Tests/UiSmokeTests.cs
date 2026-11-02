@@ -70,6 +70,7 @@ public partial class UiSmokeTests
         Assert.Equal("Cancel", buttons[0].Content);
         Assert.Equal("Continue", buttons[1].Content);
         Assert.Contains("primary", buttons[1].Classes);
+        Assert.True(buttons[1].IsFocused); // Initial focus preserves the default Enter action.
         buttons[0].Focus();
         Assert.True(buttons[0].IsFocused);
         dialog.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);

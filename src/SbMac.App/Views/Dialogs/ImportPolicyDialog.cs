@@ -43,7 +43,11 @@ public sealed class ImportPolicyDialog : Window
             MaxHeight = MaxSummaryHeight,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
         };
-        Opened += (_, _) => ClampToScreen(scroller);
+        Opened += (_, _) =>
+        {
+            ClampToScreen(scroller);
+            skip.Focus(Avalonia.Input.NavigationMethod.Tab);
+        };
 
         Content = new StackPanel
         {

@@ -7,7 +7,7 @@
     <Grid RowDefinitions="Auto,*" MaxHeight="280">
       <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,6">
         <TextBlock DockPanel.Dock="Left" Classes="caption" Text="ACTIVITY" VerticalAlignment="Center" />
-        <Button DockPanel.Dock="Right" Classes="toolbar" Content="Hide" Padding="9,3" Command="{Binding ToggleActivityCommand}" />
+        <Button DockPanel.Dock="Right" Classes="toolbar" x:Name="HideActivityButton" AutomationProperties.Name="Hide activity" Content="Hide" Padding="9,3" Command="{Binding ToggleActivityCommand}" />
         <Button DockPanel.Dock="Right" Classes="toolbar" Content="Clear finished" Padding="9,3" IsEnabled="{Binding HasFinishedOperations}" Command="{Binding ClearFinishedOperationsCommand}" />
         <Button DockPanel.Dock="Right" Classes="toolbar destructive" x:Name="CancelAllButton" Content="Cancel all" Padding="9,3" IsEnabled="{Binding IsBusy}" Command="{Binding CancelAllOperationsCommand}" />
       </DockPanel>
@@ -68,7 +68,7 @@
             <TextBlock DockPanel.Dock="Left" Classes="caption" Text="LOG · NEWEST FIRST" VerticalAlignment="Center" />
             <Button DockPanel.Dock="Right" Classes="toolbar" x:Name="ClearLogButton" Content="Clear log" Command="{Binding ClearLogCommand}" />
           </DockPanel>
-          <ListBox Grid.Row="1" ItemsSource="{Binding Log}" Padding="4,6">
+          <ListBox AutomationProperties.Name="Activity log" Grid.Row="1" ItemsSource="{Binding Log}" Padding="4,6">
             <ListBox.ItemTemplate><DataTemplate x:DataType="x:String">
               <TextBlock Classes="mono" Text="{Binding}" TextWrapping="Wrap" />
             </DataTemplate></ListBox.ItemTemplate>

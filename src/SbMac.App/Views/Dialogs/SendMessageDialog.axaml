@@ -14,20 +14,20 @@
     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
       <StackPanel Spacing="12">
         <TextBlock Classes="caption" Text="BODY" />
-        <TextBox x:Name="BodyInput" Classes="mono" Text="{Binding Body}" AcceptsReturn="True" AcceptsTab="True"
+        <TextBox AutomationProperties.Name="Message body" x:Name="BodyInput" Classes="mono" Text="{Binding Body}" AcceptsReturn="True"
                  Height="220" TextWrapping="NoWrap" VerticalContentAlignment="Top" PlaceholderText="{}{ &quot;orderId&quot;: 1 }" />
         <Grid ColumnDefinitions="110,*">
           <TextBlock Classes="fieldLabel" Text="Content type" />
-          <TextBox Grid.Column="1" Text="{Binding ContentType}" PlaceholderText="application/json" />
+          <TextBox AutomationProperties.Name="Content type" Grid.Column="1" Text="{Binding ContentType}" PlaceholderText="application/json" />
         </Grid>
         <Expander HorizontalAlignment="Stretch" Header="Message metadata" IsExpanded="{Binding IsMetadataExpanded}">
           <StackPanel Spacing="9" Margin="0,10,0,0">
-            <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Label" /><TextBox Grid.Column="1" Text="{Binding Subject}" /></Grid>
-            <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Correlation ID" /><TextBox Grid.Column="1" Text="{Binding CorrelationId}" /></Grid>
-            <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowServiceBusFields}"><TextBlock Classes="fieldLabel" Text="Session ID" /><TextBox Grid.Column="1" Text="{Binding SessionId}" /></Grid>
-            <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Partition key" /><TextBox Grid.Column="1" Text="{Binding PartitionKey}" /></Grid>
-            <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowServiceBusFields}"><TextBlock Classes="fieldLabel" Text="Reply to" /><TextBox Grid.Column="1" Text="{Binding ReplyTo}" /></Grid>
-            <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowServiceBusFields}"><TextBlock Classes="fieldLabel" Text="To" /><TextBox Grid.Column="1" Text="{Binding To}" /></Grid>
+            <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Label" /><TextBox AutomationProperties.Name="Label" Grid.Column="1" Text="{Binding Subject}" /></Grid>
+            <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Correlation ID" /><TextBox AutomationProperties.Name="Correlation ID" Grid.Column="1" Text="{Binding CorrelationId}" /></Grid>
+            <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowServiceBusFields}"><TextBlock Classes="fieldLabel" Text="Session ID" /><TextBox AutomationProperties.Name="Session ID" Grid.Column="1" Text="{Binding SessionId}" /></Grid>
+            <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Partition key" /><TextBox AutomationProperties.Name="Partition key" Grid.Column="1" Text="{Binding PartitionKey}" /></Grid>
+            <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowServiceBusFields}"><TextBlock Classes="fieldLabel" Text="Reply to" /><TextBox AutomationProperties.Name="Reply to" Grid.Column="1" Text="{Binding ReplyTo}" /></Grid>
+            <Grid ColumnDefinitions="110,*" IsVisible="{Binding ShowServiceBusFields}"><TextBlock Classes="fieldLabel" Text="To" /><TextBox AutomationProperties.Name="To" Grid.Column="1" Text="{Binding To}" /></Grid>
           </StackPanel>
         </Expander>
         <Expander HorizontalAlignment="Stretch" Header="Application properties" IsExpanded="{Binding IsPropertiesExpanded}">
@@ -36,7 +36,7 @@
             <ItemsControl ItemsSource="{Binding Properties}">
               <ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:PropertyRowViewModel">
                 <Grid ColumnDefinitions="*,6,*,6,Auto" Margin="0,0,0,5">
-                  <TextBox Text="{Binding Key}" PlaceholderText="key" /><TextBox Grid.Column="2" Text="{Binding Value}" PlaceholderText="value" />
+                  <TextBox AutomationProperties.Name="Property key" Text="{Binding Key}" PlaceholderText="key" /><TextBox AutomationProperties.Name="Property value" Grid.Column="2" Text="{Binding Value}" PlaceholderText="value" />
                   <Button Grid.Column="4" Content="Remove" Command="{Binding $parent[ItemsControl].((vm:SendMessageViewModel)DataContext).RemovePropertyCommand}" CommandParameter="{Binding}" />
                 </Grid>
               </DataTemplate></ItemsControl.ItemTemplate>
@@ -45,10 +45,10 @@
         </Expander>
         <Expander HorizontalAlignment="Stretch" Header="Copies and scheduling" IsExpanded="{Binding IsDeliveryExpanded}">
           <StackPanel Spacing="9" Margin="0,10,0,0">
-            <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Copies" /><NumericUpDown x:Name="CopiesInput" Grid.Column="1" Minimum="1" Maximum="10000" Increment="1" FormatString="0" Value="{Binding Copies}" /></Grid>
+            <Grid ColumnDefinitions="110,*"><TextBlock Classes="fieldLabel" Text="Copies" /><NumericUpDown AutomationProperties.Name="Copies" x:Name="CopiesInput" Grid.Column="1" Minimum="1" Maximum="10000" Increment="1" FormatString="0" Value="{Binding Copies}" /></Grid>
             <CheckBox Content="Replace {n} in the body with the copy number" IsChecked="{Binding NumberCopies}" />
             <CheckBox x:Name="ScheduleToggle" Content="Schedule for later" IsChecked="{Binding Schedule}" IsVisible="{Binding ShowServiceBusFields}" />
-            <Grid ColumnDefinitions="110,*,6,Auto" IsVisible="{Binding ShowScheduleFields}"><TextBlock Classes="fieldLabel" Text="Enqueue at" /><DatePicker Grid.Column="1" SelectedDate="{Binding ScheduledDate}" /><TimePicker Grid.Column="3" SelectedTime="{Binding ScheduledTime}" /></Grid>
+            <Grid ColumnDefinitions="110,*,6,Auto" IsVisible="{Binding ShowScheduleFields}"><TextBlock Classes="fieldLabel" Text="Enqueue at" /><DatePicker AutomationProperties.Name="Enqueue at date" Grid.Column="1" SelectedDate="{Binding ScheduledDate}" /><TimePicker AutomationProperties.Name="Enqueue at time" Grid.Column="3" SelectedTime="{Binding ScheduledTime}" /></Grid>
           </StackPanel>
         </Expander>
       </StackPanel>
