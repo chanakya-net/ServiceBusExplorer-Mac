@@ -64,7 +64,7 @@ static class NativePreview
                     NativeTableLayoutFixture.Seed(window, viewModel);
                 };
             }
-            else if (screen is "body-json" or "body-xml" or "body-long")
+            else if (screen is "body-json" or "body-xml" or "body-long" or "body-large" or "body-longline")
                 SeedBodyFixture(viewModel, window, screen);
             else if (screen is "resubmit" or "resubmit-long")
                 window.Opened += async (_, _) => await ShowResubmitFixture(window, screen);
@@ -86,6 +86,15 @@ static class NativePreview
 
     static void SeedBodyFixture(MainWindowViewModel viewModel, MainWindow window, string screen)
     {
+        if (screen is "body-large" or "body-longline")
+        {
+            var rows = screen == "body-large" ? LargeBodyFixture.Rows().ToList() : [LargeBodyFixture.LongLineRow()];
+            foreach (var r in rows) viewModel.Messages.Add(r);
+            window.Opened += (_, _) => window.FindControl<DataGrid>("MessageGrid")!.SelectedItem = rows[Math.Min(1, rows.Count - 1)];
+            TraceSelectionLatency(viewModel);
+            return;
+        }
+
         var body = screen == "body-long" ? string.Concat(Enumerable.Repeat("A long message body with readable words and details. ", 30)) : screen == "body-json"
             ? "{\n  \"name\": \"orders\",\n  \"count\": 42,\n  \"ok\": true\n}"
             : "<order id=\"7\">\n  <name>orders</name>\n</order>";
@@ -95,6 +104,21 @@ static class NativePreview
         });
         viewModel.Messages.Add(row);
         window.Opened += (_, _) => window.FindControl<DataGrid>("MessageGrid")!.SelectedItem = row;
+    }
+
+    /// <summary>Prints how long the UI took to go idle after each selection change (stdout, for local measurement).</summary>
+    static void TraceSelectionLatency(MainWindowViewModel viewModel)
+    {
+        var count = 0;
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(viewModel.SelectedMessage) || viewModel.SelectedMessage is not { } row) return;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var n = ++count;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                Console.WriteLine($"SELECTION_TRACE n={n} seq={row.Record.SequenceNumber} idle_ms={watch.Elapsed.TotalMilliseconds:F1}"),
+                Avalonia.Threading.DispatcherPriority.ContextIdle);
+        };
     }
 
     // Uses only synthetic data; when available, the secondary screen tests real screen bounds.
