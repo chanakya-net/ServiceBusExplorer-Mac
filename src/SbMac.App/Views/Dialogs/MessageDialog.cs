@@ -93,6 +93,7 @@ public sealed class MessageDialog : Window
         };
         Opened += (_, _) =>
         {
+            ((Button)buttons.Children[^1]).Focus(Avalonia.Input.NavigationMethod.Tab);
             var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
             if (screen is null) return;
             var frame = FrameSize ?? ClientSize;

@@ -24,6 +24,7 @@ public partial class SendMessageDialog : Window
         base.OnOpened(e);
         isOpen = true;
         FitWorkArea();
+        BodyInput.Focus(Avalonia.Input.NavigationMethod.Tab);
     }
 
     void FitWorkArea()
@@ -67,7 +68,7 @@ public partial class SendMessageDialog : Window
         Dispatcher.UIThread.Post(() =>
         {
             target.BringIntoView();
-            target.Focus();
+            target.Focus(Avalonia.Input.NavigationMethod.Tab);
         }, DispatcherPriority.Loaded);
     }
 }

@@ -201,13 +201,21 @@ public sealed class MessageTableLayoutBehavior : IDisposable
         {
             var item = new MenuItem { Header = columns[column.Id].Header, ToggleType = MenuItemToggleType.CheckBox,
                 IsChecked = column.IsVisible, IsEnabled = !column.IsVisible || visibleCount > 1 };
-            item.Click += (_, _) => vm.SetMessageColumns(layout.Select(c => c.Id == column.Id
-                ? c with { IsVisible = !column.IsVisible } : c).ToArray());
+            item.Click += (_, _) =>
+            {
+                menu.Hide(); // Close before Apply replaces the focused menu item.
+                vm.SetMessageColumns(layout.Select(c => c.Id == column.Id
+                    ? c with { IsVisible = !column.IsVisible } : c).ToArray());
+            };
             menu.Items.Add(item);
         }
         menu.Items.Add(new Separator());
         var restore = new MenuItem { Header = "Restore Default Columns" };
-        restore.Click += (_, _) => vm.RestoreMessageColumns();
+        restore.Click += (_, _) =>
+        {
+            menu.Hide();
+            vm.RestoreMessageColumns();
+        };
         menu.Items.Add(restore);
     }
 

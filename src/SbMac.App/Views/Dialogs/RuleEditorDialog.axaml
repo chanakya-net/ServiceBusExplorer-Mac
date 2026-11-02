@@ -21,12 +21,12 @@
     <TextBlock Classes="caption" Text="ESSENTIAL" />
     <Grid ColumnDefinitions="150,*">
       <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
-      <TextBox x:Name="NameField" Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}" />
+      <TextBox AutomationProperties.Name="Name" x:Name="NameField" Grid.Column="1" Text="{Binding Name}" IsEnabled="{Binding IsNew}" />
     </Grid>
 
     <Grid ColumnDefinitions="150,*">
       <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Filter type" />
-      <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+      <ComboBox AutomationProperties.Name="Filter type" Grid.Column="1" HorizontalAlignment="Stretch"
                 ItemsSource="{Binding FilterTypes}"
                 SelectedIndex="{Binding SelectedFilterIndex}" />
     </Grid>
@@ -36,7 +36,7 @@
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="SQL expression"
                    VerticalAlignment="Top" Margin="0,6,10,0" />
-        <TextBox x:Name="SqlExpression" Grid.Column="1" Classes="mono" Text="{Binding SqlExpression}"
+        <TextBox AutomationProperties.Name="SQL expression" x:Name="SqlExpression" Grid.Column="1" Classes="mono" Text="{Binding SqlExpression}"
                  AcceptsReturn="True" TextWrapping="Wrap" Height="70"
                  PlaceholderText="region = 'emea' AND priority &gt; 3" />
       </Grid>
@@ -44,7 +44,7 @@
       <Expander HorizontalAlignment="Stretch" Header="Optional SQL action" IsExpanded="{Binding IsSqlActionExpanded}" HorizontalContentAlignment="Stretch">
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="SQL action" />
-        <TextBox Grid.Column="1" Classes="mono" Text="{Binding SqlAction}"
+        <TextBox AutomationProperties.Name="SQL action" Grid.Column="1" Classes="mono" Text="{Binding SqlAction}"
                  PlaceholderText="optional, e.g. SET routed = 'yes'" />
       </Grid>
       </Expander>
@@ -57,39 +57,39 @@
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Correlation ID" />
-        <TextBox Grid.Column="1" Text="{Binding CorrelationId}" />
+        <TextBox AutomationProperties.Name="Correlation ID" Grid.Column="1" Text="{Binding CorrelationId}" />
       </Grid>
 
       <Expander HorizontalAlignment="Stretch" Header="Advanced correlation fields" IsExpanded="{Binding IsCorrelationAdvancedExpanded}" HorizontalContentAlignment="Stretch">
       <StackPanel Spacing="10" Margin="0,10,0,0">
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Message ID" />
-        <TextBox Grid.Column="1" Text="{Binding MessageId}" />
+        <TextBox AutomationProperties.Name="Message ID" Grid.Column="1" Text="{Binding MessageId}" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Label" />
-        <TextBox Grid.Column="1" Text="{Binding Subject}" />
+        <TextBox AutomationProperties.Name="Subject" Grid.Column="1" Text="{Binding Subject}" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="To" />
-        <TextBox Grid.Column="1" Text="{Binding To}" />
+        <TextBox AutomationProperties.Name="To" Grid.Column="1" Text="{Binding To}" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Reply to" />
-        <TextBox Grid.Column="1" Text="{Binding ReplyTo}" />
+        <TextBox AutomationProperties.Name="Reply To" Grid.Column="1" Text="{Binding ReplyTo}" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Session ID" />
-        <TextBox Grid.Column="1" Text="{Binding SessionId}" />
+        <TextBox AutomationProperties.Name="Session ID" Grid.Column="1" Text="{Binding SessionId}" />
       </Grid>
 
       <Grid ColumnDefinitions="150,*">
         <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Content type" />
-        <TextBox Grid.Column="1" Text="{Binding ContentType}" />
+        <TextBox AutomationProperties.Name="Content Type" Grid.Column="1" Text="{Binding ContentType}" />
       </Grid>
       </StackPanel>
       </Expander>

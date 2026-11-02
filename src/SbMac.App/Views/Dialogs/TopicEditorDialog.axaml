@@ -23,19 +23,19 @@
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Name" />
-          <TextBox Grid.Column="1" x:Name="NameField" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
+          <TextBox AutomationProperties.Name="Name" Grid.Column="1" x:Name="NameField" Text="{Binding Name}" IsEnabled="{Binding IsNew}"
                    PlaceholderText="order-events" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Max size (MB)" />
-          <NumericUpDown Grid.Column="1" Minimum="1024" Maximum="81920" Increment="1024"
+          <NumericUpDown AutomationProperties.Name="Maximum size in megabytes" Grid.Column="1" Minimum="1024" Maximum="81920" Increment="1024"
                          FormatString="0" Value="{Binding MaxSizeInMegabytes}" />
         </Grid>
 
         <Grid ColumnDefinitions="190,*">
           <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Default time to live" />
-          <TextBox Grid.Column="1" x:Name="DefaultMessageTimeToLive" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
+          <TextBox AutomationProperties.Name="Default Message Time To Live" Grid.Column="1" x:Name="DefaultMessageTimeToLive" Text="{Binding DefaultMessageTimeToLive}" PlaceholderText="blank = service default" />
         </Grid>
 
         <TextBlock Classes="tertiary" TextWrapping="Wrap"
@@ -45,14 +45,14 @@
           <StackPanel Spacing="12" Margin="0,10,0,0">
             <Grid ColumnDefinitions="190,*">
               <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Auto-delete on idle" />
-              <TextBox Grid.Column="1" x:Name="AutoDeleteOnIdle" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
+              <TextBox AutomationProperties.Name="Auto Delete On IDle" Grid.Column="1" x:Name="AutoDeleteOnIdle" Text="{Binding AutoDeleteOnIdle}" PlaceholderText="blank = never" />
             </Grid>
             <CheckBox Content="Support ordering" IsChecked="{Binding SupportOrdering}" />
             <CheckBox Content="Enable batched operations" IsChecked="{Binding EnableBatchedOperations}" />
             <CheckBox Content="Topic is active (uncheck to disable)" IsChecked="{Binding IsActive}" />
             <Grid ColumnDefinitions="190,*">
               <TextBlock Grid.Column="0" Classes="fieldLabel" Text="User metadata" />
-              <TextBox Grid.Column="1" Text="{Binding UserMetadata}" />
+              <TextBox AutomationProperties.Name="User Metadata" Grid.Column="1" Text="{Binding UserMetadata}" />
             </Grid>
           </StackPanel>
         </Expander>
@@ -70,7 +70,7 @@
 
           <Grid ColumnDefinitions="190,*">
             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="Duplicate detection window" />
-            <TextBox Grid.Column="1" x:Name="DuplicateDetectionHistoryTimeWindow"
+            <TextBox AutomationProperties.Name="Duplicate Detection History Time Window" Grid.Column="1" x:Name="DuplicateDetectionHistoryTimeWindow"
                      Text="{Binding DuplicateDetectionHistoryTimeWindow}"
                      IsEnabled="{Binding CanEditCreateOnlySettings}"
                      PlaceholderText="00:10:00" />

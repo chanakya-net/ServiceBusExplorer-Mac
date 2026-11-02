@@ -35,6 +35,7 @@ public partial class MessageBodyViewer : UserControl
     public MessageBodyViewer()
     {
         InitializeComponent();
+        Avalonia.Automation.AutomationProperties.SetName(Editor.TextArea, "Message body text");
         WrapToggle.IsCheckedChanged += (_, _) => Editor.WordWrap = WrapToggle.IsChecked == true;
         OpenFindButton.Click += (_, _) => OpenFind();
         FindQuery.TextChanged += (_, _) => RefreshMatches();
@@ -104,7 +105,7 @@ public partial class MessageBodyViewer : UserControl
     internal void OpenFind()
     {
         FindBar.IsVisible = true;
-        FindQuery.Focus();
+        FindQuery.Focus(NavigationMethod.Tab);
         FindQuery.SelectAll();
         RefreshMatches();
     }
@@ -114,13 +115,22 @@ public partial class MessageBodyViewer : UserControl
         FindBar.IsVisible = false;
         FindQuery.Text = string.Empty;
         Editor.Select(0, 0);
-        Editor.TextArea.Focus();
+        Editor.TextArea.Focus(NavigationMethod.Tab);
     }
 
     void HandleFindKey(object? sender, KeyEventArgs e)
     {
         if (!IsKeyboardFocusWithin) return;
-        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Meta)
+        if (e.Key == Key.Tab && Editor.IsKeyboardFocusWithin &&
+            (e.KeyModifiers == KeyModifiers.None || e.KeyModifiers == KeyModifiers.Shift))
+        {
+            if (e.KeyModifiers == KeyModifiers.Shift)
+                (FindBar.IsVisible ? CloseFindButton : OpenFindButton).Focus(NavigationMethod.Tab);
+            else
+                TopLevel.GetTopLevel(this)?.FocusManager?.TryMoveFocus(NavigationDirection.Next);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Meta)
         {
             OpenFind();
             e.Handled = true;

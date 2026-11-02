@@ -44,7 +44,7 @@ public sealed class ResubmitDialog : Window
         Opened += (_, _) =>
         {
             ClampToScreen(scroller);
-            keep.Focus();
+            keep.Focus(Avalonia.Input.NavigationMethod.Tab);
         };
 
         Content = new StackPanel

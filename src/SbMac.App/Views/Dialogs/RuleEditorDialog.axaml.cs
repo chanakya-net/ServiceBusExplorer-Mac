@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using Avalonia.Threading;
 
 using SbMac.App.ViewModels.Dialogs;
@@ -23,6 +25,7 @@ public partial class RuleEditorDialog : Window
     {
         isOpen = true;
         FitWorkArea();
+        (NameField.IsEnabled ? (Control)NameField : this.GetVisualDescendants().OfType<ComboBox>().First()).Focus(NavigationMethod.Tab);
     }
 
     void FitWorkArea()
@@ -54,7 +57,7 @@ public partial class RuleEditorDialog : Window
         Dispatcher.UIThread.Post(() =>
         {
             var target = this.FindControl<Control>(field == nameof(RuleEditorViewModel.Name) ? "NameField" : field);
-            target?.Focus();
+            target?.Focus(NavigationMethod.Tab);
             target?.BringIntoView();
         }, DispatcherPriority.Loaded);
     }
