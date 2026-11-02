@@ -49,7 +49,13 @@ static class NativePreview
         {
             var viewModel = MainWindowViewModel.CreateIsolated(connections, RejectAzure, loaded);
             var window = new MainWindow { DataContext = viewModel };
-            if (screen is "resubmit" or "resubmit-long")
+            if (screen == "table-layout")
+                window.Opened += async (_, _) =>
+                {
+                    await viewModel.InitializeAsync();
+                    NativeTableLayoutFixture.Seed(window, viewModel);
+                };
+            else if (screen is "resubmit" or "resubmit-long")
                 window.Opened += async (_, _) => await ShowResubmitFixture(window, screen);
             else if (screen is not null) window.Opened += (_, _) => (screen == "rule" ? (Window)BuildRuleFixture() : screen == "topic" ? BuildTopicFixture() : screen == "subscription" ? BuildSubscriptionFixture() : BuildSendFixture(screen)).Show();
             if (width is { } w) window.Width = w;

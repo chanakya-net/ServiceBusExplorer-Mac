@@ -284,7 +284,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public void SetMessageColumns(IReadOnlyList<MessageColumnMetadata> columns)
     {
-        var states = columns.Select(c => new SbMac.App.Models.MessageColumnState(c.Id, c.IsVisible)).ToArray();
+        var states = columns.Select((c, index) => new SbMac.App.Models.MessageColumnState(c.Id, c.IsVisible, index, c.Width)).ToArray();
         if (preferences is null) sessionColumns[MessageTableKey] = states;
         else _ = preferences.SetMessageColumnsAsync(MessageTableKey, states);
         OnPropertyChanged(nameof(MessageColumns));

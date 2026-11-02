@@ -171,6 +171,55 @@ public partial class UiSmokeTests
     public void ServiceBusRowsHaveNoOffset() =>
         Assert.Null(new MessageRowViewModel(new MessageRecord { Body = BinaryData.FromString("x"), SourceEntityPath = "q" }).Offset);
 
+    [AvaloniaFact]
+    public async Task MessageTableLayout_SavedOrderAndWidthsRestoreIntoFreshGrid()
+    {
+        var directory = Directory.CreateTempSubdirectory("sbmac-layout-test-");
+        try
+        {
+            var file = Path.Combine(directory.FullName, "settings.json");
+            File.WriteAllText(file, """{"messageTables":{"serviceBus":{"columns":[{"id":"label","visible":true,"displayIndex":1,"width":215},{"id":"sequence","visible":true,"displayIndex":2,"width":105},{"id":"preview","visible":true,"width":80}]}}}""");
+            var preferences = new AppPreferencesService(new JsonSettingsStore(file));
+            preferences.Load();
+            var vm = NewIsolatedViewModel(preferences);
+            var window = new MainWindow { DataContext = vm };
+            window.Show();
+            var grid = window.GetControl<DataGrid>("MessageGrid");
+            var row = BuildMessageRow(1);
+            vm.Messages.Add(row);
+            grid.SelectedItems.Add(row);
+            Assert.Equal(new[] { "✓", "LABEL", "SEQ", "ENQUEUED", "MESSAGE ID", "SIZE", "PREVIEW" }, VisibleHeaders(grid));
+            Assert.Equal(215, grid.Columns[4].Width.Value);
+            Assert.Equal(160, grid.Columns[8].Width.Value); // XAML minimum wins.
+            Assert.Equal(Enumerable.Range(0, grid.Columns.Count), grid.Columns.OrderBy(c => c.DisplayIndex).Select(c => c.DisplayIndex));
+            Assert.Same(row, vm.SelectedMessage);
+            Assert.Contains(row, vm.SelectedMessages);
+            Assert.False(preferences.HasPendingSaves);
+            window.Close();
+            Assert.True(await preferences.FlushAsync());
+        }
+        finally { directory.Delete(true); }
+    }
+
+    [Fact]
+    public void MessageTableLayout_InvalidAndStaleStateRecoversSafely()
+    {
+        MessageColumnState[] states = [new("selection", false, 9, 60), new("label", true, 1, 140),
+            new("sequence", false, 1, double.NaN), new("sequence", true, 2, 900),
+            new("enqueued", true, int.MaxValue, double.NegativeInfinity), new("unknown", true, 2),
+            new("preview", true, -1, 1e9), new("partition", true, 3, 137)];
+        var layout = MessageTableLayoutViewModel.Resolve(MessageTableContext.ServiceBus, states);
+        Assert.Equal(new[] { "selection", "sequence", "label", "partition", "enqueued", "messageId", "size", "deliveryCount", "reason", "preview", "offset" }, layout.Select(c => c.Id));
+        Assert.True(layout[0].IsVisible);
+        Assert.Equal(60, layout[0].Width);
+        Assert.False(layout[1].IsVisible);
+        Assert.Null(layout[1].Width);
+        Assert.False(layout.Single(c => c.Id == "partition").IsVisible);
+        Assert.Equal(137, layout.Single(c => c.Id == "partition").Width);
+        Assert.Null(layout.Single(c => c.Id == "enqueued").Width);
+        Assert.Equal(10000, layout.Single(c => c.Id == "preview").Width);
+    }
+
     static string[] VisibleHeaders(DataGrid grid) => grid.Columns.Where(c => c.IsVisible)
         .OrderBy(c => c.DisplayIndex).Select(c => c.Header!.ToString()!).ToArray();
 }

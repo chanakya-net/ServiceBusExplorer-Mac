@@ -4,7 +4,7 @@ namespace SbMac.App.ViewModels;
 
 public enum MessageTableContext { ServiceBus, DeadLetter, EventHub }
 
-public sealed record MessageColumnMetadata(string Id, bool IsVisible);
+public sealed record MessageColumnMetadata(string Id, bool IsVisible, double? Width = null);
 
 public sealed class MessageTableLayoutViewModel
 {
@@ -29,18 +29,21 @@ public sealed class MessageTableLayoutViewModel
     public static IReadOnlyList<MessageColumnMetadata> Resolve(MessageTableContext context, IEnumerable<MessageColumnState>? saved)
     {
         var defaults = ForContext(context);
-        var values = new Dictionary<string, bool>();
+        var values = new Dictionary<string, MessageColumnState>();
         foreach (var state in saved ?? [])
-            if (state.Id is not null) values.TryAdd(state.Id, state.Visible);
-        var result = defaults.Select(c => c.Id == "selection" ? c with { IsVisible = true }
+            if (state.Id is not null) values.TryAdd(state.Id, state.Normalize());
+        var result = defaults.Select(c => values.TryGetValue(c.Id, out var state) ? c with { Width = state.Width } : c)
+            .Select(c => c.Id == "selection" ? c with { IsVisible = true }
             : !IsApplicable(context, c.Id) ? c with { IsVisible = false }
-            : values.TryGetValue(c.Id, out var visible) ? c with { IsVisible = visible } : c).ToArray();
+            : values.TryGetValue(c.Id, out var state) ? c with { IsVisible = state.Visible } : c).ToArray();
         if (!result.Any(c => c.Id != "selection" && c.IsVisible))
         {
             var first = Array.FindIndex(result, c => c.Id != "selection" && defaults.Any(d => d.Id == c.Id && d.IsVisible));
             result[first] = result[first] with { IsVisible = true };
         }
-        return result;
+        return result.OrderBy(c => c.Id == "selection" ? -1
+            : values.TryGetValue(c.Id, out var savedState) && savedState.DisplayIndex is > 0 && savedState.DisplayIndex < defaults.Count
+                ? savedState.DisplayIndex.Value : int.MaxValue).ToArray();
     }
 
     public static bool IsApplicable(MessageTableContext context, string id) => id != "selection" && context switch
