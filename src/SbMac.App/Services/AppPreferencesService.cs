@@ -21,6 +21,7 @@ public sealed partial class AppPreferencesService
     bool themeDirty;
     bool workspaceDirty;
     bool tablesDirty;
+    bool wordWrapDirty;
 
     public AppPreferencesService(JsonSettingsStore store) : this(store, Task.Delay) { }
 
@@ -80,7 +81,7 @@ public sealed partial class AppPreferencesService
             root = [];
         }
 
-        Current = new AppPreferences(ParseTheme(root[ThemeKey])) { Workspace = ParseWorkspace(root["workspace"]), MessageTables = ParseMessageTables(root["messageTables"]) };
+        Current = new AppPreferences(ParseTheme(root[ThemeKey])) { Workspace = ParseWorkspace(root["workspace"]), MessageTables = ParseMessageTables(root["messageTables"]), WordWrap = root["bodyViewer"] is JsonObject body && ReadFlag(body, "wordWrap", false) };
         return Current;
     }
 
@@ -104,6 +105,18 @@ public sealed partial class AppPreferencesService
             pendingSave = SaveAfterAsync(pendingSave);
             return pendingSave;
         }
+    }
+
+    public Task<bool> SetWordWrapAsync(bool wordWrap)
+    {
+        AppPreferences updated;
+        lock (saveLock)
+        {
+            Current = updated = Current with { WordWrap = wordWrap };
+            wordWrapDirty = true;
+        }
+        Changed?.Invoke(this, updated);
+        lock (saveLock) return pendingSave = SaveAfterAsync(pendingSave);
     }
 
     /// <summary>Resets only workspace and table layouts, superseding deferred captures.</summary>
@@ -164,7 +177,7 @@ public sealed partial class AppPreferencesService
         lock (saveLock)
         {
             if (delayedWorkspace is not null) PromoteWorkspace();
-            else if (pendingSave.IsCompleted && (themeDirty || workspaceDirty || tablesDirty))
+            else if (pendingSave.IsCompleted && (themeDirty || workspaceDirty || tablesDirty || wordWrapDirty))
                 pendingSave = SaveAfterAsync(pendingSave);
             return pendingSave;
         }
@@ -207,19 +220,20 @@ public sealed partial class AppPreferencesService
         lock (saveLock)
         {
             // An earlier queued save may already have persisted these changes.
-            if (!themeDirty && !workspaceDirty && !tablesDirty) return true;
+            if (!themeDirty && !workspaceDirty && !tablesDirty && !wordWrapDirty) return true;
         }
         bool saved;
         try
         {
-            var snapshot = (Preferences: Current, Theme: false, Workspace: false, Tables: false);
+            var snapshot = (Preferences: Current, Theme: false, Workspace: false, Tables: false, WordWrap: false);
             await store.UpdateAsync(root => snapshot = WritePendingPreferences(root)).ConfigureAwait(false);
             lock (saveLock)
             {
                 if (snapshot.Theme && Current.Theme == snapshot.Preferences.Theme) themeDirty = false;
                 if (snapshot.Workspace && Current.Workspace == snapshot.Preferences.Workspace) workspaceDirty = false;
                 if (snapshot.Tables && ReferenceEquals(Current.MessageTables, snapshot.Preferences.MessageTables)) tablesDirty = false;
-                if (!themeDirty && !workspaceDirty && !tablesDirty) LastSaveError = null;
+                if (snapshot.WordWrap && Current.WordWrap == snapshot.Preferences.WordWrap) wordWrapDirty = false;
+                if (!themeDirty && !workspaceDirty && !tablesDirty && !wordWrapDirty) LastSaveError = null;
             }
             saved = true;
         }
@@ -234,14 +248,20 @@ public sealed partial class AppPreferencesService
         return saved;
     }
 
-    (AppPreferences Preferences, bool Theme, bool Workspace, bool Tables) WritePendingPreferences(JsonObject root)
+    (AppPreferences Preferences, bool Theme, bool Workspace, bool Tables, bool WordWrap) WritePendingPreferences(JsonObject root)
     {
         lock (saveLock)
         {
             if (themeDirty) WriteTheme(root, Current.Theme);
             if (workspaceDirty) WriteWorkspace(root, Current.Workspace);
             if (tablesDirty) WriteMessageTables(root, Current.MessageTables);
-            return (Current, themeDirty, workspaceDirty, tablesDirty);
+            if (wordWrapDirty)
+            {
+                WriteSchema(root);
+                if (root["bodyViewer"] is not JsonObject body) root["bodyViewer"] = body = [];
+                body["wordWrap"] = Current.WordWrap;
+            }
+            return (Current, themeDirty, workspaceDirty, tablesDirty, wordWrapDirty);
         }
     }
 

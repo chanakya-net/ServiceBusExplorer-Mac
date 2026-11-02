@@ -78,6 +78,54 @@ public partial class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public void WordWrapToggleIsRestoredInNewWindow()
+    {
+        var dir = Directory.CreateTempSubdirectory("sbmac-wrap-");
+        try
+        {
+            var file = Path.Combine(dir.FullName, "settings.json");
+            var first = new SbMac.App.Services.AppPreferencesService(new SbMac.App.Services.JsonSettingsStore(file));
+            first.Load();
+            var window = new MainWindow();
+            window.AttachWorkspacePreferences(first);
+            var viewer = window.GetControl<MessageBodyViewer>("BodyViewer");
+            viewer.WrapToggle.IsChecked = true;
+            Assert.True(first.FlushAsync().GetAwaiter().GetResult());
+            var second = new SbMac.App.Services.AppPreferencesService(new SbMac.App.Services.JsonSettingsStore(file));
+            second.Load();
+            var restarted = new MainWindow();
+            restarted.AttachWorkspacePreferences(second);
+            var restored = restarted.GetControl<MessageBodyViewer>("BodyViewer");
+            Assert.True(restored.WrapToggle.IsChecked);
+            Assert.True(restored.Editor.WordWrap);
+        }
+        finally { dir.Delete(true); }
+    }
+
+    [AvaloniaFact]
+    public void WordWrapTogglePreservesDocumentSelectionAndCopy()
+    {
+        var body = string.Concat(Enumerable.Repeat("long body text ", 100));
+        var row = BodyRow(body);
+        var (window, vm, viewer, recorder) = OpenBody(row);
+        Assert.False(viewer.Editor.WordWrap);
+        Assert.Equal(Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, viewer.Editor.HorizontalScrollBarVisibility);
+        viewer.Editor.Select(0, 4);
+        viewer.WrapToggle.IsChecked = true;
+        Assert.True(viewer.Editor.WordWrap);
+        Assert.Equal(body, viewer.Editor.Text);
+        Assert.Equal("long", viewer.SelectedText);
+        vm.CopyBodyCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal([body], recorder.ClipboardTexts);
+        Assert.Equal(body, vm.BodyText);
+        viewer.WrapToggle.IsChecked = false;
+        Assert.False(viewer.Editor.WordWrap);
+        Assert.Equal(Avalonia.Controls.Primitives.ScrollBarVisibility.Auto, viewer.Editor.HorizontalScrollBarVisibility);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void TextHexAndEmptyBodiesShowUnhighlightedText()
     {
         foreach (var row in new[] { BodyRow("just words"), BodyRow(new byte[] { 0xFF, 0xFE, 0x00, 0x80 }), BodyRow("") })

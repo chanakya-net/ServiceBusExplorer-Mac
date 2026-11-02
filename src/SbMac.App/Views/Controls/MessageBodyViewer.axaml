@@ -3,7 +3,10 @@
              xmlns:ae="using:AvaloniaEdit"
              x:Class="SbMac.App.Views.Controls.MessageBodyViewer">
   <DockPanel>
-    <Button x:Name="OpenFindButton" DockPanel.Dock="Top" Content="Find" HorizontalAlignment="Right" Margin="8,4" />
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="8,4">
+      <CheckBox x:Name="WrapToggle" Content="Word wrap" VerticalAlignment="Center" />
+      <Button x:Name="OpenFindButton" Content="Find" />
+    </StackPanel>
     <StackPanel x:Name="FindBar" DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="8,6" IsVisible="False">
       <TextBox x:Name="FindQuery" Width="200" PlaceholderText="Find in body" AutomationProperties.Name="Find in body" />
       <TextBlock x:Name="FindStatus" VerticalAlignment="Center" MinWidth="80" />

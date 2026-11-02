@@ -35,6 +35,7 @@ public partial class MessageBodyViewer : UserControl
     public MessageBodyViewer()
     {
         InitializeComponent();
+        WrapToggle.IsCheckedChanged += (_, _) => Editor.WordWrap = WrapToggle.IsChecked == true;
         OpenFindButton.Click += (_, _) => OpenFind();
         FindQuery.TextChanged += (_, _) => RefreshMatches();
         PreviousButton.Click += (_, _) => FindPrevious();
